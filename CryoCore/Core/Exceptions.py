@@ -1,0 +1,3 @@
+
+class UAVException(Exception):
+    pass

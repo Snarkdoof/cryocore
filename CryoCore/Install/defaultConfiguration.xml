@@ -1,0 +1,37 @@
+<?xml version="1.0" ?><configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="configuration.xsd">
+    <Version>1</Version>
+    <default_version>default</default_version>
+
+    <System>
+        <SystemInformation>
+            <sample_rate>10</sample_rate>
+            <monitor_sensors>True</monitor_sensors>
+        </SystemInformation>
+
+        <WebServer>
+            <web_root>./CryoCore/GUI/Web/html/</web_root>
+            <port>8080</port>
+        </WebServer>
+  
+        <InternalDB>
+          <db_name>cryocore</db_name>
+          <db_user>cc</db_user>
+          <db_password>Kjøkkentrappene bestyrer sørlandske databehandlingsrutiner</db_password>
+          <db_host>localhost</db_host>
+        </InternalDB>
+
+        <SystemControl>
+          <sample_rate>10</sample_rate>
+          <monitor_sensors>True</monitor_sensors>
+          <default_user>cryocore</default_user>
+          <default_environment>PYTHONPATH=.</default_environment>
+          <default_start_delay>1</default_start_delay>
+          <process>
+            <p99_WebServer>
+              <enabled>True</enabled>
+              <command>python3 CryoCore/GUI/Web/WebServer.py</command>
+            </p99_WebServer>
+          </process>
+        </SystemControl>
+      </System>
+</configuration>

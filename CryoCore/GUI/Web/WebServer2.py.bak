@@ -1,0 +1,1139 @@
+import sys
+import select
+import socket
+import os
+import os.path
+import urllib
+import mimetypes
+import threading
+import time
+import re
+import random
+
+import gzip
+import StringIO
+import json
+import cgi
+import hashlib
+import base64
+
+# Verbose error messages from CGI module
+import cgitb
+cgitb.enable()
+
+import BaseHTTPServer
+import SocketServer
+
+DB_TYPE="mysql"    
+
+import MySQLdb
+
+from Common import API,PrettyPrint
+from Common.Utils import *
+#from Common.PictureSupplier import PictureSupplier
+from Tools import TailLog, HUD
+from Common.InternalDB import mysql as sqldb
+
+global channel_ids 
+global param_ids
+global disablePic
+channel_ids = {}
+param_ids = {}
+disablePic = False
+WebSocketMagic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+DEBUG = False
+
+def toUnicode(string):
+    """
+    Function to change a string (unicode or not) into a unicode string
+    Will try utf-8 first, then latin-1.
+    TODO: Is there a better way?  There HAS to be!!!
+    """
+
+    if string.__class__ != str:
+        return string
+    try:
+        return unicode(string, "utf-8")
+    except:
+        pass
+    return unicode(string, "latin-1")
+
+
+def microsec_to_string(microsec):
+    """
+    Convert from million seconds to a decent string
+    """
+
+    str = ""
+
+    sec = long(microsec)/1000000000
+    # Now make this into "hours" "minutes" "seconds"
+    hours = sec/3600
+    if hours:
+        sec -= hours*3600
+        str = "%d h "%hours
+        
+    minutes = sec/60
+    if minutes:
+        sec -= minutes*60
+        str += "%d min "%minutes
+
+    str += "%d sec"%sec
+
+    return str
+
+
+
+        
+class LogDB(TailLog.TailLog):
+    
+    def __init__(self):
+        TailLog.TailLog.__init__(self)
+
+    def get_changes_by_time(self, args, 
+                            start_time,
+                            stop_time): 
+        # TODO: Also do sessions, times and stuff here
+        if args:
+            sql = "AND " + args
+        else:
+            sql = ""
+
+        rows = 0
+        cursor = self._execute("SELECT * FROM log WHERE timestamp>? AND timestamp<? AND %s ORDER BY id"%sql,
+                               [start_time, stop_time])
+        return cursor
+        
+        
+    def get_changes_by_id(self, args, min_id, limit):
+        """
+        return updates since last time and 
+        """
+        _last_id = min_id
+        if not _last_id:
+            cursor = self._execute("SELECT MAX(id) FROM log")
+            row = cursor.fetchone()
+            if row[0]:
+                _last_id = max(row[0] - 10, 0)
+
+        rows = 0
+        SQL = "SELECT * FROM log WHERE id>? ";
+        params = [_last_id]
+        if len(args) > 0:
+            SQL += "AND %s "%args[0]
+            params += args[1]
+        SQL += "ORDER BY id DESC "
+        if limit:
+            SQL += "LIMIT %s"
+            params.append(int(limit))
+        cursor = self._execute(SQL, params)
+        return cursor
+
+    def get_modules(self):
+        """
+        Return a list of modules that have been logging
+        """
+        cursor = self._execute("SELECT DISTINCT(module) FROM log")
+        return cursor
+
+    def get_log_levels(self):
+        """
+        Return a list of textual log levels that are available
+        """
+        return API.log_level_str.keys()
+
+class DBWrapper:
+    def __init__(self, status_db="System.Status.MySQL"):
+        self.status_db = status_db
+        self._dbs = {}
+        
+    def get_db(self, db_name):
+        if not db_name in self._dbs.keys():
+            self._dbs[db_name] = StatusDB(db_name = db_name, status_db = self.status_db)
+            
+        return self._dbs[db_name]
+
+class StatusDB(sqldb):
+
+    def __init__(self, name = "WebGui.StatusDB", db_name = None, status_db = "System.Status.MySQL"):
+
+        self._cached_params = {}
+        self.name = name
+        self.log = API.get_log(self.name)
+        cfg = API.get_config(status_db)
+        print db.__class__
+        ssl = None
+        if cfg["ssl"]:
+            ssl = {
+                "key": "/opt/LSG/keys/client-key.pem",
+                "cert": "/opt/LSG/keys/client-cert.pem",
+                "ca": "/opt/LSG/keys/server-ca.pem"
+            }
+
+        sqldb.__init__(self, name, cfg, db_name = db_name, ssl=ssl)
+
+    def fesk_get_param_info(self, aid, paramid):
+        """
+        Get the channel and name of a parameter
+        """
+        if not paramid in self._cached_params:
+            SQL = "SELECT status_channel.name,status_parameter.name FROM gstatus_channel,gstatus_parameter "\
+                "WHERE gstatus_parameter.chanid=gstatus_channel.chanid AND paramid=%s AND aid=%s"
+            cursor = self._execute(SQL, [paramid, aid])
+            row = cursor.fetchone()
+            if not row:
+                raise Exception("No parameter '%s'"%paramid)
+            self._cached_params[paramid] = {"channel":row[0],
+                                            "name":row[1]}
+        return self._cached_params[paramid]
+    
+                
+    ########### Available interface ############
+
+    def fesk_get_timestamps(self):
+        """
+        Return the smallest and largest timestamp (for relative clocks)
+        """
+        cursor = self._execute("SELECT MIN(timestamp), MAX(timestamp) FROM status")
+        try:
+            row = cursor.fetchone()
+            return {"min":row[0], "max":row[1]}
+        except:
+            return {}
+
+    def get_aids(self):
+        cursor = self._execute("SELECT aid, aname FROM anlegg")
+        aids = []
+        for aid, aname in cursor.fetchall():
+            aids.append((aid, aname))
+        return aids
+
+    def get_channels(self, aid):
+        cursor = self._execute("SELECT chanid, name FROM gstatus_channel WHERE aid=%s ORDER BY name", [aid])
+        global channel_ids
+        if aid not in channel_ids:
+            channel_ids[aid] = {}
+        channels = []
+        for row in cursor.fetchall():
+            if row[1] not in channel_ids:
+                channel_ids[aid][row[1]] = row[0]
+            channels.append(row[1])
+        return channels
+
+    def get_params(self, aid, channel):
+        if not channel in channel_ids[aid]:
+            self.get_channels()
+
+        cursor = self._execute("SELECT paramid, name FROM gstatus_parameter WHERE chanid=%s AND aid=%s ORDER BY name",[channel_ids[aid][channel]], aid)
+        params = []
+        global param_ids
+        if aid not in param_ids:
+            param_ids[aid] = {}
+        for row in cursor.fetchall():
+            fullname = channel + "." + row[1]
+            if not fullname in param_ids:
+                param_ids[aid][fullname] = row[0]
+            params.append(row[1])
+        return params
+
+    def get_params_with_ids(self, aid, channel):
+        if not channel in channel_ids:
+            self.get_channels(aid)
+
+        cursor = self._execute("SELECT paramid, name FROM gstatus_parameter WHERE aid=%s AND chanid=%s ORDER BY name", [aid, channel_ids[aid][channel]])
+        params = []
+        global param_ids
+        for row in cursor.fetchall():
+            fullname = channel + "." + row[1]
+            if not fullname in param_ids:
+                param_ids[fullname] = row[0]
+            params.append((row[0], row[1]))
+        return params
+
+    def get_config(self, aid):
+        cursor = self._execute("SELECT config FROM config WHERE aid=%s", [aid])
+        row = cursor.fetchone()
+        if not row:
+            raise Exception("Missing AID %s" % aid)
+        return row[0]
+
+    def get_data(self, aid, params, start_time, end_time, since=0, aggregate=None):
+        if len(params) == 0:
+            raise Exception("No parameters given")
+
+        p = [aid, start_time, end_time, since]
+        SQL = "SELECT id, paramid, timestamp, value FROM gstatus WHERE aid=%s AND timestamp>%s AND timestamp<%s AND id> %s AND ("
+        for param in params:
+            SQL += "paramid=%s OR "
+            p.append(param)
+        if aggregate is not None:
+            SQL = SQL[:-4] + ") GROUP BY paramid, timestamp DIV %d" % aggregate
+        else:
+            SQL = SQL[:-4] + ") ORDER BY paramid, timestamp"
+
+        print SQL, str(p)
+        cursor = self._execute(SQL, p)
+        dataset = {}
+        max_id = since
+        for i, p, ts, v in cursor.fetchall():
+            max_id = max(max_id, i)
+            if p not in dataset:
+                dataset[p] = []
+
+            try:
+                v = float(v)
+            except:
+                pass
+
+            dataset[p].append((ts, v))
+        return max_id, dataset
+
+
+class MyWebServer(BaseHTTPServer.HTTPServer):
+    """
+    Non-blocking, multi-threaded IPv6 enabled web server
+    """
+    # DS: Temporarily disable ipv6
+    #if socket.has_ipv6:
+    #    address_family = socket.AF_INET6
+        
+    # Override that blasted blocking thing!
+    def get_request(self):
+        """Get the request and client address from the socket.
+        Override to allow non-blocking requests.
+
+        WARNING: This will make "serve_forever" and "handle_request"
+        throw exceptions and stuff! Serve_forever thus does not work!
+        """
+
+        # Use select for non-blocking IO
+        if select.select([self.socket], [], [], 1)[0]:
+            return self.socket.accept()
+        else:
+            return None
+
+# TODO: Implement class ThreadPoolMixIn  defining
+#def process_request(self, request, client_address):
+# Which queues requests on a queu and executes the handler
+# with requests, client_address as parameter
+#        """Start a new thread to process the request."""
+#        t = threading.Thread(target = self.process_request_thread,
+#                             args = (request, client_address))
+#        if self.daemon_threads:
+#            t.setDaemon (1)
+#        t.start()
+# where process_request_thread(self): is 
+#        try:
+#            self.finish_request(request, client_address)
+#            self.close_request(request)
+#        except:
+#            self.handle_error(request, client_address)
+#            self.close_request(request)
+
+
+
+class MyWebHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    """
+    Handle requests
+    """
+
+    server_version = "UAV Onboard/0.1"
+
+    def log_message(self, format, *args):
+        """
+        Override message logging - don't want reverse DNS lookups
+        or output to stderr
+
+        The first argument, FORMAT, is a format string for the
+        message to be logged.  If the format string contains
+        any % escapes requiring parameters, they should be
+        specified as subsequent arguments (it's just like
+        printf!).
+
+        The client host and current date/time are prefixed to
+        every message.
+
+        """
+
+        if self.server.cfg["log_requests"]:
+            self.get_log().debug(format%args)
+
+    def getPath(self, strip_args=False):
+        """
+        Get the unicode, unquoted path of the request
+        """
+        path = urllib.unquote(self.path)
+        path = unicode(path, "utf-8", "replace")
+
+        if strip_args and path.find("?") > -1:
+            path = path[:path.find("?")]
+        return path
+
+    def failed(self, code, message = None):
+        """
+        Request failed, return error
+        """
+        
+        try:
+            if message:
+                self.send_error(code, str(message))
+            else:
+                self.send_error(code)
+        except Exception,e:
+            print "Could not send error:",e
+        return False
+
+    def get_log(self):
+        return API.get_log("WebGUI.Handler")
+    
+    def prepare_send(self, type, size=None, response=200, encoding=None, content_range=None):
+
+        try:
+#            self.server.log.debug("Sending %s"%response)
+            self.send_response(response)
+        except Exception, e:
+            self.get_log().warning("Error sending response: %s"%e)
+            return
+
+        #self.send_header("date", makeRFC1123time(time.time()))
+        self.send_header("server", self.server_version)
+        
+        # Send type
+        if type:
+#            self.server.log.debug("Content-Type: %s "%type)
+            self.send_header("Content-Type", type)
+
+        if content_range:
+#            self.server.log.debug("Content-Range: bytes %d-%d/%d"%content_range)
+            self.send_header("Content-Range", "bytes %d-%d/%d"%content_range)
+
+        self.send_header("Accept-Ranges", "bytes")
+
+        if size:
+#            self.server.log.debug("Content-Length: %s"%size)
+            self.send_header("Content-Length",size)
+        
+        if encoding:
+#            self.server.log.debug("Content-Encoding: %s"%encoding)
+            self.send_header("Content-Encoding", encoding)
+            
+        self.end_headers()
+
+    def _to_file(self, path):
+        """
+        Return a valid file, send error and return None if not allowed
+        """
+        if not file:
+            return self.failed(404, "No file specified")
+        
+        if not self.server.cfg["web_root"]:
+            self.server.log.error("Internal error: 'web_root' config parameter does not exist")
+            return self.failed(400)
+
+        file_path = os.path.join(self.server.cfg["web_root"], path[1:])
+
+        if not os.path.abspath(file_path).startswith(os.path.abspath(self.server.cfg["web_root"])):
+            self.failed(403)
+            return None
+        
+        if not os.path.exists(file_path):
+            self.failed(404, "No such file '%s'"%file_path)
+            return None
+        return file_path
+        
+        
+        
+    def _send_image(self, path, fullpath=False):
+        if not path:
+            return self.failed(404, "No file specified")
+        if fullpath:
+            p = path
+        else:
+            p = self._to_file(path)
+        if not p:
+            self.server.log.info("Got request for '%s' which turned into None"%path)
+            return self.failed(404, "Nothing know about '%s'"%path)
+        
+        if os.path.exists(p):
+            data = open(p,"r").read()
+            self.prepare_send("image/jpeg", len(data))
+            self.wfile.write(data)
+            self.wfile.close()
+            return
+        self.failed(404, "Missing file '%s'"%path)
+
+    def add_url(self, _url, reset=False):
+        """
+        """
+        import re
+        m = re.match("/.*url=(.*)", _url)
+        if not m:
+            return
+
+        url = m.groups()[0]
+        if reset:
+            self.server.player.clear()
+
+        self.server.player.add_url(url)
+        
+    def do_POST(self):
+
+        path = self.getPath()
+
+        if path != "/set_config":
+            return self.failed(404)
+        
+        ctype, pdict = cgi.parse_header(self.headers.getheader('content-type'))
+        if ctype == 'multipart/form-data':
+            form = cgi.parse_multipart(self.rfile, pdict)
+        elif ctype == 'application/x-www-form-urlencoded':
+            length = int(self.headers.getheader('content-length'))
+            form = cgi.parse_qs(self.rfile.read(length), keep_blank_values=1)
+        else:
+            form = {}
+        #data = self.rfile.read(length)
+        #self.server.log.debug("Got data:" + data)
+        #form = cgi.FieldStorage(fp=self.rfile)
+        self.server.log.debug("set config: " + str(form.keys()))
+
+        if not form.has_key("version"):
+            return self.send_error(400, "Missing version")
+        if not form.has_key("json"):
+            return self.send_error(400, "Missing config")
+        
+        if form.has_key("root"):
+            root = form["root"].value
+        else:
+            root = None
+
+        version = form["version"][0]
+        serialized = form["json"][0]
+
+        if path.startswith("/set_config"):
+            try:
+                self.server.log.info("Should save config" + " root:" + str(root) + ", version:" + str(version))
+
+                self.server.log.info("Saving config '%s'"%version)
+
+                cfg = API.get_config()
+                
+                # First we add the version if it doesn't already exist
+                try:
+                    cfg.add_version(version)
+                except:
+                    pass # Ignore any errors at this point
+                cfg.deserialize(serialized, 
+                                root=root, 
+                                version=version,
+                                overwrite=True)
+                self.server.log.debug("Saved OK")
+                return self.send_response(200)
+            except Exception, e:
+                self.server.log.exception("Setting config '%s'"%path)
+                return self.failed(404, "Failed to save:" + str(e))
+
+
+        return self.failed(300, "Should never get here")
+
+    def _get_arg(self, args, name, default):
+        if name in args:
+            return args[name]
+        return default
+        
+    def get_db(self):
+        return self.server.db.get_db(self._get_params()["db"])
+
+    def _do_GET_pic(self, path, args):
+        """
+        Divided into two different variants - if a timestamp is given,
+        the image id to the correct image is given.  If img has a
+        value, that image is returned with the correct quality
+
+        Try to get a picture based on a timestamp, according to the
+        given quality parameters
+        - quality (typical values 0.4-0.9), default 0.9, 0 is thumbnail
+        - scale (up to 1.0), default 1.0
+        - crop (left,top,right,bottom), default whole image
+        """
+        global disablePic
+        if disablePic:
+            return self.failed(403, "Pictures disabled on basestation")
+        
+        if not "t" in args:
+            if not "img" in args:
+                return self.failed(400, "Need timestamp or picture id")
+
+        if "t" in args:
+            timestamp = float(args["t"])
+            instrumentid = self._get_arg(args, "i", None)
+            try:
+                info = self.server.picture_supplier.get_image(timestamp, 
+                                                              instrumentid)
+            except:
+                return self.failed(404, "No image for given time")
+
+            data = json.dumps({"img":info["id"], "i":[info["timestamp"], info["instrument"], 
+                                 info["lat"], info["lon"], info["alt"],
+                                 info["q0"], info["q1"], info["q2"], info["q3"], 
+                                 info["roll"], info["pitch"], info["yaw"], info["alt"]]})
+            return self._send_html(data);
+        
+        img_id = args["img"]
+        if (self._get_arg(args, "o", False)):
+            # Request for the unmodified original 
+            try:
+                info = self.server.picture_supplier.get_image_by_id(img_id)
+                self._send_image(info["path"], fullpath=True)
+            except:
+                self.failed(404)
+            return
+
+        quality = float(self._get_arg(args, "q", 0.9))
+        scale = float(self._get_arg(args, "s", 1.0))
+        crop = self._get_arg(args, "crop", None)
+        histogram = self._get_arg(args, "h", None)
+        headers_only = self._get_arg(args, "p", False)
+        cached = self._get_cached(img_id, quality, scale, crop, histogram)
+        if cached:
+            return self._send_img_result(cached, headers_only)
+
+        rotation = self.server.picture_supplier.get_rotation(img_id)
+
+        crop_box = None
+        if crop:
+            c = crop.split(",")
+            crop_box = (int(c[0]), int(c[1]), int(c[2]), int(c[3]))
+
+        try:
+            info = self.server.picture_supplier.get_image_by_id(img_id)
+        except Exception, e:
+            #self.server.log.exception("Getting picture")
+            return self.failed(404, e)
+
+        header = [info["timestamp"], info["instrument"], 
+                  info["lat"], info["lon"], info["alt"],
+                  info["q0"], info["q1"], info["q2"], info["q3"]]
+        if histogram:
+            data = self.server.picture_supplier.get_histogram(info["path"])
+            print len(data)
+            content_type = "application/binary"
+        else:
+            #content_type = "image/jpeg"
+            content_type = "image/png"
+            # Got file info, prepare header and get data
+
+            try:
+                if quality == 0:
+                    inf, data = self.server.picture_supplier.get_thumbnail(info["path"], rotation)
+                    if len(data) == 0:
+                        inf, data = self.server.picture_supplier.resample(info["path"], scale=0.2, rotation=rotation, filetype="png")
+                else:
+                    inf, data = self.server.picture_supplier.resample(info["path"], scale=scale,
+                                                                 quality=quality, crop_box=crop_box, rotation=rotation, filetype="png")
+            except Exception, e:
+                self.server.log.exception("Getting picture")
+                return self.failed(404, e)
+
+            self.server.log.debug("Sending picture %s (%d bytes)"%(info["path"], len(data)))
+            
+        # We also send the physical size of the image as well as the
+        # lat,lon of the boundingbox for it.  These are crude
+        # estimations atm
+        additional_info = {}
+        for key in ["bb_size", "bb_sw", "bb_ne"]:
+            if key in inf:
+                additional_info[key] = inf[key]
+
+        # Send data
+        result = {"content-type":content_type,
+                          "content-length":len(data),
+                          "i":json.dumps(header),
+                          "a": json.dumps(additional_info),
+                          "data":data}
+        self._cache_result(img_id, quality, scale, crop, histogram, result)
+        self._send_img_result(result, headers_only)
+        
+    def _send_img_result(self, result, headers_only = False):
+        self.send_response(200)
+        for header in ["content-type", "content-length", "i", "a"]:
+            if header in result:
+                if headers_only and header == "content-length":
+                    continue
+                self.send_header(header, result[header])
+        self.end_headers()
+        if not headers_only:
+            self.wfile.write(result["data"])
+        self.wfile.close()
+        return
+
+    def _cache_result(self, img_id, quality, scale, crop, histogram, result):
+        # Quick and dirty
+	if not os.path.exists("/tmp/cache"):
+		os.mkdir("/tmp/cache")
+
+        cache_file = "/tmp/cache/%s_%s_%s_%s_%s"%(img_id, quality, scale, crop, histogram)
+        f = open(cache_file, "w")
+        f.write(result["data"])
+        f.close()
+        res = {}
+        for k in result.keys():
+            if k == "data":
+                continue
+            res[k] = result[k]
+        f = open(cache_file + ".nfo", "w")
+        f.write(json.dumps(res))
+        f.close()
+    
+    def _get_cached(self, img_id, quality, scale, crop, histogram):
+        cache_file = "/tmp/cache/%s_%s_%s_%s_%s"%(img_id, quality, scale, crop, histogram)
+        
+        if os.path.exists(cache_file):
+            f = open(cache_file + ".nfo", "r")
+            result = json.loads(f.read())
+            f.close()
+            f = open(cache_file, "r")
+            result["data"] = f.read()
+            f.close()
+            return result
+            
+        return None
+        
+    def _get_additional_info(self, rotation, inf):
+        """
+        Physical size of bounding box + lat_lon of bounding box
+        """
+        additional = {}
+        
+        # We expect square pixels
+        additional["px_size"] = rotation["image_width"]/inf["new_size"][0]
+
+        #bounding-box size
+        additional["bb_size"] = (inf["bb_size"][0]*additional["px_size"],
+                                 inf["bb_size"][1]*additional["px_size"])
+        
+        # Lat-lon top left and bottom right corners
+        # Latitude: 1 deg = 110.54 km
+        # Longitude: 1 deg = 111.320*cos(latitude) km
+        additional["bb_sw"] = (rotation["lat"] - (additional["bb_size"][0]/(2*110540.0)),
+                               rotation["lon"] - (additional["bb_size"][1]/(2*112320.0*math.cos(math.radians(rotation["lat"])))))
+        additional["bb_ne"] = (rotation["lat"] + (additional["bb_size"][0]/(2*110540.0)),
+                       rotation["lon"] + (additional["bb_size"][1]/(2*112320.0*math.cos(math.radians(rotation["lat"])))))
+
+        print additional
+        return additional
+        
+        
+    def processItemRequest(self, path, args):
+        data = None
+        if path == "/item/list":
+            l = self.get_db().list_items();
+            data = json.dumps({"keys":l})
+        elif path == "/item/add":
+            self.get_db().add_item(args["key"], args["item"]);
+            data = "";
+        elif path == "/item/get":
+            data = self.get_db().get_item(args["key"])
+        if data == None:
+            return self.failed(404, "Missing data")
+        self._send_html(data)
+    
+    def processConfigRequest(self, path, args):
+        #cfg = API.get_config()
+        cfg = self.server.root_cfg
+        print "Config request: '%s'(%s)"%(path, args)
+        res = None
+        try:
+            if path == "/cfg/get":
+                res = cfg[args["param"]]
+                #res = self.server.cfg.get(args["param"], absolute_path=True).get_value()
+            elif path == "/cfg/set":
+                if args["value"].isdigit():
+                    val = int(args["value"])
+                elif args["value"].replace(".","").isdigit():
+                    val = float(args["value"])
+                else:
+                    val = args["value"]
+                cfg[args["param"]] = val
+                #try:
+                #    self.server.cfg.set(args["param"], args["value"], absolute_path=True)
+                #except NoSuchParameterException:
+                #    self.server.cfg.add(args["param"], args["value"])
+                res = []
+        except:
+            self.server.log.exception("Config request failed: %s=%s"%(path, args))
+            return self.failed(400, "Bad request")
+        if res == None:
+            return self.failed(404, "No such elmement %s"%path)
+        self._send_html(json.dumps(res))
+
+    def do_GET(self):
+        try:
+            self._do_GET()
+        except:
+            self.server.log.exception("In GET")
+
+    def _get_params(self):
+        import urlparse
+        path = self.getPath()
+        if path.find("?") > -1:
+            args = cgi.parse_qs(path[path.find("?")+1:])
+            for key in args:
+                args[key] = args[key][0]
+            path = path[:path.find("?")]
+        else:
+            args = {}
+
+        if not "ts" in args:
+            args["ts"] = None
+
+        if not "db" in args:
+            args["db"] = None
+        return args
+            
+
+    def _do_ws_request(self):
+        """
+        Process a web socket request
+        """
+        headers = self.headers
+        self.server.log.debug("Processing web socket request")
+        valid = True
+        if "upgrade" in headers.keys():
+            if headers["upgrade"] == "websocket":
+                self.send_response(101)
+                # Handshake
+                if "cookie" in headers.keys():
+                    self.send_header("Cookie", headers["cookie"])
+                self.send_header("Connection", "Upgrade")
+                self.send_header("Upgrade", "websocket")
+                self.send_header("Sec-WebSocket-Version", 13)
+                the_string = headers["sec-websocket-key"] + WebSocketMagic;
+                m = hashlib.sha1()
+                m.update(the_string)
+                self.send_header("Sec-WebSocket-Accept", base64.b64encode(m.digest()))
+        else:
+            return self.error(400, "Unsupported request")
+
+        path = self.getPath(strip_args=True)
+        if path == "/hud":
+            # Head up display 
+            class fakeit:
+                def __init__(self, rfile, wfile):
+                    self.rfile = rfile
+                    self.wfile = wfile
+                def send(self, data):
+                    return self.wfile.write(data)
+                def recv(self, maxlen):
+                    return self.rfile.read(maxlen)
+
+            f = fakeit(self.rfile, self.wfile)
+            hud = HUD.HUDProvider(f)
+            hud.start()
+            return
+                
+
+    def _do_GET(self):
+
+        if "upgrade" in self.headers.keys():
+            return self._do_ws_request()
+
+            
+        self._compress = False
+        if "Accept-Encoding" in self.headers:
+            if "gzip" in self.headers["Accept-Encoding"]:
+                self._compress = True
+
+        path = self.getPath(strip_args=True)
+        args = self._get_params()
+
+        # Picture request?
+        try:
+            if path.startswith("/pic"):
+                return self._do_GET_pic(path, args)
+        except:
+            self.server.log.exception("Getting picture")
+            return self.failed(500, "unknown error")
+
+        if path.startswith("/img/"):
+            return self._send_image(path)
+
+        if path.startswith("/list_aids"):
+            return self._send_html(json.dumps(self._list_aids()))
+
+        if path.startswith("/list_channels_and_params_full"):
+            if "aid" not in args:
+                return self.failed(500, "Missing aid")
+            return self._list_channels_and_params_full(args["aid"])
+
+        if path.startswith("/get_config"):
+            if "aid" not in args:
+                return self.failed(500, "Missing aid")
+            try:
+                self._send_html(self._get_config(args["aid"]))
+                return
+            except Exception, e:
+                print e
+                return self.failed(404)
+
+        if path.startswith("/get"):
+            if "aid" not in args:
+                return self.failed(500, "Missing aid")
+
+            #  List of parameters to get, and a time window is required
+            if "params" not in args:
+                return self.failed(500, "Missing parameter list")
+
+            if "start" not in args:
+                return self.failed(500, "Missing start")
+
+            if "end" not in args:
+                return self.failed(500, "Missing end")
+
+            try:
+                params = json.loads(args["params"])
+                if len(params) == 0:
+                    return self.failed(500, "Missing parameters")
+            except:
+                return self.failed(500, "Bad parameter list")
+
+            if "since" in args:
+                since = int(args["since"])
+            else:
+                since = 0
+            if "aggregate" in args:
+                try:
+                    aggregate = int(args["aggregate"])
+                except:
+                    aggregate = None
+            else:
+                aggregate = None
+            # Now get the data!
+            ret = self._get_data(args["aid"], params, args["start"], args["end"], since, aggregate)
+            if ret:
+                ret["ts"] = time.time()
+                self._send_html(json.dumps(ret))
+            else:
+                self.failed(404)
+            return
+
+        if path == "/":
+            file_path = self._to_file("/index.html")
+        else:
+            file_path = self._to_file(path)
+            
+        if file_path:
+            response = 200;
+            content_range = None
+            ftype = mimetypes.guess_type(file_path)[0]
+            print "Request for",file_path,"of type",ftype
+            if "Range" in self.headers:
+                response = 206;
+                r = self.headers["Range"]
+                if not r.startswith("bytes="):
+                    self.failed(400, "Bad request range")
+                start, end = r[6:].split("-")
+                f = open(file_path, "r")
+                f.seek(int(start))
+                fsize = os.path.getsize(file_path)
+                if not end:
+                    content = f.read()
+                    content_range = (int(start), len(content)+int(start)-1, fsize)
+                else:
+                    content = f.read(int(end)-int(start))
+                    content_range = (int(start), int(end), fsize)
+            else:            
+                content = open(file_path, "r").read()
+                if ftype =="text/html" or ftype == "application/javascript":
+                    content = self._replace_base_path(content)
+
+            self._send_html(content, ftype, response=response, content_range=content_range)
+
+    def _replace_base_path(self, content):
+        """
+        Allow config of base-path, allowing us to move some library stuff
+        to another machine if we want to
+        """
+        
+        if self.server.cfg["base_path"]:
+            return content.replace("_BASE_PATH_", self.server.cfg["base_path"])
+        return content.replace("_BASE_PATH_", "")
+
+    def _list_aids(self):
+        """
+        Return all AIDs and their associated names
+        """
+        anlegg = [];
+        for aid, aname in self.get_db().get_aids():
+            anlegg.append((aid, aname))
+        return anlegg
+
+    def _list_channels_and_params(self, aid):
+        """
+        Return all channels and their parameters as one giant json dump.
+        """
+        channelsAndParams = {}
+        for channel in self.get_db().get_channels(aid):
+            params = self.get_db().get_params(channel, aid)
+            channelsAndParams[channel] = params
+        data = json.dumps({"channels":channelsAndParams})
+        self._send_html(data)
+
+    def _list_channels_and_params_full(self, aid):
+        """
+        Return all channels and their parameters as one giant json dump.
+        """
+        channelsAndParams = {}
+        for channel in self.get_db().get_channels(aid):
+            params = self.get_db().get_params_with_ids(aid, channel)
+            channelsAndParams[channel] = params
+        data = json.dumps({"channels":channelsAndParams})
+        self._send_html(data)
+   
+    def _get_config(self, aid):
+        """
+        Return the config of the given aid
+        """
+        cfg = self.get_db().get_config(aid)
+        return cfg
+
+    def _get_data(self, aid, params, start_time, end_time, since=0, aggregate=None):
+        """
+        Return the dataset of the given parameters
+        """
+        max_id, dataset = self.get_db().get_data(aid, params, start_time, end_time, since, aggregate)
+        return {"max_id": max_id, "data": dataset}
+
+    def _get_changes(self, since, start_time=None, stop_time=None):
+        """
+        Return changes since time X as a map in JSON {LineNum:
+        (ID,timestamp,channel,name,value), ...} where num is from 0
+        and up
+        
+        """
+        #return json.dumps(self.get_db().get_changes(since))
+
+        res = {}
+        
+        i=0
+        print "Time interval:",start_time, stop_time
+        rows = self.get_db().get_changes(since, session=self.session, start_time=start_time, stop_time=stop_time)
+        if rows:
+            for (id, timestamp, paramid, value) in rows:
+                try:
+                    value = float(value)
+                except:
+                    pass # TODO: Do this nicer!
+
+                res[i] = (id, timestamp, paramid, value)
+                i += 1
+
+        return json.dumps(res)
+
+    def _send_html(self, html, mimetype="text/html", response=200, content_range=None):
+        
+        # Only compress text if > 100 bytes
+        if mimetype and mimetype.startswith("text") and self._compress and len(html) > 100: 
+            encoding = "gzip"
+            compressed = StringIO.StringIO()
+            zipped = gzip.GzipFile(mode="w", fileobj=compressed, 
+                                   compresslevel=9)
+            zipped.write(html)
+            zipped.close()
+            html = compressed.getvalue()
+        else:
+            encoding = None
+
+        self.prepare_send(mimetype, len(html), encoding=encoding, 
+                          response=response, content_range=content_range)
+        self.wfile.write(html)
+        self.wfile.close()
+        
+
+        
+class WebServer(threading.Thread):
+
+    def __init__(self, port, db, stop_event):
+        threading.Thread.__init__(self)
+        print "Starting WebServer on port %s"%port
+
+        self.stop_event = stop_event
+        
+        self.log = API.get_log("WebGUI")
+        self.cfg = API.get_config("System.WebServer")
+        self.cfg.require(["web_root"])
+        
+        self.log.debug("Initializing WebServer")
+        self.server = MyWebServer(('0.0.0.0', int(port)), MyWebHandler)
+        self.server.cfg = self.cfg
+        
+        self.server.root_cfg = API.get_config()
+        
+        self.server.db = db
+        self.server.picture_supplier = None #PictureSupplier()
+
+        try:
+            from Instruments.TriOS.TriOS import DBDump
+        #self.server.trios = DBDump("UAV/trios.sqlite") # Replace with Postgres
+            self.server.trios = DBDump("TriOS") 
+        except:
+            self.server.trios = None
+
+        self.server._log_db = LogDB()
+        self.server.log = self.log
+
+        self.log.debug("WebServer initialized OK")
+
+    def run(self):
+        while not self.stop_event.is_set():
+            try:
+                self.server.handle_request()
+            except Exception,e:
+                # Ignore these, Just means that there was no request
+                # waiting for us
+                pass
+
+        self.log.info("Stopped")
+
+    def stop(self):
+        print "Stopping"
+        self.running = False
+
+        self.server.socket.close()
+
+
+if __name__ == "__main__":
+
+    socket.setdefaulttimeout(5.0)
+    
+	
+    #if len(sys.argv) == 2:
+    #    db = StatusDB(sys.argv[1])
+    #else:
+    #    db = StatusDB()
+
+    stop_event = threading.Event()
+    if len(sys.argv) > 1:
+        db = DBWrapper(status_db = sys.argv[1])
+    else:
+        db = DBWrapper()
+    ws = WebServer(4321, db, stop_event)
+    if "--disable-pic" in sys.argv:
+        disablePic = True
+    else:
+        disablePic = False
+    ws.start()
+    
+    print "WebServer running on port 4321"
+    try:
+        raw_input("Press ENTER to stop")
+#        while True:
+#            time.sleep(10)
+    except Exception, e:
+        pass
+
+    print "Stopping server"
+    stop_event.set()
+
+    API.shutdown()
+    

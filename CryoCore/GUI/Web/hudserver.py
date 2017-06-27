@@ -1,0 +1,121 @@
+import socket
+import threading
+import select
+import time
+import hashlib
+import base64
+
+from Tools import HUD
+
+
+from Common import API
+DEBUG = True
+WebSocketMagic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+class HUDServer(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+
+        self._socket = None
+        self.log = API.get_log("System.HUDServer")
+
+        for res in socket.getaddrinfo('::', 
+                                      4322,
+                                      socket.AF_UNSPEC,
+                                      socket.SOCK_STREAM, 0,
+                                      socket.AI_PASSIVE):
+            
+            af, socktype, proto, canonname, sa = res
+            self._socket = socket.socket(af, socktype, proto)
+            self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._socket.bind(sa)
+            self._socket.listen(5) 
+            self.log.info("WebSocketServer listening on %s"%str(sa))
+            break
+
+        if not self._socket:
+            raise Exception("Bind failed")
+
+        self.start()
+
+    def _handshake(self, sock):
+        """
+        Check that the connection is valid
+        """
+        self.log.debug("Handshaking")
+        response = None
+        headers = {}
+        out_headers = {}
+
+        data = sock.recv(10240)
+
+        # GET request - get the URL part, which should describe what to get
+        path = data[5:data.find(" ", 5)]
+        self.log.info("Request for '%s'"%path)
+
+        #if path != "hud":
+        # TODO: SEND 404
+        
+        for line in data.split("\n"):
+            if line.find(":") > -1:
+                name, val = line.split(":", 1)
+                headers[name.lower()] = val.strip()
+                
+        if DEBUG: 
+            self.log.debug("Got request: '%s'"%str(headers))
+
+        valid = True
+        if "upgrade" in list(headers.keys()):
+            if headers["upgrade"] == "websocket":
+                # Handshake
+                if "cookie" in list(headers.keys()):
+                    out_headers["Cookie"] = headers["cookie"]
+                out_headers["Connection"] = "Upgrade"
+                out_headers["Upgrade"] = "websocket"
+                out_headers["Sec-WebSocket-Version"] = 13
+                the_string = headers["sec-websocket-key"] + WebSocketMagic;
+                m = hashlib.sha1()
+                m.update(the_string)
+                out_headers["Sec-WebSocket-Accept"] = \
+                    base64.b64encode(m.digest())
+                response = "HTTP/1.1 101 Switching Protocols"
+        else:
+            valid = False
+            self.log.error("Request is not web socket upgrade request")
+            response = "HTTP/1.1 400 Unsupported Request"
+            
+        if response:
+            if response[-2:] != "\r\n":
+                response += "\r\n"
+            for key in list(out_headers.keys()):
+                response += "%s: %s\r\n"%(key, out_headers[key])
+            response += "\r\n"
+            sock.send(response)
+
+        if valid:
+            print("VALID SOCKET")
+            # TODO: CREATE HUD SUPPLIER
+            return True
+        return False
+
+    def run(self):
+
+        hud = HUD.HUDProvider()
+        hud.start()
+
+        while not API.api_stop_event.isSet():
+            r = select.select([self._socket], [], [], 1.0)[0]
+            if len(r) == 0:
+                continue
+
+            s,addr = self._socket.accept()
+            if self._handshake(s):
+                hud.add_socket(s)
+
+if __name__ == "__main__":
+    s = HUDServer()
+    try:
+        while True:
+            time.sleep(1)
+    finally:
+        API.shutdown()

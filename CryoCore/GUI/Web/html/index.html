@@ -1,0 +1,102 @@
+<html>
+<head>
+<script src="js/cryocore.js"></script>
+<script src="js/cryocoregui.js"></script>
+
+<!-- For plots -->
+<script src="js/jquery-1.11.1.min.js"></script>
+<script src="js/jquery.flot.js"></script>
+
+
+<!-- Timing stuff -->
+<script src="https://mcorp.no/lib/timingsrc.js"></script>
+<script>
+
+var timingObject = new TIMINGSRC.TimingObject();
+timingObject.update({position: (new Date().getTime()/1000), velocity:1});
+
+var cfg = CryoCore.Config();
+var dataset = CryoCore.Dataset({
+  timingObject: timingObject,
+  onReady: function() {
+    CryoCoreGUI.progressBar(document.querySelector(".progressbar#user"), dataset, dataset.resolveParams({
+      channel: "System.SystemControl",
+      param: "cpu_user"
+    })[0], {
+      fill_color: function(val) {
+        return CryoCoreGUI.fractionToColor(1 - (val / 100));
+      },
+      showText: true,
+      text: "User"
+    });
+
+    CryoCoreGUI.progressBar(document.querySelector(".progressbar#idle"), dataset, dataset.resolveParams({
+      channel: "System.SystemControl",
+      param: "cpu_idle"
+    })[0], {
+      fill_color: "blue",
+      showText: true,
+      text: "Idle"
+    });
+
+/*
+*/
+    CryoCoreGUI.plot($("#cpu_plot"), dataset, dataset.resolveParams({
+      channel: "System.SystemControl",
+      param: "cpu_",
+    }),
+    {
+      rangeY:{min:0, max:100},
+      hideLegend: true
+    });
+/*
+*/
+    CryoCoreGUI.progressMap(document.querySelector(".progressmap"), dataset, dataset.resolveParams({
+      channel: "Demo",
+      param: "test2d"
+    }, true)[0], {
+    });
+    dataset.monitorLastValue({channel:"Demo", param:"state"}, function(e) {
+      document.querySelector("#state").innerHTML = e.value;
+    });
+  }
+});
+</script>
+<style>
+.progressbar {
+  display: inline-block;
+  width: 250px;
+  height: 10px;
+  background: darkgray;
+  font-size:0.5em;
+  font-family: sans-serif;
+}
+
+.plot {
+  width: 400px;
+  height: 150px;
+}
+
+.progressmap {
+  width: 150px;
+  height:150px;
+  background:darkgray;
+}
+
+</style>
+</head>
+<body>
+
+<div id="cpu_info">
+  <div class="progressbar" id="user"></div>
+  <div class="progressbar" style="color:white" id="idle"></div>
+</div>
+
+<div class="plot" id="cpu_plot"></div>
+
+Demo state: <span id="state"></span>
+<div class="progressmap"></div>
+<!--
+-->
+</body>
+</html>
