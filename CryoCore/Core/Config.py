@@ -379,7 +379,7 @@ class Configuration:
 
         self._prepare_tables()
 
-        if not version:
+        if not version or version == "default":
             try:
                 version = self.get("root.default_version", version="default").get_value()
             except:
