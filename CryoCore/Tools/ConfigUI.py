@@ -519,7 +519,6 @@ if __name__ == "__main__":
     if options.fullkeys:
         fullkeys = True
     cfg = API.get_config()
-    cfg.set_version("default_version")
     if options.version:
         try:
             cfg.set_version(options.version)
