@@ -29,6 +29,7 @@ try:
 except:
     import importlib as imp
 
+import sys
 sys.path.append("CryoCloud/Modules/")
 
 
@@ -37,7 +38,7 @@ modules = {}
 
 def load(modulename):
     if modulename not in modules:
-        if sys.version_info[0] == 2:
+        if sys.version_info.major == 2:
             info = imp.find_module(modulename)
             modules[modulename] = imp.load_module(modulename, info[0], info[1], info[2])
         else:

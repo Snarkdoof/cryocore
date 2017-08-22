@@ -79,15 +79,13 @@ def process_task(worker, task):
             # Check for output on stderr - set error message
             if buf[p.stderr]:
                 # Should we parse this for some known stuff?
-                if buf[p.stderr].strip():
-                    worker.log.error(buf[p.stderr])
+                worker.log.error(buf[p.stderr])
                 buf[p.stderr] = ""
 
             # See if the process is still running
             if p.poll() is not None:
                 # Process exited
                 if p.poll() == 0:
-                    return 100, None  # Normal exit, no progress reported...
                     break
                 # Unexpected
                 raise Exception("IDL exited with exit value %d" % p.poll())

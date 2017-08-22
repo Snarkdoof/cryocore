@@ -14,7 +14,6 @@ except:
 
 from CryoCore import API
 from CryoCloud.Common import jobdb
-
 import CryoCloud.Common
 
 try:
@@ -26,7 +25,7 @@ modules = {}
 
 def load(modulename):
     if modulename not in modules:
-        if sys.version_info[0] == 2:
+        if sys.version_info.major == 2:
             # f = open(modulename)
             # modules[modulename] = imp.load_module(modulename, f, modulename, (".py", "U", 1))  # info[0], info[1], info[2])
             info = imp.find_module(modulename)
@@ -90,11 +89,11 @@ class HeadNode(threading.Thread):
     def add_job(self, step, taskid, args, jobtype=jobdb.TYPE_NORMAL, priority=jobdb.PRI_NORMAL, node=None, expire_time=None, module=None):
         if expire_time is None:
             expire_time = self.options.max_task_time
-        self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module, priority=priority)
-        # if step > self.status["progress"].size[0]:
-        #     self.status.new2d("progress", (self.options.steps, self.options.tasks), expire_time=3*81600, initial_value=0)
+        self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module)
+        if step > self.status["progress"].size[0]:
+            self.status.new2d("progress", (self.options.steps, self.options.tasks), expire_time=3*81600, initial_value=0)
 
-        # self.status["progress"].set_value((step - 1, taskid), 1)
+        self.status["progress"].set_value((step - 1, taskid), 1)
         self.status["tasks_created"].inc(1)
 
     def requeue(self, job, node=None, expire_time=None):
@@ -114,17 +113,17 @@ class HeadNode(threading.Thread):
             self._jobdb.remove(i)
 
     def start_step(self, step):
-        # print("Starting step", step, "progress size is", self.status["progress"].size)
+        print("Starting step", step, "progress size is", self.status["progress"].size)
 
-        # if step > self.status["progress"].size[0]:
-        #    print ("MUST RE-configure progress")
-        #    self.status["total_steps"] = step
+        if step > self.status["progress"].size[0]:
+            print ("MUST RE-configure progress")
+            self.status["total_steps"] = step
 
         self.step = step
         self.status["step"] = self.step
 
     def run(self):
-        # self.status.new2d("progress", (self.options.steps, self.options.tasks), expire_time=3*81600, initial_value=0)
+        self.status.new2d("progress", (self.options.steps, self.options.tasks), expire_time=3*81600, initial_value=0)
         self.status["avg_task_time_step"] = 0.0
         self.status["avg_task_time_total"] = 0.0
         self.status["eta_step"] = 0
@@ -148,7 +147,7 @@ class HeadNode(threading.Thread):
             self.status["state"] = "Done"
             return
 
-        # print("Progress status parameter thingy with size", self.options.steps, "x", self.options.tasks)
+        print("Progress status parameter thingy with size", self.options.steps, "x", self.options.tasks)
         self.start_step(1)
         failed = False
         while not API.api_stop_event.is_set():
@@ -161,18 +160,18 @@ class HeadNode(threading.Thread):
                     self._jobdb.update_timeouts()
                     updates = self._jobdb.list_jobs(since=last_run, notstate=jobdb.STATE_PENDING)
                     for job in updates:
-                        # print("Checking job update", job)
+                        print("Checking job update", job)
                         last_run = job["tschange"]
                         if job["state"] == jobdb.STATE_ALLOCATED:
-                            # self.status["progress"].set_value((job["step"]-1, job["taskid"]), 3)
+                            self.status["progress"].set_value((job["step"]-1, job["taskid"]), 3)
                             self.handler.onAllocated(job)
 
                         elif job["state"] == jobdb.STATE_FAILED:
-                            # self.status["progress"].set_value((job["step"]-1, job["taskid"]), 2)
+                            self.status["progress"].set_value((job["step"]-1, job["taskid"]), 2)
                             self.handler.onError(job)
 
                         elif job["state"] == jobdb.STATE_COMPLETED:
-                            # self.status["progress"].set_value((job["step"]-1, job["taskid"]), 10)
+                            self.status["progress"].set_value((job["step"]-1, job["taskid"]), 10)
 
                             stats = self._jobdb.get_jobstats()
                             # print("STATS", stats)
@@ -182,7 +181,7 @@ class HeadNode(threading.Thread):
                             print("Completed job, calling handler")
                             self.handler.onCompleted(job)
                         elif job["state"] == jobdb.STATE_TIMEOUT:
-                            # self.status["progress"].set_value((job["step"]-1, job["taskid"]), 0)
+                            self.status["progress"].set_value((job["step"]-1, job["taskid"]), 0)
                             self.handler.onTimeout(job)
 
                     # Still incomplete jobs?
