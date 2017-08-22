@@ -1,11 +1,8 @@
 import CryoCloud
 from argparse import ArgumentParser
 import os.path
-import random
 
 import re
-
-random.seed()
 
 
 class Handler(CryoCloud.DefaultHandler):
@@ -39,10 +36,6 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
         parser.add_argument("-i", dest="input_dir",
                             default="./",
                             help="Source directory to monitor for files")
-
-        parser.add_argument("-w", "--working-directory", dest="working_dir",
-                            default="./",
-                            help="Working directory")
 
         parser.add_argument("-o", dest="output_dir",
                             default="/data/RVL/",
@@ -96,7 +89,7 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
             return
         fdir, fname = os.path.split(info["fullpath"])
 
-        # print("Found file for processing", info["relpath"])
+        print("Found file for processing", info["relpath"])
 
         # See if we can find a calfile to go with the data
         if self.options.cal_dir is None:
@@ -108,28 +101,16 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
             calfile = os.path.join(self.options.cal_dir, calfile[0]) if len(calfile) > 0 else None
 
         # Create a job for this file
-        e = ""
-        for i in range(10):
-            workdir = "%s/%d" % (self.options.temp_dir, random.randint(0, 4000000))
-            try:
-                os.makedirs(workdir)
-                break
-            except Exception as ex:
-                e = ex
-
-        if not os.path.exists(workdir):
-            raise SystemExit("Failed to create temporary directory %s" % (workdir, e))
-        # print "Creating job for file", info["fullpath"]
-        idlcmd = "make_rs2_rvl, '%s', outputpath='%s'" % (info["fullpath"], workdir)
+        print "Creating job for file", info["fullpath"]
+        idlcmd = "make_rs2_rvl, '%s', outputpath='%s'" % (info["fullpath"], self.options.temp_dir)
         if calfile:
             idlcmd += ", calfile='%s'" % calfile
-
-        # if self.options.geoid:
+        #if self.options.geoid:
         #    idlcmd += ", geoid='%s'" % self.options.geoid
 
         cmd = ["-e", idlcmd]
 
-        self.head.add_job(1, self._taskid, {"dir": self.options.working_dir, "cmd": cmd, "filePath": info["relpath"], "level": 0, "workdir": workdir}, module="idl", priority=self.PRI_LOW)
+        self.head.add_job(1, self._taskid, {"dir": "/homes/tom/src/ksat_rvl", "cmd": cmd, "filePath": info["relpath"]}, module="idl")
         self._taskid += 1
 
     def onAllocated(self, task):
@@ -138,40 +119,19 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
     def onCompleted(self, task):
         print "Task completed:", task["taskid"], task["step"], task
 
-        if task["args"]["level"] == 0:
-            # Create plot job
-            source = None
-            for fn in os.listdir(task["args"]["workdir"]):
-                if fn.endswith(".gsar"):
-                    source = fn
-                    break
-            if not fn:
-                print "Missing gsar file"
-                self.log.error("Job done but missing .gsar file in workdir %s" % task["args"]["workdir"])
-                return
-
-            # Create the job
-            print "Queuing plot job"
-            idlcmd = "make_rs2_rvl_plots, '%s', outputpath='%s'" % (source, "%s/figures/%s" % (self.options.output_dir, source))
-            cmd = ["-e", idlcmd]
-            self.head.add_job(1, self._taskid, {"dir": self.options.working_dir, "cmd": cmd, "filePath": task["args"]["filePath"], "level": 0, "workdir": task["args"]["workdir"]}, module="idl", priority=self.PRI_NORMAL)
-        elif task["args"]["level"] == 1:
+        if task["step"] == 1:
             # TODO: The node should perhaps verify that a number of files exist before stuff happens
             # Create a new job for the node that did the processing - move files.
             # TODO: If copying was successful, clean up some other temporary data?
-            sources = []
-            for fn in os.listdir(task["args"]["workdir"]):
-                if fn.find(".gsar") > -1:
-                    sources.append("%s/%s" % (task["args"]["workdir"], fn))
-            # sourcePath = os.path.join(self.options.temp_dir, task["args"]["filePath"])
+            sourcePath = os.path.join(self.options.temp_dir, task["args"]["filePath"])
             destPath = os.path.join(self.options.output_dir, task["args"]["filePath"])
             print "Creating move job", destPath
-            # for ext in [".gsar", ".gsar.json", ".gsar.xml"]:
-            #    sources.append(sourcePath + ext)
-            self.head.add_job(1, task["taskid"], {"dir": self.options.working_dir, "src": sources, "dst": destPath, "level": 2}, module='move', node=task["node"], priority=self.PRI_HIGH)
-        elif task["args"]["level"] == 2:
+            sources = []
+            for ext in [".gsar", ".gsar.json", ".gsar.xml"]:
+                sources.append(sourcePath + ext)
+            self.head.add_job(2, task["taskid"], {"dir": "/homes/tom/src/ksat_rvl", "src": sources, "dst": destPath}, module='move', node=task["node"])
+        else:
             print "Copy completed"
-            os.remove(task["args"]["workdir"])
             self.dir_monitor.setDone(task["args"]["filePath"])
 
     def onTimeout(self, task):
@@ -179,14 +139,7 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
         self.head.requeue(task)
 
     def onError(self, task):
-        print "Error for task", task["taskid"]
-        f = open("errors.txt", "a")
-        f.write(str(task["args"]) + "\n")
-        f.close()
-        for fn in os.listdir(task["args"]["workdir"]):
-            os.remove("%s/%s" % (task["args"]["workdir"], fn))
-
-        os.removedirs(task["args"]["workdir"])
+        print "Error for task", task
         # Notify someone, log the file as failed, try to requeue it or try to figure out what is wrong and how to fix it
         pass
 
