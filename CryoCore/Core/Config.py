@@ -359,6 +359,11 @@ class Configuration:
         self.callbackCondition = threading.Condition()
         self._notify_counter = 0
 
+        # self._id_cache = {}
+        self.cache = {}
+        self._version_cache = {}
+        self._update_callbacks = {}
+
         from API import get_config_db
         self._cfg = get_config_db()
 
@@ -371,11 +376,6 @@ class Configuration:
             hdlr.setFormatter(formatter)
             self.log.addHandler(hdlr)
             self.log.setLevel(logging.DEBUG)
-
-        # self._id_cache = {}
-        self.cache = {}
-        self._version_cache = {}
-        self._update_callbacks = {}
 
         self._prepare_tables()
 
