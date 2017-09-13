@@ -12,7 +12,7 @@ Also think about adding your user to the "docker" group (edit /etc/groups, find 
 Build "cryocore" docker to see that all works
 ./build-docker.sh cryocore
 
-It should build and list log entries from the database
+It should build
 
 _________________
 Development
