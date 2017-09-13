@@ -9,6 +9,13 @@ if ! test -e docker/$target ; then
   exit
 fi
 
+# Do we have rights?
+docker stats --no-stream >/dev/null 2>/dev/null
+if test $? != 0; then
+  echo "Can't run docker - is it installed and do you have rights? Try running with sudo"
+  exit
+fi
+
 echo "Building docker", $target
 
 if test -L Dockerfile; then 
@@ -24,6 +31,6 @@ rm Dockerfile
 #fi
 
 
-echo "Pushing it to localhost:5000"
-sudo docker tag $target localhost:5000/$target:latest
-sudo docker push localhost:5000/$target:latest
+# echo "Pushing it to localhost:5000"
+# sudo docker tag $target localhost:5000/$target:latest
+# sudo docker push localhost:5000/$target:latest

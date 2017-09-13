@@ -4,8 +4,10 @@ Docker - installation, programming and running
 __________________
 Install
 __________________
-First of all, install docker (add repository and use apt):
+First of all, install docker-ce (add repository and use apt):
   https://docs.docker.com/engine/installation/linux/docker-ce/ubuntu/
+
+Also think about adding your user to the "docker" group (edit /etc/groups, find docker and add your username at the end - then re-login). The "groups" command should then list "docker". Otherwise, you will have to run docker with sudo.
 
 Build "cryocore" docker to see that all works
 ./build-docker.sh cryocore
