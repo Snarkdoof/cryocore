@@ -12,7 +12,9 @@ Also think about adding your user to the "docker" group (edit /etc/groups, find 
 Build "cryocore" docker to see that all works
 ./build-docker.sh cryocore
 
-It should build
+It should build. Try running
+docker run cryocore TailLog.py  - it should list some logs.
+
 
 _________________
 Development
