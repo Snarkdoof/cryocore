@@ -21,6 +21,12 @@ STATE_COMPLETED = 3
 STATE_FAILED = 4
 STATE_TIMEOUT = 5
 
+TASK_TYPE = {
+    TYPE_NORMAL: "Worker",
+    TYPE_ADMIN: "AdminWorker",
+    TYPE_MANUAL: "ManualWorker"
+}
+
 
 class JobDB(mysql):
 

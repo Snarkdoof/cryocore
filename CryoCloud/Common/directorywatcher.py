@@ -10,7 +10,7 @@ except:
     import queue as Queue
 
 import traceback
-import jobdb
+from . import jobdb
 
 # watched events
 MASK = pyinotify.IN_CREATE | pyinotify.IN_MOVED_TO

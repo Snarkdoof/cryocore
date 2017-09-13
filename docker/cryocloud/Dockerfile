@@ -14,7 +14,8 @@ RUN pip3 install -r requirements.txt
 
 
 ENV NAME CryoCloud
-ENV PYTHONPATH=.
+ENV PYTHONPATH="${PYTHONPATH}:/cc/"
+ENV PATH="${PATH}:/cc/CryoCore/Tools:/cc/CryoCloud/Tools"
 
 # Do we have an application to run?
 # We're starting a CryoCloud node for now

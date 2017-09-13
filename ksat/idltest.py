@@ -68,14 +68,14 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
                 raise Exception("Need calibration directory, please specify")
 
         except Exception as e:
-            print "Exception parsing options", e
+            print("Exception parsing options", e)
             self.head.stop()
         finally:
             if not self.options:
                 parser.print_help()
                 self.head.stop()
 
-        print "Monitoring directory", self.options.input_dir
+        print("Monitoring directory", self.options.input_dir)
         self.dir_monitor = self.head.makeDirectoryWatcher(self.options.input_dir, self.onAdd, recursive=self.options.recursive)
         self.dir_monitor.start()
 
@@ -89,7 +89,7 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
             return
         fdir, fname = os.path.split(info["fullpath"])
 
-        print("Found file for processing", info["relpath"])
+        print(("Found file for processing", info["relpath"]))
 
         # See if we can find a calfile to go with the data
         if self.options.cal_dir is None:
@@ -101,7 +101,7 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
             calfile = os.path.join(self.options.cal_dir, calfile[0]) if len(calfile) > 0 else None
 
         # Create a job for this file
-        print "Creating job for file", info["fullpath"]
+        print("Creating job for file", info["fullpath"])
         idlcmd = "make_rs2_rvl, '%s', outputpath='%s'" % (info["fullpath"], self.options.temp_dir)
         if calfile:
             idlcmd += ", calfile='%s'" % calfile
@@ -114,10 +114,10 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
         self._taskid += 1
 
     def onAllocated(self, task):
-        print "Allocated", task["taskid"], "by node", task["node"], "worker", task["worker"]
+        print("Allocated", task["taskid"], "by node", task["node"], "worker", task["worker"])
 
     def onCompleted(self, task):
-        print "Task completed:", task["taskid"], task["step"], task
+        print("Task completed:", task["taskid"], task["step"], task)
 
         if task["step"] == 1:
             # TODO: The node should perhaps verify that a number of files exist before stuff happens
@@ -125,24 +125,24 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
             # TODO: If copying was successful, clean up some other temporary data?
             sourcePath = os.path.join(self.options.temp_dir, task["args"]["filePath"])
             destPath = os.path.join(self.options.output_dir, task["args"]["filePath"])
-            print "Creating move job", destPath
+            print("Creating move job", destPath)
             sources = []
             for ext in [".gsar", ".gsar.json", ".gsar.xml"]:
                 sources.append(sourcePath + ext)
             self.head.add_job(2, task["taskid"], {"dir": "/homes/tom/src/ksat_rvl", "src": sources, "dst": destPath}, module='move', node=task["node"])
         else:
-            print "Copy completed"
+            print("Copy completed")
             self.dir_monitor.setDone(task["args"]["filePath"])
 
     def onTimeout(self, task):
-        print "Task timeout out, requeue"
+        print("Task timeout out, requeue")
         self.head.requeue(task)
 
     def onError(self, task):
-        print "Error for task", task
+        print("Error for task", task)
         # Notify someone, log the file as failed, try to requeue it or try to figure out what is wrong and how to fix it
         pass
 
     def onStepCompleted(self, step):
-        print "All OK Step", step, " - waiting for more files"
+        print("All OK Step", step, " - waiting for more files")
         # self.head.stop()

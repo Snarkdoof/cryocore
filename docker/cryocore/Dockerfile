@@ -13,7 +13,8 @@ ADD docker/cryocore/requirements.txt /cc
 RUN pip3 install -r requirements.txt
 
 ENV NAME CryoCore
-ENV PYTHONPATH=.
+ENV PYTHONPATH="${PYTHONPATH}:/cc/""
+ENV PATH="${PATH}:/cc/CryoCore/Tools"
 
 # Do we have an application to run?
 # We're starting a CryoCloud node for now
@@ -21,8 +22,8 @@ ENV PYTHONPATH=.
 
 # RUN PYTHONPATH=. python3 ./CryoCore/Tools/TailLog.py
 
-RUN ["ls", "/mnt/data"]
 
 # We test this by printing logs (should list something)
 # CMD ["python3", "./CryoCloud/Tools/node.py"]
 CMD ["python3", "./CryoCore/Tools/TailLog.py"]
+# CMD ["sleep", "5m"]
