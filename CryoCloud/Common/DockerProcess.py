@@ -4,13 +4,25 @@ import fcntl
 import os
 import select
 import re
+import json
 
 from CryoCore import API
 
 
 class DockerProcess():
+    """
+    A local config file .dockercfg is read which overrides a few important bits for security reasons
+    """
 
     def __init__(self, cmd, status, log, stop_event, env={}, dirs={}, gpu=False, userid=None, doPrint=False):
+        if not os.path.exists(".dockercfg"):
+            raise SystemExit("Missing .dockercfg for system wide config")
+        self._dockercfg = json.loads(open(".dockercfg").read())
+
+        for i in ["scratch", "userid"]:
+            if i not in self._dockercfg:
+                raise SystemExit("Missing %s in .dockercfg" % i)
+
         self.cmd = cmd
         self.status = status
         self.log = log
@@ -21,6 +33,9 @@ class DockerProcess():
             self.userid = userid
         else:
             self.userid = "$UID"
+
+        if self._dockercfg["userid"]:
+            self.userid = self._dockercfg["userid"]
 
         self.doPrint = doPrint
         self._retval = None
@@ -46,7 +61,13 @@ class DockerProcess():
         cmd = [docker, "run"]
 
         for source in self.dirs:
+            if self.dirs[source].startswith("/scratch"):
+                continue  # We ignore scratch
             cmd.extend(["-v", "%s:%s" % (source, self.dirs[source])])
+
+        # We also add "/scratch"
+        cmd.extend(["-v", "%s:/scratch" % self._dockercfg["scratch"]])
+
         cmd.extend(["-e", "-USERID=%s" % self.userid])
 
         cmd.extend(self.cmd)
