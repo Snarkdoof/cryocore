@@ -93,6 +93,5 @@ Running the head in a docker...
 __________________________________
 
 While CryoCloud processing nodes should not run in dockers for performance reasons, the head can. This means that if you want to run stuff on our development machines, things should be easy for you. Build CryoCloud (./build-docker.sh cryocloud) and run it directly with:
-docker run cryocloud head.py 
-
+docker run cryocloud head.py --help
 
