@@ -13,7 +13,7 @@ ADD docker/cryocore/requirements.txt /cc
 RUN pip3 install -r requirements.txt
 
 ENV NAME CryoCore
-ENV PYTHONPATH="${PYTHONPATH}:/cc/""
+ENV PYTHONPATH="${PYTHONPATH}:/cc/"
 ENV PATH="${PATH}:/cc/CryoCore/Tools"
 
 # Do we have an application to run?
