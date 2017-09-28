@@ -7,13 +7,13 @@ __________________
 First of all, install docker-ce (add repository and use apt):
   https://docs.docker.com/engine/installation/linux/docker-ce/ubuntu/
 
-Also think about adding your user to the "docker" group (edit /etc/groups, find docker and add your username at the end - then re-login). The "groups" command should then list "docker". Otherwise, you will have to run docker with sudo.
+Also think about adding your user to the "docker" group (edit /etc/group, find docker and add your username at the end - then re-login). The "groups" command should then list "docker". Otherwise, you will have to run docker with sudo.
 
 Build "cryocloud" docker to see that all works
 ./build-docker.sh cryocloud
 
 It should build. Try running
-docker run cryocloud TailLog.py  - it should list some logs.
+docker run cryocloud TailLog.py  - it should list some logs.  Use sudo docker run... if you are not in the docker group
 
 _________________
 Development
@@ -94,4 +94,8 @@ __________________________________
 
 While CryoCloud processing nodes should not run in dockers for performance reasons, the head can. This means that if you want to run stuff on our development machines, things should be easy for you. Build CryoCloud (./build-docker.sh cryocloud) and run it directly with:
 docker run cryocloud head.py --help
+
+-----------
+
+If you want to do something more crazy, there is a DockerProcess wrapper defined in CryoCloud/Common that can help you run docker from Python. You likely won't need to, but DockerProcess will at least make it somewhat more easy.
 
