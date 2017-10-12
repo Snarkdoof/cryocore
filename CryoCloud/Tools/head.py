@@ -25,12 +25,13 @@ modules = {}
 
 def load(modulename):
     if modulename not in modules:
-        if sys.version_info.major == 2:
+        if sys.version_info.major in [2, 3]:
             # f = open(modulename)
             # modules[modulename] = imp.load_module(modulename, f, modulename, (".py", "U", 1))  # info[0], info[1], info[2])
             info = imp.find_module(modulename)
             modules[modulename] = imp.load_module(modulename, info[0], info[1], info[2])
         else:
+            # modules[modulename] = imp.load_module(modulename)
             modules[modulename] = imp.import_module(modulename)
 
     imp.reload(modules[modulename])

@@ -76,7 +76,7 @@ def _toUnicode(string):
 class _ConnectionPool:
     def __init__(self, db_cfg):
         # Defaults
-        from API import get_config_db
+        from .API import get_config_db
         self._cfg = get_config_db()
         self.db_connections = {}
         if db_cfg:
@@ -364,7 +364,7 @@ class Configuration:
         self._version_cache = {}
         self._update_callbacks = {}
 
-        from API import get_config_db
+        from .API import get_config_db
         self._cfg = get_config_db()
 
         self.log = logging.getLogger("uav_config")
