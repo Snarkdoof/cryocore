@@ -6,6 +6,7 @@ import curses
 from CryoCore import API
 import CryoCore.Core.Config as Config
 import locale
+from argparse import ArgumentParser
 
 locale.setlocale(locale.LC_ALL, '')
 code = locale.getpreferredencoding()
@@ -509,10 +510,22 @@ class ConsoleUI:
         s.promptStack = s.promptStack[0:-1]
         s.setPrompt(s.promptStack[-1][0], s.promptStack[-1][1])
 
-
 if __name__ == "__main__":
-    if "--fullkeys" in sys.argv:
-        fullKeys = True
+    parser = ArgumentParser(description="Tree view of CryoCore configuration")
+    parser.add_argument("--fullkeys", action="store_true", default=False, help="Use full keys")
+    parser.add_argument("-v", "--version", dest="version", default=None, help="Version to operate on")
+
+    options = parser.parse_args()
+    if options.fullkeys:
+        fullkeys = True
     cfg = API.get_config()
+    if options.version:
+        try:
+            cfg.set_version(options.version)
+            cfg = API.get_config(version=options.version)
+        except Config.NoSuchVersionException:
+            raise SystemExit("version <%s> does not exist in list: <%s>. Aborting." % (options.version,",".join(map(str,cfg.list_versions()))))
+    
+
     ui = ConsoleUI()
     curses.wrapper(startUI)

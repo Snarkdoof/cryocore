@@ -7,21 +7,23 @@ if ! test -d "CryoCore" ; then
 fi
 
 
-uname -v | grep Ubuntu
-
-if [ $? == 0 ] || [ $1 == "force" ]; then
+apt-get --help > /dev/null 
+if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
 	echo "Checking dependencies"
-	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete
+  sudo apt-get update
+	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip
 
 	sudo activate-global-python-argcomplete
 	
 	echo "Installing mysql connector"
-	sudo dpkg -i CryoCore/Install/libs/mysql-connector-python*.deb
+  sudo pip install mysql-connector==2.1.4
+  sudo pip3 install mysql-connector==2.1.4
+	# sudo dpkg -i CryoCore/Install/libs/mysql-connector-python*.deb
 
 	echo "Detecting sensors"
 	sudo sensors-detect
 else
-	echo "Not Ubuntu, please ensure that you have mysql installed"
+	echo "Not Debian based, please ensure that you have mysql installed"
 	echo "This also includes mysql-connector, look in CryoCore/Install/libs/"
 	echo "Continue with install?"
 	read -n 1 yn
@@ -34,6 +36,6 @@ echo "Enter password for mysql admin:"
 mysql -u root -p < CryoCore/Install/create_db.sql
 
 echo "Importing default config"
-python3 CryoCore/Tools/ConfigTool.py import CryoCore/Install/defaultConfiguration.xml
+python CryoCore/Tools/ConfigTool.py import CryoCore/Install/defaultConfiguration.xml
 
 echo "OK"

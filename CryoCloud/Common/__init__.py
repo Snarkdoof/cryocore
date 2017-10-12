@@ -1,1 +1,1 @@
-from directorywatcher import DirectoryWatcher
+from .directorywatcher import DirectoryWatcher

@@ -29,7 +29,6 @@ try:
 except:
     import importlib as imp
 
-import sys
 sys.path.append("CryoCloud/Modules/")
 
 
@@ -50,7 +49,7 @@ def load(modulename):
 
 class Worker(multiprocessing.Process):
 
-    def __init__(self, workernum, stopevent):
+    def __init__(self, workernum, stopevent, type=jobdb.TYPE_NORMAL):
         super(Worker, self).__init__()
 
         self._stop_event = stopevent
@@ -65,11 +64,13 @@ class Worker(multiprocessing.Process):
         self.inqueue = None
         self._is_ready = False
         self.stop_event = API.api_stop_event
-        self.wid = "Worker-%s_%d" % (socket.gethostname(), self.workernum)
+        self._type = type
+        self._worker_type = jobdb.TASK_TYPE[type]
+        self.wid = "%s-%s_%d" % (self._worker_type, socket.gethostname(), self.workernum)
 
         self._current_job = (None, None)
 
-        print("Worker %s created" % workernum)
+        print("%s %s created" % (self._worker_type, workernum))
 
     def _switchJob(self, job):
         if self._current_job == (job["runname"], job["module"]):
@@ -96,7 +97,7 @@ class Worker(multiprocessing.Process):
             self.log.exception("Failed to get module")
             raise e
         try:
-            self.log.info("Worker allocated to job %s of %s (%s)" % (job["id"], job["runname"], job["module"]))
+            self.log.info("%s allocated to job %s of %s (%s)" % (self._worker_type, job["id"], job["runname"], job["module"]))
             self.status["state"] = "Connected"
             self.status["num_errors"] = 0.0
             self.status["last_error"] = ""
@@ -114,7 +115,7 @@ class Worker(multiprocessing.Process):
     def run(self):
 
         def sighandler(signum, frame):
-            print("WORKER GOT SIGNAL")
+            print("%s GOT SIGNAL" % self._worker_type)
             self._stop_event.set()
 
         signal.signal(signal.SIGINT, sighandler)
@@ -125,7 +126,7 @@ class Worker(multiprocessing.Process):
 
         while not self._stop_event.is_set():
             try:
-                jobs = self._jobdb.allocate_job(self.workernum, node=socket.gethostname(), max_jobs=1)
+                jobs = self._jobdb.allocate_job(self.workernum, node=socket.gethostname(), max_jobs=1, type=self._type)
                 if len(jobs) == 0:
                     time.sleep(1)
                     continue
@@ -148,7 +149,7 @@ class Worker(multiprocessing.Process):
                 time.sleep(5)
                 continue
 
-        print("Worker", self.wid, "stopped")
+        print(self._worker_type, self.wid, "stopped")
         self.status["state"] = "Stopped"
 
     def process_task(self, task):
@@ -171,7 +172,7 @@ class Worker(multiprocessing.Process):
     def _process_task(self, task):
         self.status["state"] = "Processing"
         self.log.debug("Process task %s" % str(task))
-        taskid = "%s.Worker-%s_%d" % (task["runname"], socket.gethostname(), self.workernum)
+        taskid = "%s.%s-%s_%d" % (task["runname"], self._worker_type, socket.gethostname(), self.workernum)
 
         print(taskid, "Processing", task)
 
@@ -234,6 +235,12 @@ class NodeController(threading.Thread):
             # w = multiprocessing.Process(target=worker, args=(i, self._options.address, self._options.port, AUTHKEY, self._stop_event))  # args=(wid, self._task_queue, self._results_queue, self._stop_event))
             w.start()
             self._worker_pool.append(w)
+
+        for i in range(0, int(options.adminworkers)):
+            print ("Starting adminworker %d" % i)
+            aw = Worker(i, self._stop_event, type=jobdb.TYPE_ADMIN)
+            aw.start()
+            self._worker_pool.append(aw)
 
         self.cfg = API.get_config("NodeController")
         self.cfg.set_default("expire_time", 86400)  # Default one day expire time
@@ -301,7 +308,7 @@ class NodeController(threading.Thread):
         for w in self._worker_pool:
             w.join()
             left -= 1
-            self.log.debug("Worker stopped, %d left" % left)
+            self.log.debug("Worker stopped, %d left" % (left))
 
         if self._manager:
             self._manager.shutdown()
@@ -317,6 +324,11 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--num-workers", dest="workers",
                         default=None,
                         help="Number of workers to start - default one pr virtual core")
+
+    parser.add_argument("-a", "--num-admin-workers", dest="adminworkers",
+                        default=1,
+                        help="Number of admin workers to start - default one")
+
     parser.add_argument("--cpus", dest="cpu_count", default=None,
                         help="Number of CPUs, use if not detected or if the detected value is wrong")
 

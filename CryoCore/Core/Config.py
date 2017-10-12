@@ -76,7 +76,7 @@ def _toUnicode(string):
 class _ConnectionPool:
     def __init__(self, db_cfg):
         # Defaults
-        from API import get_config_db
+        from .API import get_config_db
         self._cfg = get_config_db()
         self.db_connections = {}
         if db_cfg:
@@ -359,7 +359,12 @@ class Configuration:
         self.callbackCondition = threading.Condition()
         self._notify_counter = 0
 
-        from API import get_config_db
+        # self._id_cache = {}
+        self.cache = {}
+        self._version_cache = {}
+        self._update_callbacks = {}
+
+        from .API import get_config_db
         self._cfg = get_config_db()
 
         self.log = logging.getLogger("uav_config")
@@ -372,14 +377,9 @@ class Configuration:
             self.log.addHandler(hdlr)
             self.log.setLevel(logging.DEBUG)
 
-        # self._id_cache = {}
-        self.cache = {}
-        self._version_cache = {}
-        self._update_callbacks = {}
-
         self._prepare_tables()
 
-        if not version:
+        if not version or version == "default":
             try:
                 version = self.get("root.default_version", version="default").get_value()
             except:
