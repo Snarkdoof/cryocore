@@ -529,6 +529,7 @@ class mysql:
                         time.sleep(0.1)
                         continue
                     print("unknown error", e.errno, e)
+                    print(SQL, str(parameters))
                     raise e
                 except MySQLdb.errors.PoolError as e:
                     print("WARNING: ConnectionPool exchausted, retry in a second (%s)" % e, self.__class__)
