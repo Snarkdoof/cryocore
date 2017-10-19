@@ -68,6 +68,7 @@ def getLoggingService(name,
     with myloggers_lock:
         if name not in list(myloggers.keys()):
             myloggers[name] = logging.getLogger(name)
+            myloggers[name].propagate = False
             myloggers[name].setLevel(loggerLevel)
             myloggers[name].addHandler(dbHandler)
 

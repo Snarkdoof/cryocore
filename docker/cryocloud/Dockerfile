@@ -14,7 +14,7 @@ RUN pip3 install -r requirements.txt
 
 
 ENV NAME CryoCloud
-ENV PYTHONPATH="${PYTHONPATH}:/cc/"
+ENV PYTHONPATH="${PYTHONPATH}:/cc/:/cclib"
 ENV PATH="${PATH}:/cc/CryoCore/Tools:/cc/CryoCloud/Tools"
 
 # Do we have an application to run?

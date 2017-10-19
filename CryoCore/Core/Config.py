@@ -531,7 +531,12 @@ class Configuration:
     comment TEXT,
     FOREIGN KEY (version) REFERENCES config_version(id) ON DELETE CASCADE,
     UNIQUE(version,parent,name)) ENGINE = INNODB"""
-            self._execute(SQL, ignore_error=False)
+            # Workaround for errors when SQL server doesn't support precision on timestamp type
+            try:
+                self._execute(SQL, ignore_error=False)
+            except:
+                SQL = SQL.replace("TIMESTAMP(6)", "TIMESTAMP")
+                self._execute(SQL, ignore_error=False)
 
             self._execute("CREATE INDEX config_name ON config(name)",
                           ignore_error=True)
@@ -545,7 +550,13 @@ class Configuration:
     last_modified TIMESTAMP(6),
     PRIMARY KEY (id, param_id),
     FOREIGN KEY (param_id) REFERENCES config(id) ON DELETE CASCADE)"""
-            self._execute(SQL, ignore_error=True)
+            # Same workaround for missing timestamp precision as above
+            try:
+                # Original code had "ignore errors=True", not sure why
+                self._execute(SQL, ignore_error=True)
+            except:
+                SQL = SQL.replace("TIMESTAMP(6)", "TIMESTAMP")
+                self._execute(SQL, ignore_error=True)
 
     def _reset(self):
         """

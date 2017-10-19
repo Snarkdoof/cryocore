@@ -80,6 +80,13 @@ class DbHandler(logging.Handler, InternalDB.mysql, threading.Thread):
             pass
 
         self.tasks = queue.Queue()
+        # We use two internal events to control the handler.
+        # The stop_event is set in the handler's close() function,
+        # which in turn will wait for complete_event to be set.
+        self.stop_event = threading.Event()
+        self.complete_event = threading.Event()
+        # Set daemon flag to prevent need for calling logging.shutdown() in API.shutdown
+        self.daemon = True
         self.start()
 
     def run(self):
@@ -98,24 +105,34 @@ class DbHandler(logging.Handler, InternalDB.mysql, threading.Thread):
                            "CREATE INDEX log_logger ON log(logger)"]
 
         self._init_sqls(init_statements)
-
         # Thread entry point
-        while not API.api_stop_event.is_set():
-            try:
-                (sql, args) = self.tasks.get(block=True, timeout=1.0)
-                # Should insert something
-                self._execute(sql, args, log_errors=False)
-            except queue.Empty:
-                continue
-            except Exception as e:
-                print("Async exception on log posting", e)
-                print("SQL was", sql, "Args:", args)
+        while not self.stop_event.is_set():
+            self.get_log_entry_and_insert(True, 1.0)
+        # Insert any remaining items until self.tasks is empty
+        while self.get_log_entry_and_insert(False, None):
+            pass
+        self.complete_event.set()
+    
+    def get_log_entry_and_insert(self, should_block, desired_timeout):
+        try:
+            (sql, args) = self.tasks.get(should_block, desired_timeout)
+            # Should insert something
+            self._execute(sql, args, log_errors=False)
+        except queue.Empty:
+            return False
+        except Exception as e:
+            print("Async exception on log posting", e)
+            print("SQL was", sql, "Args:", args)
+            return False
+        return True
 
     def close(self):
         """
         Close the C{logging.Handler} object. It closes both the C{sqlite3.Connection} L{con<DbHandler.con>} and the C{sqlite3.Cursor} L{cur<DbHandler.cur>} variables, and calls the base class close function.
         @postcondition: The object variables L{con<DbHandler.con>} and L{cur<DbHandler.cur>} are closed, therefore they are no longer available.
         """
+        self.stop_event.set()
+        self.complete_event.wait()
         logging.Handler.close(self)
 
     def emit(self, record):
@@ -140,7 +157,6 @@ class DbHandler(logging.Handler, InternalDB.mysql, threading.Thread):
         @note: if the database connection failed, a warning log message would be saved into a file identified by the parameter I{aux_filename} which was passed into the object initialization.
         @warning: if the database insertion has failed, a log message would have been saved into a file identified by the parameter I{aux_filename} which was passed into the object initialization.
         """
-
         if record.levelno >= self.level:
             toRecord = []
             program_stack_string = ""
