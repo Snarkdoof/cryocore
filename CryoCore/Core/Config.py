@@ -866,10 +866,11 @@ class Configuration:
         return my_timestamp, res
 
     def _get_datatype(self, value):
-        if not value:
-            datatype = "string"
+        if value is None:
+            return "string"
 
-        elif value.__class__ == float:
+        datatype = "string"
+        if value.__class__ == float:
             datatype = "double"
         elif value.__class__ == int:
             datatype = "integer"
