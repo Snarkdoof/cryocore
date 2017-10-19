@@ -68,7 +68,7 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
         """
         statements = [""" CREATE TABLE IF NOT EXISTS status_channel (
                       chanid INTEGER PRIMARY KEY AUTO_INCREMENT,
-                      name VARCHAR(256) UNIQUE) ENGINE=MyISAM""",
+                      name VARCHAR(250) UNIQUE) ENGINE=MyISAM""",
 
                       """CREATE TABLE IF NOT EXISTS status_parameter (
                       paramid INTEGER PRIMARY KEY AUTO_INCREMENT,
