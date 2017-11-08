@@ -93,7 +93,7 @@ class Worker(multiprocessing.Process):
             self._is_ready = False
             print("Import error:", e)
             self.status["state"] = "Import error"
-            self.status["state"].set_expire_time(3*86400)
+            self.status["state"].set_expire_time(3 * 86400)
             self.log.exception("Failed to get module")
             raise e
         try:
@@ -105,7 +105,7 @@ class Worker(multiprocessing.Process):
             self.status["progress"] = 0
 
             for key in ["state", "num_errors", "last_error", "progress"]:
-                self.status[key].set_expire_time(3*86400)
+                self.status[key].set_expire_time(3 * 86400)
 
             self._is_ready = True
 
