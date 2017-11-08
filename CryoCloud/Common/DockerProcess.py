@@ -87,7 +87,7 @@ class DockerProcess():
                     print(data)
                 buf[fd] += data
 
-            print buf
+            print(buf)
             # Process any stdout data
             while buf[p.stdout].find("\n") > -1:
                 line, buf[p.stdout] = buf[p.stdout].split("\n", 1)
@@ -153,6 +153,6 @@ if __name__ == "__main__":
         # DP.join()
         DP.run()
 
-        print "OK"
+        print("OK")
     finally:
         API.shutdown()

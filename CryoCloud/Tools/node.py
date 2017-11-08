@@ -36,11 +36,17 @@ modules = {}
 
 
 def load(modulename):
+
+    # TODO: Also allow getmodulename here to allow modulename to be a .py file
+    if modulename.endswith(".py"):
+        import inspect
+        modulename = inspect.getmodulename(modulename)
+
     if modulename not in modules:
-        if sys.version_info.major == 2:
+        try:
             info = imp.find_module(modulename)
             modules[modulename] = imp.load_module(modulename, info[0], info[1], info[2])
-        else:
+        except:
             modules[modulename] = imp.import_module(modulename)
 
     imp.reload(modules[modulename])
