@@ -22,7 +22,6 @@ import logging.handlers
 
 DEBUG = False
 _ANY_VERSION = 0
-_MAX_THREADS = 5
 
 
 class ConfigException(Exception):
@@ -127,12 +126,12 @@ class _ConnectionPool:
             pass
 
     def get_connection(self):
-        #print("Get connection:", self._cfg)
+        print("Get connection:", self._cfg)
         with self.lock:
             if not self.connPool:
                 self.connPool = mysqlpooling.MySQLConnectionPool(
                     pool_name="config",
-                    pool_size=_MAX_THREADS,
+                    pool_size=self._cfg["max_connections"],
                     host=self._cfg["db_host"],
                     user=self._cfg["db_user"],
                     passwd=self._cfg["db_password"],

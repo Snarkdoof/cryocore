@@ -68,8 +68,18 @@ class GlobalDBConfig:
                     "db_host": "localhost",
                     "db_user": "cc",
                     "db_password": u"Kjøkkentrappene bestyrer sørlandske databehandlingsrutiner",
-                    "db_compress": False}
+                    "db_compress": False,
+                    "max_connections": 5}
 
+        # Check in the user's home dir
+        userconfig = os.path.expanduser("~/.cryoconfig")
+        if os.path.isfile(userconfig):
+            cfg = json.loads(open(userconfig, "r").read())
+            for param in self.cfg:
+                if param in cfg:
+                    self.cfg[param] = cfg[param]
+
+        # Local override
         if os.path.isfile(".config"):
             cfg = json.loads(open(".config", "r").read())
             for param in self.cfg:
