@@ -15,14 +15,18 @@ class DockerProcess():
     """
 
     def __init__(self, cmd, status, log, stop_event, env={}, dirs={}, gpu=False, userid=None, doPrint=False):
-        if not os.path.exists(".dockercfg"):
-            raise SystemExit("Missing .dockercfg for system wide config")
-        self._dockercfg = json.loads(open(".dockercfg").read())
 
-        for i in ["scratch", "userid"]:
-            if i not in self._dockercfg:
-                raise SystemExit("Missing %s in .dockercfg" % i)
+        # if not os.path.exists(".dockercfg"):
+        #    raise SystemExit("Missing .dockercfg for system wide config")
+        if os.path.exists(".dockercfg"):
+            self._dockercfg = json.loads(open(".dockercfg").read())
 
+            for i in ["scratch", "userid"]:
+                if i not in self._dockercfg:
+                    raise SystemExit("Missing %s in .dockercfg" % i)
+        else:
+            # defaults
+            self._dockercfg = {"userid": "$UID", "scratch": "/tmp"}
         self.cmd = cmd
         self.status = status
         self.log = log
