@@ -126,7 +126,7 @@ class _ConnectionPool:
             pass
 
     def get_connection(self):
-        print("Get connection:", self._cfg)
+        # print("Get connection:", self._cfg)
         with self.lock:
             if not self.connPool:
                 self.connPool = mysqlpooling.MySQLConnectionPool(
