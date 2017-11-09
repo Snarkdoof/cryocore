@@ -20,9 +20,12 @@ def process_task(worker, task):
     if "target" not in task["args"]:
         raise Exception("Missing docker target")
 
-    target = [task["args"]["target"]]
-    if task["args"]["target"] == "":
-        raise Exception("Empty docker target")
+    target = task["args"]["target"]
+    if target.__class__ != list:
+        target = [target]
+
+    if len(target) == 0:
+        raise Exception("Require parameter 'target'")
 
     if "env" in task["args"]:
         env = task["args"]["env"]
