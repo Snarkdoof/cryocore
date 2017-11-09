@@ -95,7 +95,7 @@ class DockerProcess():
             # Process any stdout data
             while buf[p.stdout].find("\n") > -1:
                 line, buf[p.stdout] = buf[p.stdout].split("\n", 1)
-                m = re.match("\[(.+)\] (.+)", line)
+                m = re.match("\[(\w+)\] (.+)", line)
                 if m:
                     self.status[m.groups()[0]] = m.groups()[1]
 
