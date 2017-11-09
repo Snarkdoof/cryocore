@@ -89,7 +89,7 @@ class DockerProcess():
                 data = fd.read()
                 if self.doPrint:
                     print(data)
-                buf[fd] += str(data, "utf-8")
+                buf[fd] += data.decode("utf-8")
 
             # print(buf)
             # Process any stdout data
