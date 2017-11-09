@@ -99,6 +99,21 @@ class DockerProcess():
                 if m:
                     self.status[m.groups()[0]] = m.groups()[1]
 
+                m = re.match("\<(\w+)\> (.+)", line)
+                if m:
+                    level = m.groups()[0]
+                    msg = m.groups()[1]
+                    if level == "debug":
+                        self.log.debug(msg)
+                    elif level == "info":
+                        self.log.info(msg)
+                    elif level == "warning":
+                        self.log.warning(msg)
+                    elif level == "error":
+                        self.log.error(msg)
+                    else:
+                        self.log.error("Unknown log level '%s'" % level)
+
             # Check for output on stderr - set error message
             if buf[p.stderr]:
                 # Should we parse this for some known stuff?
