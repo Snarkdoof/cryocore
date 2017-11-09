@@ -89,9 +89,9 @@ class DockerProcess():
                 data = fd.read()
                 if self.doPrint:
                     print(data)
-                buf[fd] += data
+                buf[fd] += str(data, "utf-8")
 
-            print(buf)
+            # print(buf)
             # Process any stdout data
             while buf[p.stdout].find("\n") > -1:
                 line, buf[p.stdout] = buf[p.stdout].split("\n", 1)
