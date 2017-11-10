@@ -3,6 +3,7 @@ import time
 import threading
 
 from CryoCore import API
+from CryoCore.Core import Config
 
 stop_event = threading.Event()
 
@@ -21,15 +22,23 @@ class ConfigTest(unittest.TestCase):
 
     def tearDown(self):
         API.get_config(version="unittest").remove("UnitTest")
+        # API.get_config().delete_version("unittest")
+        pass
 
     def testBasic(self):
-
+        self.assertEquals(self.cfg.__class__, Config.NamedConfiguration, "Wrong ")
         self.cfg.require(["TestName", "TestBasic.One", "TestBasic.Float", "TestBasic.True"])
         try:
             self.cfg.require(["DoesNotExist", "TestName"])
             self.fail("Require does not throw exception when parameter is missing")
         except:
             pass
+
+        # These should be ignored
+        self.cfg.set_default("TestName", "TestNameFoo")
+        self.cfg.set_default("TestBasic.One", 42)
+        self.cfg.set_default("TestBasic.Float", 42.21)
+        self.cfg.set_default("TestBasic.True", False)
 
         self.assertEquals(self.cfg["TestName"], "TestNameValue")
         self.assertEquals(self.cfg["TestBasic.One"], 1)
@@ -78,7 +87,8 @@ class ConfigTest(unittest.TestCase):
 
         try:
             cfg.get("UnitTest")
-        except:
+        except Exception as e:
+            print("EXCEPTION", e)
             self.fail("Cleaning does not respect versions")
 
     def testChange(self):
