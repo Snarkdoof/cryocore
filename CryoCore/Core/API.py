@@ -54,6 +54,8 @@ global glblStatusReporter
 glblStatusReporter = None
 reporter_collection = None
 
+__is_direct = False
+
 
 def get_status_reporter():
     global glblStatusReporter
@@ -202,9 +204,11 @@ def shutdown():
     global api_stop_event
     api_stop_event.set()
 
-    global reporter_collection
-    del reporter_collection
-
+    try:
+        global reporter_collection
+        del reporter_collection
+    except:
+        pass
 
 def reset():
     """
@@ -232,7 +236,7 @@ def get_config(name=None, version="default", db_cfg=None):
 
     global main_configs
     if version not in main_configs:
-        main_configs[version] = Configuration(stop_event=api_stop_event, version=version, db_cfg=db_cfg)
+        main_configs[version] = Configuration(stop_event=api_stop_event, version=version, db_cfg=db_cfg, is_direct=__is_direct)
 
     global CONFIGS
     if not (name, version) in CONFIGS:

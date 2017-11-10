@@ -49,6 +49,9 @@ class IntegrityException(ConfigException):
     pass
 
 
+class CacheException(ConfigException):
+    pass
+
 _CONFIG_DB_CONNECTION_POOL = None
 
 
@@ -454,7 +457,7 @@ class Configuration(threading.Thread):
     It is thread-safe.
     """
 
-    def __init__(self, version=None, root="", stop_event=None, db_cfg=None):
+    def __init__(self, version=None, root="", stop_event=None, db_cfg=None, is_direct=False):
         """
         DO NOT USE this, use CryoCore.API.get_config instead
         """
@@ -463,6 +466,7 @@ class Configuration(threading.Thread):
         self.stop_event = stop_event
         self._internal_stop_event = threading.Event()
         self._db_cfg = db_cfg
+        self._is_direct = is_direct
         if root and root[-1] != ".":
             self.root = root + "."
         elif root is None:
@@ -480,7 +484,6 @@ class Configuration(threading.Thread):
         self.callbackCondition = threading.Condition()
         self._notify_counter = 0
         self._runQueue = queue.Queue()
-        self.start()
 
         # self._id_cache = {}
         self.cache = {}
@@ -490,6 +493,9 @@ class Configuration(threading.Thread):
         from .API import get_config_db
         self._cfg = get_config_db()
 
+        self.get_connection()
+        if not is_direct:
+            self.start()
         self.log = logging.getLogger("uav_config")
         if len(self.log.handlers) < 1:
             hdlr = logging.StreamHandler(sys.stdout)
@@ -558,7 +564,7 @@ class Configuration(threading.Thread):
                     # self.log.debug("** HIT %s %s %s" % (version, full_path, self.cache[version].keys()))
                     return val
         # self.log.debug("** FAIL %s %s %s" % (version, full_path, self.cache[version].keys()))
-        raise Exception("Missing parameter")
+        raise CacheException("Missing parameter")
 
     def __del__(self):
         try:
@@ -576,8 +582,13 @@ class Configuration(threading.Thread):
                 except:
                     # self.log.exception("Failed to clean up callbacks")
                     pass
+        try:
+            self._db_conn.close_connection()
+        except:
+            print("IGNORED: Failed to close DB connection")
 
     def _close_connection(self):
+        print ("***** *** *** *** CLOSING")
         self._db_conn.close_connection()
         # _get_conn_pool(self._db_cfg)._close_connection()
 
@@ -588,11 +599,22 @@ class Configuration(threading.Thread):
     def _execute(self, SQL, parameters=[],
                  temporary_connection=False,
                  ignore_error=False):
-
+        if self._is_direct:
+            try:
+                cursor = self._get_cursor()
+                cursor.execute(SQL, parameters)
+                return cursor
+            except Exception as e:
+                if ignore_error:
+                    return cursor
+                raise e
         event = threading.Event()
         retval = {}
         self._runQueue.put([event, retval, SQL, parameters, ignore_error])
+        t = time.time()
         event.wait(60.0)
+        if time.time() - t > 0.5:
+            print("*** SLOW ASYNC EXEC: %.2f" % time.time() - t, SQL, parameters)
         if not event.isSet():
             raise Exception("Failed to execute Config query in time (%s)" % SQL)
 
@@ -601,8 +623,16 @@ class Configuration(threading.Thread):
         return FakeCursor(retval)
 
     def run(self):
+        self.get_connection()
+        stop_time = 0
+        should_stop = False
         # print(os.getpid(), threading.currentThread().ident, "RUNNING")
-        while not self.stop_event.isSet() or not self._runQueue.empty():
+        while not should_stop:  # We wait for a bit after stop has been called to ensure that we finish all tasks
+            if self.stop_event.isSet() and self._runQueue.empty():
+                if not stop_time:
+                    stop_time = time.time()
+                elif time.time() - stop_time > 1:
+                    should_stop = True
             try:
                 task = self._runQueue.get(block=True, timeout=0.1)
                 event, retval, SQL, parameters, ignore_error = task
@@ -635,7 +665,6 @@ class Configuration(threading.Thread):
                     traceback.print_exc()
                     time.sleep(1)
                     continue
-                # print(" ***** EXECUTING *** ", SQL, str(parameters))
                 if len(parameters) > 0:
                     cursor.execute(SQL, tuple(parameters))
                 else:
@@ -1014,8 +1043,12 @@ class Configuration(threading.Thread):
                 else:
                     full_path = _full_path
             try:
-                return self._cache_lookup(version, full_path)
-            except:
+                item = self._cache_lookup(version, full_path)
+                if item:
+                    return item
+                else:
+                    raise NoSuchParameterException("No such parameter: " + full_path)
+            except CacheException:
                 # Cache miss
                 pass
             if DEBUG:
@@ -1044,6 +1077,8 @@ class Configuration(threading.Thread):
                 cursor = self._execute(SQL, params)
                 row = cursor.fetchone()
                 if not row:
+                    # Caching failures fails - a create is typically called 
+                    # self._cache_update(version, full_path, None, time.time() + 0.2)
                     raise NoSuchParameterException("No such parameter: " + full_path)
                 id, value, datatype, version, timestamp, comment = row
                 cp = ConfigParameter(self, id, name, parent_ids, path,
@@ -1554,7 +1589,6 @@ class Configuration(threading.Thread):
         else:
             # version_id = self._cfg["version"]
             version_id = self._get_version_id(self.version)
-
         import random
         callback_id = random.randint(0, 0xffffff)
 

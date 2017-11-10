@@ -80,6 +80,7 @@ def yn(message):
 
 if __name__ == "__main__":
     debug_ac = False
+    API.__is_direct = True  # We KNOW we're single threaded and can be quicker
     try:
         def completer(prefix, parsed_args, **kwargs):
             if debug_ac:

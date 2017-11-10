@@ -68,7 +68,7 @@ class StatusTest(unittest.TestCase):
         try:
             status.get_status_element("TestInteger")
             self.fail("Remove does not remove status element 'TestInteger'")
-        except Status.NoSuchElementException as e:
+        except Status.NoSuchElementException:
             # Expected
             pass
 
@@ -305,7 +305,6 @@ class StatusTest(unittest.TestCase):
                     event.clear()
                 else:
                     self.assertFalse(event.isSet())
-        
 
     def test2D(self):
 
@@ -417,7 +416,7 @@ class DummyCb:
 
 if __name__ == "__main__":
 
-    print("Testing Status module")
+    print("Testing Status module (takes a while...)")
 
     try:
         unittest.main()
