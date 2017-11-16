@@ -388,13 +388,24 @@ class NamedConfiguration:
         self.remove = self._parent.remove
         self.add = self._parent.add
         self.set = self._parent.set
-        self.get_leaves = self._parent.get_leaves
         self.keys = self._parent.keys
         self.get_version_info_by_id = self._parent.get_version_info_by_id
         self.serialize = self._parent.serialize
         self.deserialize = self._parent.deserialize
         self.last_updated = self._parent.last_updated
         self.del_callback = self._parent.del_callback
+
+    def get_leaves(self, root=None, recursive=True):
+        leaves = []
+        if root is None:
+            root = self.root[:-1]
+        else:
+            root = self.root + root
+
+        for leave in self._parent.get_leaves(root, True, recursive=recursive):
+            leaves.append(leave.replace(root + ".", ""))
+
+        return leaves
 
     def require(self, params):
         self._parent.require(params, self.root)
@@ -588,7 +599,6 @@ class Configuration(threading.Thread):
             print("IGNORED: Failed to close DB connection")
 
     def _close_connection(self):
-        print ("***** *** *** *** CLOSING")
         self._db_conn.close_connection()
         # _get_conn_pool(self._db_cfg)._close_connection()
 
@@ -613,7 +623,7 @@ class Configuration(threading.Thread):
         self._runQueue.put([event, retval, SQL, parameters, ignore_error])
         t = time.time()
         event.wait(60.0)
-        if time.time() - t > 0.5:
+        if time.time() - t > 2.0:
             print("*** SLOW ASYNC EXEC: %.2f" % time.time() - t, SQL, parameters)
         if not event.isSet():
             raise Exception("Failed to execute Config query in time (%s)" % SQL)
@@ -1077,7 +1087,7 @@ class Configuration(threading.Thread):
                 cursor = self._execute(SQL, params)
                 row = cursor.fetchone()
                 if not row:
-                    # Caching failures fails - a create is typically called 
+                    # Caching failures fails - a create is typically called
                     # self._cache_update(version, full_path, None, time.time() + 0.2)
                     raise NoSuchParameterException("No such parameter: " + full_path)
                 id, value, datatype, version, timestamp, comment = row
@@ -1089,7 +1099,7 @@ class Configuration(threading.Thread):
                 cp = ConfigParameter(self, 0, "root", [0], "",
                                      "folder", "", version, None, config=self)
 
-            if cp.datatype == "folder":
+            if 1 or cp.datatype == "folder":
                 timestamp, cp.children = self._get_children(cp)
                 cp._set_last_modified(timestamp)
 
@@ -1097,7 +1107,6 @@ class Configuration(threading.Thread):
             return cp
 
     def _get_children(self, config_parameter):
-
         SQL = "SELECT id, name, value, datatype, version, " + \
             "last_modified, comment FROM config WHERE " +\
             "parent=%s AND version=%s ORDER BY name"
@@ -1278,7 +1287,7 @@ class Configuration(threading.Thread):
             self._notify_counter += 1
             self.callbackCondition.notify()
 
-    def get_leaves(self, _full_path=None, absolute_path=False):
+    def get_leaves(self, _full_path=None, absolute_path=False, recursive=True):
         """
         Recursively return all leaves of the given path
         """
@@ -1286,15 +1295,18 @@ class Configuration(threading.Thread):
             param = self.get(_full_path, absolute_path=absolute_path)
             leaves = []
             folders = []
-            for child in param.children:
+            for child in self._get_children(param)[1]:  # .children:
                 if child.datatype == "folder":
                     folders.append(child)
                 else:
                     leaves.append(child.get_full_path()[len(self.root):])
 
             for folder in folders:
-                leaves += self.get_leaves(folder.get_full_path(),
-                                          absolute_path=True)
+                if recursive:
+                    leaves += self.get_leaves(folder.get_full_path(),
+                                              absolute_path=True)
+                else:
+                    leaves.append(folder.get_full_path()[len(self.root):])
 
             return leaves
 
