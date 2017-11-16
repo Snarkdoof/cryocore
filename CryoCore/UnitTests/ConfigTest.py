@@ -52,6 +52,24 @@ class ConfigTest(unittest.TestCase):
         self.assertEquals(self.cfg["TestBasic.Float"], cfg2["UnitTest.TestBasic.Float"])
         self.assertEquals(self.cfg["TestBasic.True"], cfg2["UnitTest.TestBasic.True"])
 
+        leaves = self.cfg.get_leaves(recursive=False)
+        expected = ["TestName", "TestBasic"]
+        for l in expected:
+            if l not in leaves:
+                self.fail("get_leaves() returns bad, expected '%s' got '%s'" % (expected, leaves))
+
+        leaves = self.cfg.get_leaves(recursive=True)
+        expected = ["TestName", "TestBasic.One", "TestBasic.Float", "TestBasic.True"]
+        for l in expected:
+            if l not in leaves:
+                self.fail("get_leaves() returns bad, expected '%s' got '%s'" % (expected, leaves))
+
+        leaves = self.cfg.get_leaves("TestBasic", recursive=False)
+        expected = ["One", "Float", "True"]
+        for l in expected:
+            if l not in leaves:
+                self.fail("get_leaves() returns bad, expected '%s' got '%s'" % (expected, leaves))
+
     def testVersions(self):
         cfg2 = API.get_config(version="SecondTest")
         if cfg2["UnitTest"]:
