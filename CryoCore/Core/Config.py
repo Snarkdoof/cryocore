@@ -20,6 +20,8 @@ import time
 import logging
 import logging.handlers
 
+from CryoCore.Core.Utils import logTiming
+
 if sys.version_info.major == 3:
     import queue
 else:
@@ -504,10 +506,8 @@ class Configuration(threading.Thread):
         from .API import get_config_db
         self._cfg = get_config_db()
 
-        self.get_connection()
-        if not is_direct:
-            self.start()
         self.log = logging.getLogger("uav_config")
+
         if len(self.log.handlers) < 1:
             hdlr = logging.StreamHandler(sys.stdout)
             # ihdlr = logging.handlers.RotatingFileHandler("UAVConfig.log",
@@ -516,6 +516,10 @@ class Configuration(threading.Thread):
             hdlr.setFormatter(formatter)
             self.log.addHandler(hdlr)
             self.log.setLevel(logging.DEBUG)
+
+        self.get_connection()
+        if not is_direct:
+            self.start()
 
         self._prepare_tables()
 
@@ -532,17 +536,21 @@ class Configuration(threading.Thread):
         self.version = version  # self._get_version_id(version)
 
     def get_connection(self):
-        if not self.db_conn:
-            self.db_conn = mysql.MySQLConnection(
-                    host=self._cfg["db_host"],
-                    user=self._cfg["db_user"],
-                    passwd=self._cfg["db_password"],
-                    db=self._cfg["db_name"],
-                    use_unicode=True,
-                    autocommit=True,
-                    charset="utf8")
-
-        return self.db_conn
+        while not self.stop_event.isSet():
+            try:
+                if not self.db_conn:
+                    self.db_conn = mysql.MySQLConnection(host=self._cfg["db_host"],
+                                                         user=self._cfg["db_user"],
+                                                         passwd=self._cfg["db_password"],
+                                                         db=self._cfg["db_name"],
+                                                         use_unicode=True,
+                                                         autocommit=True,
+                                                         charset="utf8")
+                if self.db_conn:
+                    return self.db_conn
+            except:
+                self.log.exception("Failed to get connection, trying in 5 seconds")
+                time.sleep(5)
 
     def _cache_update(self, version, full_path, cp, expires):
         if version not in self.cache:
@@ -594,17 +602,24 @@ class Configuration(threading.Thread):
                     # self.log.exception("Failed to clean up callbacks")
                     pass
         try:
-            self._db_conn.close_connection()
-        except:
-            print("IGNORED: Failed to close DB connection")
+            self.db_conn.close()
+        except Exception as e:
+            print("IGNORED: Failed to close DB connection", e)
 
     def _close_connection(self):
-        self._db_conn.close_connection()
+        try:
+            self.db_conn.close()
+        except:
+            pass
+        self.db_conn = None
         # _get_conn_pool(self._db_cfg)._close_connection()
 
     def _get_cursor(self, temporary_connection=False):
-        return self.get_connection().cursor()
-        #return _get_conn_pool(self._db_cfg).get_connection()[1]
+        try:
+            return self.get_connection().cursor()
+        except mysql.OperationalError:
+            self._close_connection()
+            return self._get_cursor(temporary_connection)
 
     def _execute(self, SQL, parameters=[],
                  temporary_connection=False,
@@ -624,7 +639,7 @@ class Configuration(threading.Thread):
         t = time.time()
         event.wait(60.0)
         if time.time() - t > 2.0:
-            print("*** SLOW ASYNC EXEC: %.2f" % time.time() - t, SQL, parameters)
+            print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
         if not event.isSet():
             raise Exception("Failed to execute Config query in time (%s)" % SQL)
 
@@ -690,7 +705,7 @@ class Configuration(threading.Thread):
                         pass  # fetchall likely used with no result
                 retval["return"] = res
                 break
-            except mysql.Warning:
+            except mysql.Warning:  # Is this really the correct thing to do?
                 print("WARNING")
                 break
             except mysql.IntegrityError as e:
@@ -1158,15 +1173,26 @@ class Configuration(threading.Thread):
             version = self.version
 
         def _rec_delete(id, version, path):
+            ret = []
             c = self._execute("SELECT id, name FROM config WHERE parent=%s AND version=%s", [id, version])
             for row in c.fetchall():
-                _rec_delete(row[0], version, path + "." + row[1])
-            self._execute("DELETE FROM config WHERE id=%s AND version=%s", [id, version])
+                ret.extend(_rec_delete(row[0], version, path + "." + row[1]))
             self._cache_remove(version, path)
+            ret.append((id, path))
+            return ret
 
         with self._load_lock:
             param = self.get(full_path, version)
-            _rec_delete(param._get_id(), param.get_version(), full_path)
+            params = _rec_delete(param._get_id(), param.get_version(), full_path)
+
+            SQL = "DELETE FROM config WHERE "
+            args = []
+            for i, p in params:
+                SQL += "id=%s OR "
+                args.append(i)
+            SQL = SQL[:-4]
+            self._execute(SQL, args)
+            self._execute(SQL.replace("FROM config", "FROM config_callback"), args)
 
     def add(self, _full_path, value=None, datatype=None, comment=None,
             version=None,
@@ -1549,16 +1575,16 @@ class Configuration(threading.Thread):
                                 # self.log.error("Requested callback '%s' (%s) that no longer exists: %s" % (name, str((cb_id, param_id)), str(self._update_callbacks)))
                                 continue
                             (func, args) = self._update_callbacks[(cb_id, param_id)]
-                            param = self.get_by_id(param_id)
-                            if not param:
-                                raise Exception("INTERNAL: Got update on deleted parameter %d" % param_id)
-
+                            try:
+                                param = self.get_by_id(param_id)
+                            except:
+                                # Ignore update on deleted parameter - things are asynchronous, so this might happen
+                                pass
                         if args:
                             func(param, *args)
                         else:
                             func(param)
-                    except Exception as e:
-                        print("CALLBACK EXCEPTION:", e)
+                    except Exception:
                         self.log.exception("In callback handler")
 
                     self._execute("UPDATE config_callback SET last_modified=%s WHERE id=%s and param_id=%s", [last_modified, cb_id, param_id])
