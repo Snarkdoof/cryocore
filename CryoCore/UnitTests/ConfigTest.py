@@ -4,6 +4,7 @@ import threading
 
 from CryoCore import API
 from CryoCore.Core import Config
+from CryoCore.Core.Utils import logTiming
 
 stop_event = threading.Event()
 
@@ -23,6 +24,7 @@ class ConfigTest(unittest.TestCase):
     def tearDown(self):
         API.get_config(version="unittest").remove("UnitTest")
         # API.get_config().delete_version("unittest")
+        time.sleep(0.2)
         pass
 
     def testBasic(self):
@@ -121,7 +123,7 @@ class ConfigTest(unittest.TestCase):
         self.cfg.get("TestBasic.Float").set_value(2.3)
         self.cfg.get("TestBasic.One").set_comment("A comment")
 
-        time.sleep(0.1)  # Allow a bit of time for async callbacks
+        time.sleep(0.2)  # Allow a bit of time for async callbacks
 
         # Verify
         self.assertTrue("UnitTest.TestBasic.One" in last_val, "Missing change on One")
@@ -150,9 +152,13 @@ if __name__ == "__main__":
     print("Testing Configuration module")
 
     try:
-        unittest.main()
+        if 0:
+            import cProfile
+            cProfile.run("unittest.main()")
+        else:
+            unittest.main()
     finally:
-        from CryoCore import API
+        # from CryoCore import API
         stop_event.set()
         API.shutdown()
 
