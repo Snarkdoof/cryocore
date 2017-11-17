@@ -14,7 +14,9 @@ else:
     import Queue as queue
 
 
-class DbHandler(logging.Handler, InternalDB.mysql, threading.Thread):
+dbg_flag = threading.Event()
+
+class DbHandler(logging.Handler, InternalDB.mysql):
     """
     This class takes care of logging the events which will be generated during the mission by the threads/processes into a database.
     It inherits from C{logging.Handler}, therefore it uses the Python logging support.
@@ -46,7 +48,6 @@ class DbHandler(logging.Handler, InternalDB.mysql, threading.Thread):
         @postcondition: The object variables L{con<DbHandler.con>} and L{cur<DbHandler.cur>} have been initialed properly. And by calling the base class constructor the whole new object.
         @warning: if the database connection failed, a log message would be saved into a file identify by I{aux_filename}. This file is maintained as a rotating file, therefore its name would be extended by numbers, e.g. '.1', '.2' etc.
         """
-        threading.Thread.__init__(self)
         self.level = level
         self._formatter = logging.Formatter()
 
@@ -63,16 +64,15 @@ class DbHandler(logging.Handler, InternalDB.mysql, threading.Thread):
         # We get ready to deal with problems in the database connection
         self.aux_logger = logging.getLogger('dbHandler_exception')
         if len(self.aux_logger.handlers) < 1:
-            #self.aux_logger.setLevel(logging.WARNING)
+            # self.aux_logger.setLevel(logging.WARNING)
             self.aux_logger.addHandler(logging.StreamHandler(sys.stdout))
             self.aux_logger.addHandler(logging.handlers.RotatingFileHandler(aux_filename,
-                    maxBytes=50000,
-                    backupCount=5))
+                                       maxBytes=50000,
+                                       backupCount=5))
 
         # Ensure that the file is accessible for other users too
         # - Some instruments run as root, but most dont
         # TODO: Do something more sensible here
-        import os
         import stat
         try:
             os.chmod(aux_filename, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
@@ -83,13 +83,23 @@ class DbHandler(logging.Handler, InternalDB.mysql, threading.Thread):
         # We use two internal events to control the handler.
         # The stop_event is set in the handler's close() function,
         # which in turn will wait for complete_event to be set.
-        self.stop_event = threading.Event()
+        self.stop_event = API.api_stop_event
         self.complete_event = threading.Event()
         # Set daemon flag to prevent need for calling logging.shutdown() in API.shutdown
-        self.daemon = True
-        self.start()
+        try:
+            self.daemon = True
+        except:
+            pass
 
-    def run(self):
+        self._async_thread = threading.Thread(target=self.run_it)
+        self._async_thread.start()
+        self._async_thread.isDaemon = True
+
+    def run_it(self):
+        if dbg_flag.isSet():
+            raise Exception("Already created one")
+        dbg_flag.set()
+
         init_statements = ["CREATE TABLE IF NOT EXISTS log ("
                            "id INT UNSIGNED AUTO_INCREMENT primary key, "
                            "message TEXT, "
@@ -112,12 +122,12 @@ class DbHandler(logging.Handler, InternalDB.mysql, threading.Thread):
         while self.get_log_entry_and_insert(False, None):
             pass
         self.complete_event.set()
-    
+
     def get_log_entry_and_insert(self, should_block, desired_timeout):
         try:
             (sql, args) = self.tasks.get(should_block, desired_timeout)
             # Should insert something
-            self._execute(sql, args, log_errors=False)
+            self._execute(sql, args)  # , log_errors=False)
         except queue.Empty:
             return False
         except Exception as e:
@@ -206,7 +216,6 @@ class DbHandler(logging.Handler, InternalDB.mysql, threading.Thread):
                 self.tasks.put((sql_sentence, toRecord))
                 # self._execute(sql_sentence, toRecord, log_errors=False)
             except Exception as e:
-                import sys
                 print("Error inserting log message into DB (%s): %s" % (sql_sentence, e))
                 self.aux_logger.exception(time.asctime(time.localtime()) + " - the database insertion has failed.")
                 self.aux_logger.error("SQL was '%s' params: %s" % (sql_sentence, str(toRecord)))

@@ -7,12 +7,10 @@ all use the config service to get hold of their configuration.
 from __future__ import print_function
 
 import mysql.connector as mysql
-import mysql.connector.pooling as mysqlpooling
 import threading
 import os.path
 import warnings
 import sys
-from operator import itemgetter
 
 import json
 import time
@@ -80,119 +78,6 @@ def _toUnicode(string):
     except:
         pass
     return unicode(string, "latin-1")
-
-
-class _ConnectionPool:
-    def __init__(self, db_cfg):
-        # Defaults
-        raise Exception("Should not use connection pool any more")
-        from .API import get_config_db
-        self._cfg = get_config_db()
-        self.db_connections = {}
-        if db_cfg:
-            for param in self._cfg:
-                if param in db_cfg:
-                    self._cfg[param] = db_cfg[param]
-
-        self.lastUsedConn = {}
-        self.connPool = None
-        self.lock = threading.Lock()
-
-    def _closeConnectionLRU(self):
-
-        for i in range(0, 6):
-            l = []
-            for tn in self.lastUsedConn:
-                l.append((tn, self.lastUsedConn[tn]))
-            if len(l) == 0:
-                print("Wierd, trying to clear LRU cache, but no entries, lastusedconn is: %d: %s" % (len(self.lastUsedConn), str(self.lastUsedConn)))
-                # Go drastic, delete the whole pool and create a new one
-                # TODO: FIX THIS - IT SHOULD NEVER BE NECESSARY AND COULD LEAD TO CONNECTION LEAKS
-                self.connPool = None
-                self.db_connections = {}
-                return
-            l.sort(key=itemgetter(1))
-            if time.time() - l[0][1] < 0.25:
-                # Less than 250 ms since this the LRU item was last used, wait a bit and try again
-                # print("Let the thing finish", time.time() - l[0][1], i)
-                time.sleep(0.25 - (time.time() - l[0][1]))
-            else:
-                break
-
-        thread_name = int(l[0][0])
-        # print("Closing connection for", thread_name)
-        try:
-            self.db_connections[thread_name][1].close()
-            self.db_connections[thread_name][0].close()
-        except Exception as e:
-            print("Exception closing", e)
-            pass
-        try:
-            del self.db_connections[thread_name]
-        except:
-            pass
-        try:
-            del self.lastUsedConn[thread_name]
-        except:
-            pass
-
-    def get_connection(self):
-        # print("Get connection:", self._cfg)
-        with self.lock:
-            if not self.connPool:
-                if self._cfg["max_connections"] > 32:
-                    print("WARNING: max_connections set too high, max is 32, set to %d" %
-                          self._cfg["max_connections"])
-                    self._cfg["max_connections"] = 32
-                self.connPool = mysqlpooling.MySQLConnectionPool(
-                    pool_name="config",
-                    pool_size=self._cfg["max_connections"],
-                    host=self._cfg["db_host"],
-                    user=self._cfg["db_user"],
-                    passwd=self._cfg["db_password"],
-                    db=self._cfg["db_name"],
-                    use_unicode=True,
-                    autocommit=True,
-                    charset="utf8")
-
-            thread_name = threading.currentThread().ident
-#            print(thread_name, "in", id(self.db_connections), self.db_connections.keys())
-            if thread_name not in self.db_connections:
-                try:
-                    conn = self.connPool.get_connection()
-                except mysql.errors.PoolError as e:
-                    if e.errno == -1:
-                        print(threading.currentThread().ident, "Config DB connection pool exchausted, try to free connection", e)
-                        # Exhausted pool try to free a connection, simple LRU
-                        self._closeConnectionLRU()
-                        # Retry
-                        conn = self.connPool.get_connection()
-                    else:
-                        raise e
-#                print(self.__class__, id(self), "Allocated connection to", thread_name, len(self.db_connections))
-                self.db_connections[thread_name] = (conn, conn.cursor())
-
-            self.lastUsedConn[thread_name] = time.time()
-            return self.db_connections[thread_name]
-
-    def _close_connection(self):
-        with self.lock:
-            thread_name = threading.currentThread().ident
-            if thread_name in self.db_connections:
-                try:
-                    self.db_connections[thread_name][1].close()
-                    self.db_connections[thread_name][0].close()
-                except:
-                    pass
-#                print("Closing connection", thread_name)
-                del self.db_connections[thread_name]
-
-
-def _get_conn_pool(db_cfg=None):
-    global _CONFIG_DB_CONNECTION_POOL
-    if _CONFIG_DB_CONNECTION_POOL is None:
-        _CONFIG_DB_CONNECTION_POOL = _ConnectionPool(db_cfg)
-    return _CONFIG_DB_CONNECTION_POOL
 
 
 class ConfigParameter:
@@ -535,22 +420,6 @@ class Configuration(threading.Thread):
         self.set_version(version, create=True)
         self.version = version  # self._get_version_id(version)
 
-    def get_connection(self):
-        while not self.stop_event.isSet():
-            try:
-                if not self.db_conn:
-                    self.db_conn = mysql.MySQLConnection(host=self._cfg["db_host"],
-                                                         user=self._cfg["db_user"],
-                                                         passwd=self._cfg["db_password"],
-                                                         db=self._cfg["db_name"],
-                                                         use_unicode=True,
-                                                         autocommit=True,
-                                                         charset="utf8")
-                if self.db_conn:
-                    return self.db_conn
-            except:
-                self.log.exception("Failed to get connection, trying in 5 seconds")
-                time.sleep(5)
 
     def _cache_update(self, version, full_path, cp, expires):
         if version not in self.cache:
@@ -605,6 +474,23 @@ class Configuration(threading.Thread):
             self.db_conn.close()
         except Exception as e:
             print("IGNORED: Failed to close DB connection", e)
+
+    def get_connection(self):
+        while not self.stop_event.isSet():
+            try:
+                if not self.db_conn:
+                    self.db_conn = mysql.MySQLConnection(host=self._cfg["db_host"],
+                                                         user=self._cfg["db_user"],
+                                                         passwd=self._cfg["db_password"],
+                                                         db=self._cfg["db_name"],
+                                                         use_unicode=True,
+                                                         autocommit=True,
+                                                         charset="utf8")
+                if self.db_conn:
+                    return self.db_conn
+            except:
+                self.log.exception("Failed to get connection, trying in 5 seconds")
+                time.sleep(5)
 
     def _close_connection(self):
         try:
@@ -685,6 +571,8 @@ class Configuration(threading.Thread):
                 try:
                     cursor = self._get_cursor()
                 except Exception as e:
+                    if self.stop_event.isSet():
+                        break
                     print("[%s] No connection, retrying in a bit" % os.getpid(), e)
                     import traceback
                     traceback.print_exc()
