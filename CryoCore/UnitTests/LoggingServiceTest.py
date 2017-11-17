@@ -47,7 +47,7 @@ if __name__ == "__main__":
     try:
         unittest.main()
     finally:
-        from Common import API
+        from CryoCore import API
         stop_event.set()
         API.shutdown()
 

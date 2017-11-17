@@ -3,6 +3,8 @@ import time
 import threading
 
 from CryoCore import API
+from CryoCore.Core import Config
+from CryoCore.Core.Utils import logTiming
 
 stop_event = threading.Event()
 
@@ -21,15 +23,24 @@ class ConfigTest(unittest.TestCase):
 
     def tearDown(self):
         API.get_config(version="unittest").remove("UnitTest")
+        # API.get_config().delete_version("unittest")
+        time.sleep(0.2)
+        pass
 
     def testBasic(self):
-
+        self.assertEquals(self.cfg.__class__, Config.NamedConfiguration, "Wrong ")
         self.cfg.require(["TestName", "TestBasic.One", "TestBasic.Float", "TestBasic.True"])
         try:
             self.cfg.require(["DoesNotExist", "TestName"])
             self.fail("Require does not throw exception when parameter is missing")
         except:
             pass
+
+        # These should be ignored
+        self.cfg.set_default("TestName", "TestNameFoo")
+        self.cfg.set_default("TestBasic.One", 42)
+        self.cfg.set_default("TestBasic.Float", 42.21)
+        self.cfg.set_default("TestBasic.True", False)
 
         self.assertEquals(self.cfg["TestName"], "TestNameValue")
         self.assertEquals(self.cfg["TestBasic.One"], 1)
@@ -42,6 +53,24 @@ class ConfigTest(unittest.TestCase):
         self.assertEquals(self.cfg["TestBasic.One"], cfg2["UnitTest.TestBasic.One"])
         self.assertEquals(self.cfg["TestBasic.Float"], cfg2["UnitTest.TestBasic.Float"])
         self.assertEquals(self.cfg["TestBasic.True"], cfg2["UnitTest.TestBasic.True"])
+
+        leaves = self.cfg.get_leaves(recursive=False)
+        expected = ["TestName", "TestBasic"]
+        for l in expected:
+            if l not in leaves:
+                self.fail("get_leaves() returns bad, expected '%s' got '%s'" % (expected, leaves))
+
+        leaves = self.cfg.get_leaves(recursive=True)
+        expected = ["TestName", "TestBasic.One", "TestBasic.Float", "TestBasic.True"]
+        for l in expected:
+            if l not in leaves:
+                self.fail("get_leaves() returns bad, expected '%s' got '%s'" % (expected, leaves))
+
+        leaves = self.cfg.get_leaves("TestBasic", recursive=False)
+        expected = ["One", "Float", "True"]
+        for l in expected:
+            if l not in leaves:
+                self.fail("get_leaves() returns bad, expected '%s' got '%s'" % (expected, leaves))
 
     def testVersions(self):
         cfg2 = API.get_config(version="SecondTest")
@@ -78,7 +107,8 @@ class ConfigTest(unittest.TestCase):
 
         try:
             cfg.get("UnitTest")
-        except:
+        except Exception as e:
+            print("EXCEPTION", e)
             self.fail("Cleaning does not respect versions")
 
     def testChange(self):
@@ -93,7 +123,7 @@ class ConfigTest(unittest.TestCase):
         self.cfg.get("TestBasic.Float").set_value(2.3)
         self.cfg.get("TestBasic.One").set_comment("A comment")
 
-        time.sleep(0.1)  # Allow a bit of time for async callbacks
+        time.sleep(0.2)  # Allow a bit of time for async callbacks
 
         # Verify
         self.assertTrue("UnitTest.TestBasic.One" in last_val, "Missing change on One")
@@ -122,9 +152,13 @@ if __name__ == "__main__":
     print("Testing Configuration module")
 
     try:
-        unittest.main()
+        if 0:
+            import cProfile
+            cProfile.run("unittest.main()")
+        else:
+            unittest.main()
     finally:
-        from CryoCore import API
+        # from CryoCore import API
         stop_event.set()
         API.shutdown()
 

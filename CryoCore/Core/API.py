@@ -13,7 +13,7 @@ import logging
 import json
 
 from CryoCore.Core.Status import Status
-from CryoCore.Core.Config import Configuration
+from CryoCore.Core.Config import Configuration, NamedConfiguration
 # from CryoCore.Core.Utils import logTiming
 import threading
 import multiprocessing
@@ -47,9 +47,14 @@ log_level = {logging.CRITICAL: "CRITICAL",
 global CONFIGS
 CONFIGS = {}
 
+global main_configs
+main_configs = {}
+
 global glblStatusReporter
 glblStatusReporter = None
 reporter_collection = None
+
+__is_direct = False
 
 
 def get_status_reporter():
@@ -147,7 +152,6 @@ class ReporterCollection:
     @staticmethod
     def get_singleton():
         if ReporterCollection.singleton == "None":
-            print("CREATING NEW ReporterCollection")
             ReporterCollection.singleton = ReporterCollection()
         return ReporterCollection.singleton
 
@@ -197,14 +201,14 @@ def shutdown():
     """
     Shut the API down properly
     """
-
     global api_stop_event
     api_stop_event.set()
 
-    global reporter_collection
-    del reporter_collection
-    reporter_collection = None
-
+    try:
+        global reporter_collection
+        del reporter_collection
+    except:
+        pass
 
 def reset():
     """
@@ -230,12 +234,17 @@ def get_config(name=None, version="default", db_cfg=None):
     if db_cfg is None:
         db_cfg = GlobalDBConfig.get_singleton().cfg
 
+    global main_configs
+    if version not in main_configs:
+        main_configs[version] = Configuration(stop_event=api_stop_event, version=version, db_cfg=db_cfg, is_direct=__is_direct)
+
     global CONFIGS
     if not (name, version) in CONFIGS:
-        CONFIGS[(name, version)] = Configuration(root=name,
-                                                 stop_event=api_stop_event,
-                                                 version=version,
-                                                 db_cfg=db_cfg)
+        CONFIGS[(name, version)] = NamedConfiguration(name, version, main_configs[version])
+        #CONFIGS[(name, version)] = Configuration(root=name,
+        #                                         stop_event=api_stop_event,
+        #                                         version=version,
+        #                                         db_cfg=db_cfg)
     return CONFIGS[(name, version)]
 
 
