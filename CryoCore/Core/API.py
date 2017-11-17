@@ -14,6 +14,7 @@ import json
 
 from CryoCore.Core.Status import Status
 from CryoCore.Core.Config import Configuration, NamedConfiguration
+
 # from CryoCore.Core.Utils import logTiming
 import threading
 import multiprocessing
@@ -49,6 +50,9 @@ CONFIGS = {}
 
 global main_configs
 main_configs = {}
+
+LOGS = {}
+LOG_DESTINATION = None
 
 global glblStatusReporter
 glblStatusReporter = None
@@ -250,9 +254,17 @@ def get_config(name=None, version="default", db_cfg=None):
 
 # @logTiming
 def get_log(name):
-    from CryoCore.Core.loggingService import getLoggingService
-    assert name.__class__ == str
-    return getLoggingService(name)
+    global LOGS
+    global LOG_DESTINATION
+    if not LOG_DESTINATION:
+        from CryoCore.Core.dbHandler import DbHandler
+        LOG_DESTINATION = DbHandler()
+    if name not in LOGS:
+            LOGS[name] = logging.getLogger(name)
+            LOGS[name].propagate = False
+            LOGS[name].setLevel(logging.DEBUG)
+            LOGS[name].addHandler(LOG_DESTINATION)
+    return LOGS[name]
 
 
 # @logTiming

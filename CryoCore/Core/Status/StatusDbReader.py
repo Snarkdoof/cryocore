@@ -5,7 +5,7 @@ class StatusDbReader(InternalDB.mysql):
 
     def __init__(self, name="System.Status.MySQL"):
         cfg = API.get_config(name)
-        InternalDB.mysql.__init__(self, name, cfg)
+        InternalDB.mysql.__init__(self, name, cfg, is_direct=True)
         self._id_cache = {}
 
     def _cache_lookup(self, chan, param):

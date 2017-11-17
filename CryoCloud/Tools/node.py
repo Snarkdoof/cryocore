@@ -125,7 +125,6 @@ class Worker(multiprocessing.Process):
             self._stop_event.set()
 
         signal.signal(signal.SIGINT, sighandler)
-
         self.log = API.get_log(self.wid)
         self.status = API.get_status(self.wid)
         self._jobdb = jobdb.JobDB(None, None)
