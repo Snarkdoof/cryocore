@@ -14,7 +14,7 @@ else:
     import Queue as queue
 
 
-dbg_flag = threading.Event()
+# dbg_flag = threading.Event()
 
 class DbHandler(logging.Handler, InternalDB.mysql):
     """
@@ -48,6 +48,10 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         @postcondition: The object variables L{con<DbHandler.con>} and L{cur<DbHandler.cur>} have been initialed properly. And by calling the base class constructor the whole new object.
         @warning: if the database connection failed, a log message would be saved into a file identify by I{aux_filename}. This file is maintained as a rotating file, therefore its name would be extended by numbers, e.g. '.1', '.2' etc.
         """
+        # if dbg_flag.isSet():
+        #    raise Exception("Already created one")
+        # dbg_flag.set()
+
         self.level = level
         self._formatter = logging.Formatter()
 
@@ -96,9 +100,6 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         self._async_thread.isDaemon = True
 
     def run_it(self):
-        if dbg_flag.isSet():
-            raise Exception("Already created one")
-        dbg_flag.set()
 
         init_statements = ["CREATE TABLE IF NOT EXISTS log ("
                            "id INT UNSIGNED AUTO_INCREMENT primary key, "

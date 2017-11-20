@@ -39,8 +39,8 @@ try:
         # print("Test file: " + test_file + " class:" + test_class)
         try:
             exec("from CryoCore.UnitTests import " + test_file)
-        except:
-            print(" *** UNITTEST", test_file, " is broken (does not import")
+        except Exception as e:
+            print(" *** UNITTEST", test_file, " is broken (does not import:", e, ")")
             log.exception("Unittest %s is broken" % test_file)
             continue
 
@@ -56,7 +56,7 @@ try:
                         raise e
                 elif member[0] == "stop_event":
                     stop_events.append(%s.stop_event)""" %
-                     (test_file, test_file, test_file, test_file, test_file))
+                 (test_file, test_file, test_file, test_file, test_file))
         except:
             log.exception("Can't execute unittest %s" % test_file)
             continue
@@ -83,6 +83,7 @@ try:
             test_suite = unittest.makeSuite(suite, 'test')
 
             # Run the suite
+            print("RUNNING", suite)
             res = runner.run(test_suite)
             total += res.testsRun
             errors += len(res.errors)
