@@ -39,4 +39,18 @@ mysql -u root -p < CryoCore/Install/create_db.sql
 echo "Importing default config"
 python CryoCore/Tools/ConfigTool.py import CryoCore/Install/defaultConfiguration.xml
 
+
+echo "Copying startup scripts"
+python -c "import sys;import os;lines=sys.stdin.read();print lines.replace('CCINSTALLDIR', os.getcwd())" < CryoCore/Install/cryocore.service > /tmp/cryocore.service
+sudo mv /tmp/cryocore.service /etc/systemd/system/
+
+python -c "import sys;import os;lines=sys.stdin.read();print lines.replace('CCINSTALLDIR', os.getcwd())" < CryoCore/Install/cryocored > bin/cryocored
+chmod 755 bin/cryocored
+
+systemctl is-enabled cryocore.service
+if $? == 1; then
+  echo "To autostart, please write:"
+  echo "sudo systemctl enable cryocore.service"
+fi
+
 echo "OK"
