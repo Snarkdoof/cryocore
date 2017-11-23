@@ -274,13 +274,12 @@ class JobDB(mysql):
 if __name__ == "__main__":
     try:
         print("Testing")
-        db = JobDB(None, None)
-
-        # db = JobDB("test1", "hello", 2)
+        db = JobDB("test1", "hello", 2)
+        # db = JobDB(None, None)
         # db.add_job(0, 1, {"param1":1, "param2": "param2"})
-        jobs = db.allocate_job(max_jobs=2)
-        for job in jobs:
-            print("Got job", job)
-            db.update_job(job["id"], db.STATE_COMPLETED)
+        # jobs = db.allocate_job(max_jobs=2)
+        # for job in jobs:
+        #    print("Got job", job)
+        #    db.update_job(job["id"], db.STATE_COMPLETED)
     finally:
         API.shutdown()
