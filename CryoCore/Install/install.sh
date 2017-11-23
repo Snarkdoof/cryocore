@@ -12,7 +12,7 @@ apt-get --help > /dev/null
 if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
 	echo "Checking dependencies"
   sudo apt-get update
-	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip
+	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip python-pyinotify python3-pyinotify
 
 	sudo activate-global-python-argcomplete
 	
