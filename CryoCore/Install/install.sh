@@ -48,7 +48,7 @@ python -c "import sys;import os;lines=sys.stdin.read();print lines.replace('CCIN
 chmod 755 bin/cryocored
 
 systemctl is-enabled cryocore.service
-if $? == 1; then
+if test $? == 1; then
   echo "To autostart, please write:"
   echo "sudo systemctl enable cryocore.service"
 fi
