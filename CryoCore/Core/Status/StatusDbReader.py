@@ -40,8 +40,8 @@ class StatusDbReader(InternalDB.mysql):
         """
         paramid = self._cache_lookup(channel, name)
 
-        SQL = "SELECT timestamp, value FROM status WHERE id=(SELECT max(id) FROM status WHERE paramid=?)"
-        # SQL = "SELECT timestamp, value FROM status WHERE paramid=? ORDER BY id DESC LIMIT 1"
+        # SQL = "SELECT timestamp, value FROM status WHERE id=(SELECT max(id) FROM status WHERE paramid=?)"
+        SQL = "SELECT timestamp, value FROM status WHERE paramid=? ORDER BY id DESC LIMIT 1"
         cursor = self._execute(SQL, [paramid])
         # SQL = "SELECT timestamp, value FROM status,status_parameter,status_channel WHERE status_channel.name=? AND status_parameter.name=? AND status_parameter.chanid=status_channel.chanid AND status.paramid=status_parameter.paramid ORDER BY id DESC LIMIT 1"
         # cursor = self._execute(SQL, (channel, name))
@@ -54,7 +54,8 @@ class StatusDbReader(InternalDB.mysql):
         """
         Return the last (timestamp, value) of the given parameter
         """
-        SQL = "SELECT timestamp, value FROM status WHERE id=(SELECT max(id) FROM status WHERE paramid=?)"
+        SQL = "SELECT timestamp, value FROM status WHERE paramid=? ORDER BY id DESC LIMIT 1"
+        # SQL = "SELECT timestamp, value FROM status WHERE id=(SELECT max(id) FROM status WHERE paramid=?)"
         cursor = self._execute(SQL, (paramid))
         row = cursor.fetchone()
         if not row:
