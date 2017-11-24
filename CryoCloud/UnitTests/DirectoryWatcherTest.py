@@ -1,0 +1,221 @@
+from __future__ import print_function
+
+import unittest
+import time
+import threading
+import tempfile
+import shutil
+
+from CryoCore import API
+from CryoCloud.Common.directorywatcher import *
+
+stop_event = threading.Event()
+
+
+class Listener:
+    def __init__(self):
+        self.added = []
+        self.modified = []
+        self.removed = []
+        self.errors = []
+
+    def onAdd(self, info):
+        print("ADDED", info)
+        self.added.append(info["relpath"])
+        self.added.sort()
+
+    def onModify(self, info):
+        print("MODIFIED", info)
+        self.modified.append(info["relpath"])
+        self.modified.sort()
+
+    def onRemove(self, info):
+        self.removed.append(info["relpath"])
+        self.removed.sort()
+
+    def onError(self, info):
+        print("ERROR", info)
+        self.errors.append(info)
+        self.errors.sort()
+
+
+class DirectoryWatcherTest(unittest.TestCase):
+    """
+    Unit tests for the Directory Watcher
+
+    """
+    def setUp(self):
+        self.runid = 123
+        self.listener = Listener()
+        self.target = tempfile.mkdtemp()
+        print("Running on target", self.target)
+
+    def tearDown(self):
+        shutil.rmtree(self.target)
+
+    def testBasic(self):
+        dw = DirectoryWatcher(self.runid,
+                              self.target,
+                              onAdd=self.listener.onAdd,
+                              onModify=self.listener.onModify,
+                              onRemove=self.listener.onRemove,
+                              onError=self.listener.onError,
+                              stabilize=1.0)
+        dw.start()
+
+        # Add a few files
+        f = open(os.path.join(self.target, "1"), "w")
+        f.write("1")
+        f.close()
+        f = open(os.path.join(self.target, "2"), "w")
+        f.write("2")
+        f.close()
+        time.sleep(2)
+
+        self.assertEquals(self.listener.added, ["1", "2"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        f = open(os.path.join(self.target, "1"), "w")
+        f.write("1a")
+        f.close()
+        f = open(os.path.join(self.target, "2"), "w")
+        f.write("2a")
+        f.close()
+        time.sleep(2)
+        self.assertEquals(self.listener.added, ["1", "2"])
+        self.assertEquals(self.listener.modified, ["1", "2"])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        os.remove(os.path.join(self.target, "1"))
+        os.remove(os.path.join(self.target, "2"))
+        time.sleep(1.0)
+        self.assertEquals(self.listener.added, ["1", "2"])
+        self.assertEquals(self.listener.modified, ["1", "2"])
+        self.assertEquals(self.listener.removed, ["1", "2"])
+        self.assertEquals(self.listener.errors, [])
+
+    def testMove(self):
+        dw = DirectoryWatcher(self.runid,
+                              self.target,
+                              onAdd=self.listener.onAdd,
+                              onModify=self.listener.onModify,
+                              onRemove=self.listener.onRemove,
+                              onError=self.listener.onError,
+                              stabilize=1.0)
+        dw.start()
+
+        target = os.path.join(self.target, "1")
+        f = open(target, "w")
+        f.close()
+        time.sleep(2)
+        self.assertEquals(self.listener.added, ["1"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        # Move the file
+        os.rename(target, "/tmp/.tmptmp")
+        time.sleep(1)
+        self.assertEquals(self.listener.added, ["1"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, ["1"])
+        self.assertEquals(self.listener.errors, [])
+
+        # Move the file back
+        os.rename("/tmp/.tmptmp", target)
+        time.sleep(1)
+        self.assertEquals(self.listener.added, ["1", "1"])  # What is the correct effect here?
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, ["1"])
+        self.assertEquals(self.listener.errors, [])
+
+    def testRecursive(self):
+        dw = DirectoryWatcher(self.runid,
+                              self.target,
+                              onAdd=self.listener.onAdd,
+                              onModify=self.listener.onModify,
+                              onRemove=self.listener.onRemove,
+                              onError=self.listener.onError,
+                              stabilize=1.0,
+                              recursive=True)
+        dw.start()
+
+        self.fail("Write test")
+
+    def testDirectories(self):
+        dw = DirectoryWatcher(self.runid,
+                              self.target,
+                              onAdd=self.listener.onAdd,
+                              onModify=self.listener.onModify,
+                              onRemove=self.listener.onRemove,
+                              onError=self.listener.onError,
+                              stabilize=1.0,
+                              recursive=False)
+        dw.start()
+
+        target = os.path.join(self.target, "dir1")
+        os.mkdir(target)
+
+        for i in range(0, 10):
+            f = open(os.path.join(target, str(i)), "w")
+            time.sleep(0.2)
+            f.write("1")
+            f.flush()
+            f.close()
+
+        # Should still not be stable
+        self.assertEquals(self.listener.added, [])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        time.sleep(2.0)
+        # Should be stable
+        self.assertEquals(self.listener.added, ["dir1"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        target = os.path.join(self.target, "dir2")
+        os.mkdir(target)
+
+        f = open(os.path.join(target, "1"), "w")
+        for i in range(0, 10):
+            time.sleep(0.2)
+            f.write("1")
+            f.flush()
+        f.close()
+
+        # Should still not be stable
+        self.assertEquals(self.listener.added, ["dir1"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        time.sleep(2.0)
+        # Should be stable
+        self.assertEquals(self.listener.added, ["dir1", "dir2"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+
+if __name__ == "__main__":
+
+    print("Testing Directiory watcher module")
+
+    try:
+        if 0:
+            import cProfile
+            cProfile.run("unittest.main()")
+        else:
+            unittest.main()
+    finally:
+        # from CryoCore import API
+        stop_event.set()
+        API.shutdown()
+
+    print("All done")
