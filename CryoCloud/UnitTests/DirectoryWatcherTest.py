@@ -20,16 +20,17 @@ class Listener:
         self.errors = []
 
     def onAdd(self, info):
-        print("ADDED", info)
+        # print("ADDED", info)
         self.added.append(info["relpath"])
         self.added.sort()
 
     def onModify(self, info):
-        print("MODIFIED", info)
+        # print("MODIFIED", info)
         self.modified.append(info["relpath"])
         self.modified.sort()
 
     def onRemove(self, info):
+        # print("REMOVED", info)
         self.removed.append(info["relpath"])
         self.removed.sort()
 
@@ -48,7 +49,6 @@ class DirectoryWatcherTest(unittest.TestCase):
         self.runid = 123
         self.listener = Listener()
         self.target = tempfile.mkdtemp()
-        print("Running on target", self.target)
 
     def tearDown(self):
         shutil.rmtree(self.target)
@@ -143,7 +143,78 @@ class DirectoryWatcherTest(unittest.TestCase):
                               recursive=True)
         dw.start()
 
-        self.fail("Write test")
+        target = os.path.join(self.target, "dir1")
+        os.mkdir(target)
+        time.sleep(0.5)
+        # Should still not be stable
+        self.assertEquals(self.listener.added, [])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        time.sleep(1.)
+        # Should be stable
+        self.assertEquals(self.listener.added, ["dir1"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        target2 = os.path.join(target, "dir2")
+        os.mkdir(target2)
+
+        time.sleep(0.5)
+        # Should still not be stable
+        self.assertEquals(self.listener.added, ["dir1"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        time.sleep(1)
+        # Should be stable
+        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        filename = os.path.join(target2, "file1")
+        f = open(filename, "w")
+        f.write("foo")
+        f.close()
+        time.sleep(0.5)
+        # Should still not be stable
+        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        time.sleep(1)
+        # Should be stable
+        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        # Remove
+        os.remove(filename)
+        time.sleep(0.5)
+        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, ["dir1/dir2/file1"])
+        self.assertEquals(self.listener.errors, [])
+
+        os.rmdir(target2)
+        time.sleep(0.5)
+        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, ["dir1/dir2", "dir1/dir2/file1"])
+        self.assertEquals(self.listener.errors, [])
+
+        os.rmdir(target)
+        time.sleep(0.5)
+        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
+        self.assertEquals(self.listener.errors, [])
 
     def testDirectories(self):
         dw = DirectoryWatcher(self.runid,
