@@ -273,6 +273,40 @@ class DirectoryWatcherTest(unittest.TestCase):
         self.assertEquals(self.listener.removed, [])
         self.assertEquals(self.listener.errors, [])
 
+    def testReset(self):
+
+        dw = DirectoryWatcher(self.runid,
+                              self.target,
+                              onAdd=self.listener.onAdd,
+                              onModify=self.listener.onModify,
+                              onRemove=self.listener.onRemove,
+                              onError=self.listener.onError,
+                              stabilize=1.0,
+                              recursive=False)
+        dw.start()
+        # Add a few files
+        f = open(os.path.join(self.target, "1"), "w")
+        f.write("1")
+        f.close()
+        f = open(os.path.join(self.target, "2"), "w")
+        f.write("2")
+        f.close()
+        time.sleep(2)
+
+        self.assertEquals(self.listener.added, ["1", "2"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        # Reset
+        dw.reset()
+
+        time.sleep(0.5)
+        self.assertEquals(self.listener.added, ["1", "1", "2", "2"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
 
 if __name__ == "__main__":
 

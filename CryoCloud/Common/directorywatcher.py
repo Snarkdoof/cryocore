@@ -145,7 +145,7 @@ class DirectoryWatcher(threading.Thread):
         self.runid = runid
         self.target = target
         self.recursive = recursive
-
+        self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._unstable = {}
 
@@ -211,11 +211,20 @@ class DirectoryWatcher(threading.Thread):
         """
         Reset all files
         """
-        self._db.reset_files(self, self.target, self.runid)
+        self._db.reset_files(self.target, self.runid)
+
+        # We now do an initial check again
+        self._check_existing(self.target)
+
+    def stop(self):
+        """
+        Stop the DirWatcher - it also stops if API.api_stop_event is set (API.shutdown() has been run)
+        """
+        self._stop_event.set()
 
     def run(self):
         next_check = 0
-        while not CryoCore.API.api_stop_event.isSet():
+        while not CryoCore.API.api_stop_event.isSet() and not self._stop_event.isSet():
             if self.notifier.check_events(timeout=0.25):
                 self.notifier.read_events()
                 self.notifier.process_events()
