@@ -1520,6 +1520,7 @@ class Configuration(threading.Thread):
 
         if not self._cb_thread:
             self._cb_thread = threading.Thread(target=self._callback_thread_main)
+            self._cb_thread.daemon = True
             self._cb_thread.start()
 
         for param in parameter_list:

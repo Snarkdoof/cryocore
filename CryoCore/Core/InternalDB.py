@@ -40,6 +40,11 @@ class FakeCursor():
         else:
             self.rowcount = None
 
+        if "lastrowid" in result:
+            self.lastrowid = result["lastrowid"]
+        else:
+            self.lastrowid = None
+
     def fetchone(self):
         if self.index >= len(self.resultset):
             return None
@@ -61,6 +66,7 @@ class AsyncDB(threading.Thread):
         global dbThread
         if dbThread is None:
             dbThread = AsyncDB(config)
+            dbThread.daemon = True  # Will be stopped too quickly otherwise...
             dbThread.start()
         return dbThread
 
@@ -87,6 +93,7 @@ class AsyncDB(threading.Thread):
             self.log.setLevel(logging.DEBUG)
 
     def __del__(self):
+        print("AsyncDB stopped")
         return  # No commit should be necessary
         with self._db_lock:
             for c in list(self.db_connections.values()):
@@ -107,28 +114,40 @@ class AsyncDB(threading.Thread):
         self.get_connection()
         stop_time = 0
         should_stop = False
+        # print("ASYNCDB starting")
         # print(os.getpid(), threading.currentThread().ident, "o")
         while not should_stop:  # We wait for a bit after stop has been called to ensure that we finish all tasks
-            if self.stop_event.isSet() and self.runQueue.empty():
-                if not stop_time:
-                    stop_time = time.time()
-                elif time.time() - stop_time > 1:
-                    should_stop = True
-                    self.running = False
             try:
-                task = self.runQueue.get(block=True, timeout=0.1)
+                if self.stop_event.isSet() and self.runQueue.empty():
+                    # print("Should stop?")
+                    if not stop_time:
+                        stop_time = time.time()
+                    elif time.time() - stop_time > 1:
+                        # print("ASYNCDB should stop")
+                        should_stop = True
+                        self.running = False
+
+                task = self.runQueue.get(block=True, timeout=0.5)
                 event, retval, SQL, parameters, ignore_error = task
                 # self.log.debug("Running event %s" % SQL)
                 self._async_execute(event, retval, SQL, parameters, ignore_error)
             except queue.Empty:
+                # print(os.getpid(), "AsyncDB IDLE")
                 continue
+            except KeyboardInterrupt:
+                print("*** Ignoring keyboard interrupt - handle on main thread... ***")
+                # We ignore these - these should be handled by the MAIN THREAD, which is not us...
+                pass
             except:
                 print("Unhandled exception")
                 import traceback
                 import sys
                 traceback.print_exc(file=sys.stdout)
+
         if DEBUG:
             self.log.debug("ASYNC_DB STOPPED")
+
+        # print("ASYNC DB STOPPED")
 
     def _get_conn_cfg(self):
 
@@ -207,6 +226,7 @@ class AsyncDB(threading.Thread):
                 retval["status"] = "ok"
                 retval["return"] = []
                 retval["rowcount"] = cursor.rowcount
+                retval["lastrowid"] = cursor.lastrowid
                 res = []
                 if cursor.rowcount != 0:
                     try:
@@ -338,7 +358,6 @@ class mysql:
 
         if DEBUG and self.log:
             self.log.debug("Initializing tables DONE")
-
 
     def _execute(self, SQL, parameters=[],
                  temporary_connection=False,

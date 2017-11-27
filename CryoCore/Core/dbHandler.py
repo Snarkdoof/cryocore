@@ -91,13 +91,13 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         self.complete_event = threading.Event()
         # Set daemon flag to prevent need for calling logging.shutdown() in API.shutdown
         try:
-            self.daemon = True
+            self.daemon = False
         except:
             pass
 
         self._async_thread = threading.Thread(target=self.run_it)
+        self._async_thread.daemon = True
         self._async_thread.start()
-        self._async_thread.isDaemon = True
 
     def run_it(self):
 
@@ -142,7 +142,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         Close the C{logging.Handler} object. It closes both the C{sqlite3.Connection} L{con<DbHandler.con>} and the C{sqlite3.Cursor} L{cur<DbHandler.cur>} variables, and calls the base class close function.
         @postcondition: The object variables L{con<DbHandler.con>} and L{cur<DbHandler.cur>} are closed, therefore they are no longer available.
         """
-        self.stop_event.set()
+        # self.stop_event.set()
         self.complete_event.wait()
         logging.Handler.close(self)
 
