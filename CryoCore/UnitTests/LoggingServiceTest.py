@@ -2,7 +2,6 @@
 import unittest
 from CryoCore.Core.loggingService import getLoggingService
 import threading
-import logging
 import time
 
 stop_event = threading.Event()
@@ -14,7 +13,8 @@ class TestLoggingService(unittest.TestCase):
         self.log = getLoggingService("LogUnitTest")
 
     def tearDown(self):
-        logging.shutdown()
+        pass
+        # logging.shutdown()
 
     def testBasic(self):
         self.log.debug("Debug message")
@@ -25,6 +25,8 @@ class TestLoggingService(unittest.TestCase):
             raise Exception("Test exception")
         except:
             self.log.exception("Exception message")
+
+        print "DONE"
 
     def testMultiThread(self):
         def runner(name):
@@ -44,10 +46,11 @@ if __name__ == "__main__":
 
     print("Testing Log module")
 
+    from CryoCore import API
     try:
         unittest.main()
     finally:
-        from CryoCore import API
+        print "Got some kind of exception"
         stop_event.set()
         API.shutdown()
 

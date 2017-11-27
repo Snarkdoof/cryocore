@@ -43,7 +43,7 @@ class InternalDBTest(unittest.TestCase):
             while not stop_event.is_set() and not API.api_stop_event.is_set():
                 self.db._execute("INSERT INTO __TestDB__ values(%s)", [random.randint(0, 1000000)])
                 self.inserted += 1
-                time.sleep(random.random()*0.5)
+                time.sleep(random.random() * 0.5)
 
         t1 = threading.Thread(target=runpoint)
         t1.start()

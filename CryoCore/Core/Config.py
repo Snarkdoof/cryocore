@@ -372,6 +372,7 @@ class Configuration(threading.Thread):
         else:
             self.root = root
 
+        self.running = True
         self._cb_lock = threading.Lock()
         self._cb_thread = None
         self.connPool = None
@@ -419,7 +420,6 @@ class Configuration(threading.Thread):
 
         self.set_version(version, create=True)
         self.version = version  # self._get_version_id(version)
-
 
     def _cache_update(self, version, full_path, cp, expires):
         if version not in self.cache:
@@ -510,6 +510,10 @@ class Configuration(threading.Thread):
     def _execute(self, SQL, parameters=[],
                  temporary_connection=False,
                  ignore_error=False):
+
+        if not self.running:
+            raise Exception("Can't execute more commands - have stopped")
+
         if self._is_direct:
             try:
                 cursor = self._get_cursor()
@@ -542,13 +546,16 @@ class Configuration(threading.Thread):
             if self.stop_event.isSet() and self._runQueue.empty():
                 if not stop_time:
                     stop_time = time.time()
-                elif time.time() - stop_time > 1:
+                elif time.time() - stop_time > 2:
+                    # print("Async config DB stopped")
+                    self.running = False
                     should_stop = True
             try:
-                task = self._runQueue.get(block=True, timeout=0.1)
+                task = self._runQueue.get(block=True, timeout=0.5)
                 event, retval, SQL, parameters, ignore_error = task
                 self._async_execute(event, retval, SQL, parameters, ignore_error)
             except queue.Empty:
+                # print(os.getpid(), "AsyncConfig IDLE")
                 continue
             except:
                 print("Unhandled exception")

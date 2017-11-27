@@ -119,10 +119,11 @@ class AsyncDB(threading.Thread):
         while not should_stop:  # We wait for a bit after stop has been called to ensure that we finish all tasks
             try:
                 if self.stop_event.isSet() and self.runQueue.empty():
-                    # print("Should stop?")
                     if not stop_time:
+                        # print("Should stop*?")
                         stop_time = time.time()
-                    elif time.time() - stop_time > 1:
+                        time.sleep(0.05)
+                    elif time.time() - stop_time > 2:
                         # print("ASYNCDB should stop")
                         should_stop = True
                         self.running = False
@@ -134,10 +135,6 @@ class AsyncDB(threading.Thread):
             except queue.Empty:
                 # print(os.getpid(), "AsyncDB IDLE")
                 continue
-            except KeyboardInterrupt:
-                print("*** Ignoring keyboard interrupt - handle on main thread... ***")
-                # We ignore these - these should be handled by the MAIN THREAD, which is not us...
-                pass
             except:
                 print("Unhandled exception")
                 import traceback
@@ -146,8 +143,6 @@ class AsyncDB(threading.Thread):
 
         if DEBUG:
             self.log.debug("ASYNC_DB STOPPED")
-
-        # print("ASYNC DB STOPPED")
 
     def _get_conn_cfg(self):
 
