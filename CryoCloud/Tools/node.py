@@ -58,7 +58,8 @@ class Worker(multiprocessing.Process):
     def __init__(self, workernum, stopevent, type=jobdb.TYPE_NORMAL):
         super(Worker, self).__init__()
 
-        self._stop_event = stopevent
+        # self._stop_event = stopevent
+        self._stop_event = threading.Event()
         self._manager = None
         self.workernum = workernum
 
@@ -69,7 +70,6 @@ class Worker(multiprocessing.Process):
         self.status = None
         self.inqueue = None
         self._is_ready = False
-        self.stop_event = API.api_stop_event
         self._type = type
         self._worker_type = jobdb.TASK_TYPE[type]
         self.wid = "%s-%s_%d" % (self._worker_type, socket.gethostname(), self.workernum)
@@ -122,6 +122,7 @@ class Worker(multiprocessing.Process):
 
         def sighandler(signum, frame):
             print("%s GOT SIGNAL" % self._worker_type)
+            # API.shutdown()
             self._stop_event.set()
 
         signal.signal(signal.SIGINT, sighandler)
@@ -146,6 +147,8 @@ class Worker(multiprocessing.Process):
             except Empty:
                 self.status["state"] = "Idle"
                 continue
+            except KeyboardInterrupt:
+                break
             except Exception as e:
                 print("No job", e)
                 # log.error("Failed to get job")
@@ -154,6 +157,8 @@ class Worker(multiprocessing.Process):
                 time.sleep(5)
                 continue
 
+        # print(self._worker_type, self.wid, "stopping")
+        # self._stop_event.set()
         print(self._worker_type, self.wid, "stopped")
         self.status["state"] = "Stopped"
 
@@ -242,7 +247,7 @@ class NodeController(threading.Thread):
             self._worker_pool.append(w)
 
         for i in range(0, int(options.adminworkers)):
-            print ("Starting adminworker %d" % i)
+            print("Starting adminworker %d" % i)
             aw = Worker(i, self._stop_event, type=jobdb.TYPE_ADMIN)
             aw.start()
             self._worker_pool.append(aw)
@@ -342,9 +347,16 @@ if __name__ == "__main__":
 
     options = parser.parse_args()
 
+    if not options.cpu_count:
+        try:
+            psutil.num_cpus()
+        except:
+            raise SystemExit("Can't detect number of CPUs, please specify with --cpus")
+
     import signal
     try:
         node = NodeController(options)
+        node.daemon = True
         node.start()
 
         def sighandler(signum, frame):
@@ -358,6 +370,9 @@ if __name__ == "__main__":
         signal.signal(signal.SIGINT, sighandler)
 
         while not API.api_stop_event.isSet():
-            time.sleep(1)
+            try:
+                time.sleep(1)
+            except KeyboardInterrupt:
+                break
     finally:
         API.shutdown()

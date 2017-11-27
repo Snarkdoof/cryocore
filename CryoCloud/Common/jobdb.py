@@ -90,8 +90,6 @@ class JobDB(mysql):
                               [self._runname, module, steps])
             self._runid = c.lastrowid
 
-        print("RunID is", self._runid)
-
     def add_job(self, step, taskid, args, jobtype=TYPE_NORMAL, priority=PRI_NORMAL, node=None, expire_time=3600, module=None):
 
         if not module and not self._module:
