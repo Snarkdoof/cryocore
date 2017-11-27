@@ -15,9 +15,11 @@ from CryoCloud.Common import jobdb
 # watched events
 MASK = pyinotify.IN_CREATE
 MASK |= pyinotify.IN_MOVED_TO
-MASK = MASK | pyinotify.IN_MODIFY
-MASK = MASK | pyinotify.IN_MOVED_FROM | pyinotify.IN_DELETE
-MASK = MASK | pyinotify.IN_MOVE_SELF | pyinotify.IN_DELETE_SELF
+MASK |= pyinotify.IN_MODIFY
+MASK |= pyinotify.IN_MOVED_FROM
+MASK |= pyinotify.IN_DELETE
+MASK |= pyinotify.IN_MOVE_SELF
+# | pyinotify.IN_DELETE_SELF
 
 
 class Dispatcher(pyinotify.ProcessEvent):
@@ -38,7 +40,7 @@ class Dispatcher(pyinotify.ProcessEvent):
     def onError(self, info):
         pass
 
-    def _make_info(self, event):
+    def _make_info(self, event, is_delete=False):
         info = {}
         # print(event)
 
@@ -48,11 +50,20 @@ class Dispatcher(pyinotify.ProcessEvent):
             info["relpath"] = info["relpath"][1:]
         info["isdir"] = event.dir
         info["mtime"] = 0
+        if is_delete:
+            return info
         try:
-            if os.path.exists(info["fullpath"]):
+            if info["isdir"]:
                 info["mtime"] = os.stat(info["fullpath"]).st_mtime
-                event.mtime = info["mtime"]
+                # Must check the update times of all entries in the directory
+                entries = os.listdir(info["fullpath"])
+                for entry in entries:
+                    info["mtime"] = max(info["mtime"], os.stat(os.path.join(info["fullpath"], entry)).st_mtime)
+
+            elif os.path.exists(info["fullpath"]):
+                info["mtime"] = os.stat(info["fullpath"]).st_mtime
                 # info["stable"] = (time.time() - info["mtime"] > self._stabilize)
+            event.mtime = info["mtime"]
         except OSError as e:
             print("OSERROR", e)
             pass
@@ -62,23 +73,19 @@ class Dispatcher(pyinotify.ProcessEvent):
         # print("Monitored - file added", event)
         info = self._make_info(event)
 
-        if self._watcher.stabilize and self._watcher.stabilize > time.time() - info["mtime"]:
+        if not self._watcher.isStable(info):
             self._watcher.addUnstable(event)
-            print(event.pathname, "Unstable", info["mtime"])
             return
 
         # File added - is it done already?
-        f = self._watcher._db.get_file(self._watcher.target, event.pathname, self._watcher.runid)
+        f = self._watcher.lookupState(event.pathname)
         if not f:
-
             # Is stable (enough)
-            print(event.pathname, " ******* STABLE", self._watcher.stabilize, time.time() - info["mtime"], self._watcher.stabilize < time.time() - info["mtime"])
-            self._watcher._db.insert_file(self._watcher.target, event.pathname, info["mtime"], True, None, self._watcher.runid)
-
+            self._watcher.addStable(event.pathname, info["mtime"])
         else:
             if info["mtime"] > f[3]:
                 # print("Modified since last stable")
-                self._watcher._db.update_file(self._watcher.target, event.pathname, info["mtime"], True)
+                self._watcher.updateStable(event.pathname, info["mtime"])
                 self.onModify(info)
                 return
 
@@ -113,12 +120,9 @@ class Dispatcher(pyinotify.ProcessEvent):
 
     def process_IN_DELETE(self, event):
         # print("Monitored - file removed", event)
+        self._watcher.removeFile(event.pathname)
 
-        f = self._watcher._db.get_file(self._watcher.target, event.pathname, self._watcher.runid)
-        if f:
-            self._watcher._db.remove_file(f[0])
-
-        self.onRemove(self._make_info(event))
+        self.onRemove(self._make_info(event, is_delete=True))
 
     def process_IN_MOVED_FROM(self, event):
         self.process_IN_DELETE(event)
@@ -176,12 +180,32 @@ class DirectoryWatcher(threading.Thread):
             # We add the directory itself as well as any files
             self.addUnstable(event)
 
+    def lookupState(self, pathname):
+        return self._db.get_file(self.target, pathname, self.runid)
+
+    def isStable(self, info):
+        if self.stabilize and self.stabilize > time.time() - info["mtime"]:
+            return False
+
+        return True
+
     def addUnstable(self, event):
         with self._lock:
             self._unstable[event.pathname] = event
 
+    def addStable(self, pathname, mtime):
+        self._db.insert_file(self.target, pathname, mtime, True, None, self.runid)
+
+    def updateStable(self, pathname, mtime):
+        self._db.update_file(self.target, pathname, mtime, True)
+
     def markDone(self, path):
         self._db.done_file(self, self.target, path, self.runid)
+
+    def removeFile(self, pathname):
+        f = self._db.get_file(self.target, pathname, self.runid)
+        if f:
+            self._db.remove_file(f[0])
 
     def reset(self):
         """
@@ -190,16 +214,23 @@ class DirectoryWatcher(threading.Thread):
         self._db.reset_files(self, self.target, self.runid)
 
     def run(self):
+        next_check = 0
         while not CryoCore.API.api_stop_event.isSet():
             if self.notifier.check_events(timeout=0.25):
                 self.notifier.read_events()
                 self.notifier.process_events()
+
             # Do we have any unstable files?
+            if time.time() < next_check:
+                continue
+            next_check = time.time() + 0.25
             try:
                 q = []
                 with self._lock:
                     for k in self._unstable:
                         if self.stabilize and time.time() - self._unstable[k].mtime < self.stabilize:
+                            # We won't wait longer than we need
+                            next_check = min(next_check, self._unstable[k].mtime + self.stabilize + 0.01)
                             continue
                         q.append((k, self._unstable[k]))
                     for k, event in q:
@@ -223,16 +254,16 @@ if __name__ == '__main__':
             ROOTPATH = sys.argv[1]
 
         def onAdd(filepath):
-            print ("--onAdd", filepath)
+            print("--onAdd", filepath)
 
         def onModify(filepath):
-            print ("--onModify", filepath)
+            print("--onModify", filepath)
 
         def onRemove(filepath):
-            print ("--onRemove", filepath)
+            print("--onRemove", filepath)
 
         def onError(message):
-            print ("--onError", message)
+            print("--onError", message)
 
         # watch directory
         RUNID = 1
@@ -241,7 +272,7 @@ if __name__ == '__main__':
                               recursive=True, stabilize=3)
         dw.start()
 
-        #dw.reset()
+        # dw.reset()
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
