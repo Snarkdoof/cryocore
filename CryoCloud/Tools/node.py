@@ -329,7 +329,7 @@ class NodeController(threading.Thread):
 
 if __name__ == "__main__":
 
-    parser = ArgumentParser(description="Pretend to be a HEAD node in processing")
+    parser = ArgumentParser(description="Worker node")
 
     parser.add_argument("-n", "--num-workers", dest="workers",
                         default=None,
