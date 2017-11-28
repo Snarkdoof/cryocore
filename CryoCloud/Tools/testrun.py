@@ -14,6 +14,9 @@ import os.path
 import CryoCloud.Tools.node as node
 from CryoCore import API
 
+if len(sys.argv) < 2:
+    raise SystemExit("Need module to testrun")
+
 filename = sys.argv[1]
 moduleinfo = inspect.getmoduleinfo(filename)
 path = os.path.dirname(os.path.abspath(filename))
