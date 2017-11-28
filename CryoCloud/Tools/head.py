@@ -7,6 +7,9 @@ import time
 from argparse import ArgumentParser
 import threading
 
+import inspect
+import os.path
+
 try:
     import argcomplete
 except:
@@ -39,7 +42,7 @@ def load(modulename):
 
 
 class HeadNode(threading.Thread):
-    def __init__(self, options):
+    def __init__(self, handler, options):
         threading.Thread.__init__(self)
 
         self.name = "%s.HeadNode" % (options.name)
@@ -57,7 +60,8 @@ class HeadNode(threading.Thread):
                        (self.name, self.options.steps, self.options.tasks))
 
         # Load the handler
-        self.handler = load(options.handler).Handler()
+        self.handler = handler.Handler()  # load(options.handler).Handler()
+        print("HANDLER", self.handler)
         self.handler.head = self
         self.step = 0
 
@@ -79,7 +83,6 @@ class HeadNode(threading.Thread):
     def makeDirectoryWatcher(self, dir, onAdd=None, onModify=None, onRemove=None, onError=None, stabilize=5, recursive=True):
             return CryoCloud.Common.DirectoryWatcher(self._jobdb._runid,
                                                      dir,
-                                                     jobDB=self._jobdb,
                                                      onAdd=onAdd,
                                                      onModify=onModify,
                                                      onRemove=onRemove,
@@ -139,12 +142,12 @@ class HeadNode(threading.Thread):
         self.status["state"] = "Running"
 
         try:
-            self.handler.onReady(self.options.args)  # .split(" "))
+            self.handler.onReady(self.options)
         except Exception as e:
-            print("Exception in onReady for handler", self.options.handler)
+            print("Exception in onReady for handler", self.handler)
             import traceback
             traceback.print_exc()
-            self.log.exception("In onReady handler is %s" % self.options.handler)
+            self.log.exception("In onReady handler is %s" % self.handler)
             self.status["state"] = "Done"
             return
 
@@ -222,7 +225,44 @@ class HeadNode(threading.Thread):
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="HEAD node for CryoCloud processing")
+
+    # We start out by checking that we have a handler specified
+    if len(sys.argv) < 2:
+        raise SystemExit("Need module to testrun")
+
+    filename = sys.argv[1]
+    moduleinfo = inspect.getmoduleinfo(filename)
+    path = os.path.dirname(os.path.abspath(filename))
+
+    sys.path.append(path)
+    info = imp.find_module(moduleinfo.name)
+    mod = imp.load_module(moduleinfo.name, info[0], info[1], info[2])
+
+    print("Loaded module")
+    try:
+        description = mod.description
+    except:
+        description = "HEAD node for CryoCloud processing - add 'description' to the handler for better info"
+
+    parser = ArgumentParser(description=description)
+
+    parser.add_argument("-i", dest="input_dir",
+                        default="./",
+                        help="Source directory to monitor for files")
+
+    parser.add_argument("-o", dest="output_dir",
+                        default="/data/RVL/",
+                        help="Target directory")
+
+    parser.add_argument("-r", "--recursive", action="store_true", dest="recursive", default="False",
+                        help="Recursively monitor input directory for changes")
+
+    parser.add_argument("-f", "--force", action="store_true", dest="force", default="False",
+                        help="Force re-processing of all products even if they have been successfully processed before")
+
+    parser.add_argument("-t", "--tempdir", dest="temp_dir",
+                        default="./",
+                        help="Temporary directory (on worker nodes) where data will be kept during processing")
 
     parser.add_argument("--runid", dest="runid",
                         default=0,
@@ -248,10 +288,6 @@ if __name__ == "__main__":
                         default=None,
                         help="The default module imported by workers to process these jobs")
 
-    parser.add_argument("--handler", dest="handler",
-                        default=None,
-                        help="The handler for this master")
-
     parser.add_argument("--max-task-time", dest="max_task_time",
                         default=None,
                         help="Maximum time a task will be allowed to run before it is re-queued")
@@ -260,25 +296,25 @@ if __name__ == "__main__":
                         default=None,
                         help="Arguments passed to the Handler")
 
+    # We allow the module to add more arguments
+    try:
+        mod.addArguments(parser)
+    except:
+        pass
+
     if "argcomplete" in sys.modules:
         argcomplete.autocomplete(parser)
 
-    options = parser.parse_args()
+    options = parser.parse_args(args=sys.argv[2:])
     options.steps = int(options.steps)
     options.tasks = int(options.tasks)
     if options.max_task_time:
         options.max_task_time = float(options.max_task_time)
     # if options.module is None:
     #    raise SystemExit("Need a module")
-    if options.handler is None:
-        raise SystemExit("Need handler")
 
     if options.args:
         options.args = options.args.split()  # parser.convert_arg_line_to_args(options.args)
-    #if options.module:
-    #    options.module = options.module.replace("/", ".").replace(".py", "")
-    # if options.handler:
-    #    options.handler = options.handler.replace("/", ".").replace(".py", "")
 
     import signal
 
@@ -289,7 +325,7 @@ if __name__ == "__main__":
     signal.signal(signal.SIGQUIT, handler)
 
     try:
-        headnode = HeadNode(options)
+        headnode = HeadNode(mod, options)
         headnode.start()
 
         # We create an event triggered by the head node when it's done

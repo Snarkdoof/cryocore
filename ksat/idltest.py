@@ -1,17 +1,10 @@
 import CryoCloud
-from argparse import ArgumentParser
 import os.path
 
 import re
 
 
-class Handler(CryoCloud.DefaultHandler):
-
-    def onReady(self, args):
-
-        self._taskid = 1
-
-        description = """This program processes only Radarsat-2 ScanSAR products in FRED format,
+description = """This program processes only Radarsat-2 ScanSAR products in FRED format,
 and only filenames of the form
     RS2_SAR_FRED_<start datetime>_<end datetime>_...SCAN(NARROW|WIDE)
 are recognized.
@@ -31,38 +24,28 @@ With -p, only Radarsat-2 RVL products in GSAR format are recognized, and plots
 of normalized radar cross section (NRCS), Doppler and radial surface velocity
 (RVL) are made, using the IDL routine `make_rs2_rvl_plots`."""
 
-        parser = ArgumentParser(description=description)
 
-        parser.add_argument("-i", dest="input_dir",
-                            default="./",
-                            help="Source directory to monitor for files")
+# We have some additional arguments we'd like
+def addArguments(parser):
+    print("ADDING ARGUMENTS")
+    parser.add_argument("-p", "--plot", action="store_true", dest="plot", default="False",
+                        help="Make plots from GSAR files")
 
-        parser.add_argument("-o", dest="output_dir",
-                            default="/data/RVL/",
-                            help="Target directory")
+    parser.add_argument("--geo-id", dest="geoid", default="/auto/zfs01/rawdata/auxdata/dem/EGM96/")
 
-        parser.add_argument("-r", "--recursive", action="store_true", dest="recursive", default="False",
-                            help="Recursively monitor input directory for changes")
+    parser.add_argument("-c", "--caldir", dest="cal_dir",
+                        default=None,
+                        help="Directory to look for calibration files")
 
-        parser.add_argument("-f", "--force", action="store_true", dest="force", default="False",
-                            help="Force re-processing of all products even if they have been successfully processed before")
 
-        parser.add_argument("-p", "--plot", action="store_true", dest="plot", default="False",
-                            help="Make plots from GSAR files")
+class Handler(CryoCloud.DefaultHandler):
 
-        parser.add_argument("--geo-id", dest="geoid", default="/auto/zfs01/rawdata/auxdata/dem/EGM96/")
+    def onReady(self, options):
 
-        parser.add_argument("-c", "--caldir", dest="cal_dir",
-                            default=None,
-                            help="Directory to look for calibration files")
+        self._taskid = 1
 
-        parser.add_argument("-t", "--tempdir", dest="temp_dir",
-                            default="./",
-                            help="Temporary directory (on worker nodes) where data will be kept during processing")
-        self.options = None
+        self.options = options
         try:
-            self.options = parser.parse_args(args)
-
             # Compulsory stuff
             if not self.options.cal_dir:
                 raise Exception("Need calibration directory, please specify")
@@ -70,10 +53,6 @@ of normalized radar cross section (NRCS), Doppler and radial surface velocity
         except Exception as e:
             print("Exception parsing options", e)
             self.head.stop()
-        finally:
-            if not self.options:
-                parser.print_help()
-                self.head.stop()
 
         print("Monitoring directory", self.options.input_dir)
         self.dir_monitor = self.head.makeDirectoryWatcher(self.options.input_dir, self.onAdd, recursive=self.options.recursive)
