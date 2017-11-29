@@ -36,10 +36,10 @@ class DockerProcess():
         if userid:
             self.userid = userid
         else:
-            self.userid = "$UID"
+            self.userid = os.getuid()
 
         if groupid:
-            self.groupid = groupid
+            self.groupid = os.getgid()
         else:
             self.groupid = "$GROUPS"
 
