@@ -14,7 +14,7 @@ class DockerProcess():
     A local config file .dockercfg is read which overrides a few important bits for security reasons
     """
 
-    def __init__(self, cmd, status, log, stop_event, env={}, dirs={}, gpu=False, userid=None, doPrint=False):
+    def __init__(self, cmd, status, log, stop_event, env={}, dirs={}, gpu=False, userid=None, groupid=None, doPrint=False):
 
         # if not os.path.exists(".dockercfg"):
         #    raise SystemExit("Missing .dockercfg for system wide config")
@@ -37,6 +37,11 @@ class DockerProcess():
             self.userid = userid
         else:
             self.userid = "$UID"
+
+        if groupid:
+            self.groupid = groupid
+        else:
+            self.groupid = "$GROUPS"
 
         if self._dockercfg["userid"]:
             self.userid = self._dockercfg["userid"]
@@ -70,15 +75,17 @@ class DockerProcess():
         for source in self.dirs:
             if self.dirs[source].startswith("/scratch"):
                 continue  # We ignore scratch
-            options = ""
+            options = ":ro"
             if self.dirs[source] == "/output":
-                options = ",rw"
+                options = ":rw"
             cmd.extend(["-v", "%s:%s%s" % (source, self.dirs[source], options)])
 
         # We also add "/scratch"
-        cmd.extend(["-v", "%s:/scratch,rw" % self._dockercfg["scratch"]])
+        cmd.extend(["-v", "%s:/scratch" % self._dockercfg["scratch"]])
 
-        cmd.extend(["-e", "-USERID=%s" % self.userid])
+        # also allow ENV
+        # cmd.extend(["-e", ....])
+        cmd.extend(["-USERID=%s:%s" % (self.userid, self.groupid)])
 
         cmd.extend(self.cmd)
         self.log.debug("Running Docker command '%s'" % str(cmd))
