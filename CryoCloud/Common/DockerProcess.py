@@ -71,7 +71,7 @@ class DockerProcess():
             if self.dirs[source].startswith("/scratch"):
                 continue  # We ignore scratch
             options = ""
-            if self.dirs[source] == "output":
+            if self.dirs[source] == "/output":
                 options = ",rw"
             cmd.extend(["-v", "%s:%s%s" % (source, self.dirs[source], options)])
 
