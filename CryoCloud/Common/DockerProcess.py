@@ -26,7 +26,7 @@ class DockerProcess():
                     raise SystemExit("Missing %s in .dockercfg" % i)
         else:
             # defaults
-            self._dockercfg = {"userid": "$UID", "scratch": "/tmp"}
+            self._dockercfg = {"scratch": "/tmp"}
         self.cmd = cmd
         self.status = status
         self.log = log
@@ -39,12 +39,14 @@ class DockerProcess():
             self.userid = os.getuid()
 
         if groupid:
-            self.groupid = os.getgid()
+            self.groupid = groupid
         else:
-            self.groupid = "$GROUPS"
+            self.groupid = os.getgid()
 
-        if self._dockercfg["userid"]:
+        if "userid" in self._dockercfg and self._dockercfg["userid"]:
             self.userid = self._dockercfg["userid"]
+        if "gruopid" in self._dockercfg and self._dockercfg["groupid"]:
+            self.groupid = self._dockercfg["groupid"]
 
         self.doPrint = doPrint
         self._retval = None
