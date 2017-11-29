@@ -85,7 +85,7 @@ class DockerProcess():
 
         # also allow ENV
         # cmd.extend(["-e", ....])
-        cmd.extend(["-USERID=%s:%s" % (self.userid, self.groupid)])
+        cmd.extend(["-u=%s:%s" % (self.userid, self.groupid)])
 
         cmd.extend(self.cmd)
         self.log.debug("Running Docker command '%s'" % str(cmd))
