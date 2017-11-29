@@ -73,7 +73,7 @@ class DockerProcess():
             options = ""
             if self.dirs[source] == "output":
                 options = ",rw"
-            cmd.extend(["-v", "%s:%s%s" % (source, self.dirs[source]), options])
+            cmd.extend(["-v", "%s:%s%s" % (source, self.dirs[source], options)])
 
         # We also add "/scratch"
         cmd.extend(["-v", "%s:/scratch,rw" % self._dockercfg["scratch"]])
