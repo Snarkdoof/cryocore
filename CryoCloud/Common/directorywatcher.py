@@ -228,7 +228,6 @@ class DirectoryWatcher(threading.Thread):
             if self.notifier.check_events(timeout=250):
                 self.notifier.read_events()
                 self.notifier.process_events()
-            print("PING")
             # Do we have any unstable files?
             if time.time() < next_check:
                 continue
