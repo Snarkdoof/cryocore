@@ -225,10 +225,10 @@ class DirectoryWatcher(threading.Thread):
     def run(self):
         next_check = 0
         while not CryoCore.API.api_stop_event.isSet() and not self._stop_event.isSet():
-            if self.notifier.check_events(timeout=0.25):
+            if self.notifier.check_events(timeout=250):
                 self.notifier.read_events()
                 self.notifier.process_events()
-
+            print("PING")
             # Do we have any unstable files?
             if time.time() < next_check:
                 continue
