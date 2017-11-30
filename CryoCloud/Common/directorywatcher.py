@@ -199,7 +199,7 @@ class DirectoryWatcher(threading.Thread):
     def updateStable(self, pathname, mtime):
         self._db.update_file(self.target, pathname, mtime, True)
 
-    def markDone(self, path):
+    def setDone(self, path):
         self._db.done_file(self, self.target, path, self.runid)
 
     def removeFile(self, pathname):
