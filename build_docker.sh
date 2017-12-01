@@ -2,6 +2,12 @@
 
 target=$1
 
+if test "$target"=="cleanup"; then
+  echo "Removing dangling docker images"
+  # docker rmi $(docker images --filter "dangling=true" -q --no-trunc)
+  exit
+fi
+
 if ! test -e docker/$target ; then
   echo "Missing docker target $target"
   echo "Valid options could be:"
@@ -34,3 +40,4 @@ rm Dockerfile
 # echo "Pushing it to localhost:5000"
 # sudo docker tag $target localhost:5000/$target:latest
 # sudo docker push localhost:5000/$target:latest
+
