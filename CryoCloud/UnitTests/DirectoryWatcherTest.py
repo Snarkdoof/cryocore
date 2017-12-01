@@ -307,6 +307,9 @@ class DirectoryWatcherTest(unittest.TestCase):
         self.assertEquals(self.listener.removed, [])
         self.assertEquals(self.listener.errors, [])
 
+    def testSetDone(self):
+        pass
+        # TODO: Create test also for setDone
 
 if __name__ == "__main__":
 

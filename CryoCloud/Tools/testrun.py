@@ -34,10 +34,13 @@ try:
     # Create the worker
     worker = node.Worker(0, API.api_stop_event)
 
+    worker.log = API.get_log("testrun." + moduleinfo.name)
+    worker.status = API.get_status("testrun." + moduleinfo.name)
+
     # Load it
     info = imp.find_module(moduleinfo.name)
     mod = imp.load_module(moduleinfo.name, info[0], info[1], info[2])
     task = {"args": args}
-    mod.process_task(None, task)
+    mod.process_task(worker, task)
 finally:
     API.shutdown()

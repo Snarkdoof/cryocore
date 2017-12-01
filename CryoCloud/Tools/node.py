@@ -36,7 +36,7 @@ modules = {}
 
 
 def load(modulename):
-
+    print("LOADING MODULE", modulename)
     # TODO: Also allow getmodulename here to allow modulename to be a .py file
     if modulename.endswith(".py"):
         import inspect
@@ -81,7 +81,8 @@ class Worker(multiprocessing.Process):
     def _switchJob(self, job):
         if self._current_job == (job["runname"], job["module"]):
             # Same job
-            return
+            # return
+            pass
 
         print("Switching job from", self._current_job, (job["runname"], job["module"]))
         self._current_job = (job["runname"], job["module"])

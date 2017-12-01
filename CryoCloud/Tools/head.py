@@ -156,7 +156,7 @@ class HeadNode(threading.Thread):
             self.status["state"] = "Done"
             return
 
-        print("Progress status parameter thingy with size", self.options.steps, "x", self.options.tasks)
+        # print("Progress status parameter thingy with size", self.options.steps, "x", self.options.tasks)
         self.start_step(1)
         failed = False
         while not API.api_stop_event.is_set():
@@ -169,7 +169,6 @@ class HeadNode(threading.Thread):
                     self._jobdb.update_timeouts()
                     updates = self._jobdb.list_jobs(since=last_run, notstate=jobdb.STATE_PENDING)
                     for job in updates:
-                        print("Checking job update", job)
                         last_run = job["tschange"]
                         if job["state"] == jobdb.STATE_ALLOCATED:
                             self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 3)
@@ -187,7 +186,6 @@ class HeadNode(threading.Thread):
                             if self.step in stats:
                                 self.status["avg_task_time_step"] = stats[self.step]
                             # self.status["avg_task_time_total"] = sum_all / total_len
-                            print("Completed job, calling handler")
                             self.handler.onCompleted(job)
                         elif job["state"] == jobdb.STATE_TIMEOUT:
                             self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 0)
@@ -259,10 +257,10 @@ if __name__ == "__main__":
                         default="/data/RVL/",
                         help="Target directory")
 
-    parser.add_argument("-r", "--recursive", action="store_true", dest="recursive", default="False",
+    parser.add_argument("-r", "--recursive", action="store_true", dest="recursive", default=False,
                         help="Recursively monitor input directory for changes")
 
-    parser.add_argument("-f", "--force", action="store_true", dest="force", default="False",
+    parser.add_argument("-f", "--force", action="store_true", dest="force", default=False,
                         help="Force re-processing of all products even if they have been successfully processed before")
 
     parser.add_argument("-t", "--tempdir", dest="temp_dir",
@@ -278,7 +276,7 @@ if __name__ == "__main__":
                         help="Config version to use on")
 
     parser.add_argument("--name", dest="name",
-                        default="ExampleProcessor",
+                        default="",
                         help="The name of this HeadNode")
 
     parser.add_argument("--steps", dest="steps",
@@ -313,6 +311,9 @@ if __name__ == "__main__":
         options.max_task_time = float(options.max_task_time)
     # if options.module is None:
     #    raise SystemExit("Need a module")
+    if options.name == "":
+        import socket
+        options.name = socket.gethostname()
 
     import signal
 
@@ -339,4 +340,3 @@ if __name__ == "__main__":
     finally:
         print("Shutting down")
         API.shutdown()
-    print("Done")
