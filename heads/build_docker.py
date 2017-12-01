@@ -58,4 +58,9 @@ class Handler(CryoCloud.DefaultHandler):
     def onError(self, task):
         print("Error for task", task)
         # Notify someone, log the file as failed, try to requeue it or try to figure out what is wrong and how to fix it
-        pass
+        self._tasks.remove(task["taskid"])
+
+        print(len(self._tasks), "tasks left")
+        if len(self._tasks) == 0:
+            print("DONE")
+            self.head.stop()

@@ -7,7 +7,7 @@ description = """
 Run docker
 """
 
-supress = ["-o", "-r", "-f", "-t", "--steps", "--module"]
+supress = ["-r", "-f", "-t", "--steps", "--module"]
 
 
 # We have some additional arguments we'd like
@@ -43,14 +43,24 @@ class Handler(CryoCloud.DefaultHandler):
 
         self.options = options
 
+        if not options.target:
+            raise Exception("Missing target")
+
         task = {
             "target": options.target,
             "gpu": options.gpu,
             "log_all": not options.silent
         }
+        task["dirs"] = []
+        if options.input_dir:
+            task["dirs"].append((options.input_dir, "/input"))
+        if options.output_dir:
+            task["dirs"].append((options.output_dir, "/output"))
         if options.args:
             task["arguments"] = options.args.split(" ")
 
+        print(task)
+        self.head.stop()
         self.head.add_job(1, 1, task, module="docker", node=self.options.node)
 
     def onAllocated(self, task):

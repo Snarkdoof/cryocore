@@ -73,13 +73,13 @@ class DockerProcess():
 
         cmd = [docker, "run"]
 
-        for source in self.dirs:
-            if self.dirs[source].startswith("/scratch"):
+        for source, destination in self.dirs:
+            if destination.startswith("/scratch"):
                 continue  # We ignore scratch
             options = ":ro"
-            if self.dirs[source] == "/output":
+            if destination == "/output":
                 options = ":rw"
-            cmd.extend(["-v", "%s:%s%s" % (source, self.dirs[source], options)])
+            cmd.extend(["-v", "%s:%s%s" % (source, destination, options)])
 
         # We also add "/scratch"
         cmd.extend(["-v", "%s:/scratch" % self._dockercfg["scratch"]])

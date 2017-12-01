@@ -61,7 +61,7 @@ class HeadNode(threading.Thread):
 
         # Load the handler
         self.handler = handler.Handler()  # load(options.handler).Handler()
-        print("HANDLER", self.handler)
+        print("HANDLER", self.handler.__module__)
         self.handler.head = self
         self.step = 0
 
@@ -258,12 +258,12 @@ if __name__ == "__main__":
 
     if "-i" not in supress:
         parser.add_argument("-i", dest="input_dir",
-                            default="./",
-                            help="Source directory to monitor for files")
+                            default=None,
+                            help="Source directory")
 
     if "-o" not in supress:
         parser.add_argument("-o", dest="output_dir",
-                            default="/data/RVL/",
+                            default=None,
                             help="Target directory")
 
     if "-r" not in supress and "--recursive" not in supress:
