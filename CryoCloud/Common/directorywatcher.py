@@ -181,7 +181,7 @@ class DirectoryWatcher(threading.Thread):
             self.addUnstable(event)
 
     def lookupState(self, pathname):
-        return self._db.get_file(self.target, pathname, self.runid)
+        return self._db.get_file(self.target, pathname.replace(self.target, ""), self.runid)
 
     def isStable(self, info):
         if self.stabilize and self.stabilize > time.time() - info["mtime"]:
@@ -194,16 +194,16 @@ class DirectoryWatcher(threading.Thread):
             self._unstable[event.pathname] = event
 
     def addStable(self, pathname, mtime):
-        self._db.insert_file(self.target, pathname, mtime, True, None, self.runid)
+        self._db.insert_file(self.target, pathname.replace(self.target, ""), mtime, True, None, self.runid)
 
     def updateStable(self, pathname, mtime):
-        self._db.update_file(self.target, pathname, mtime, True)
+        self._db.update_file(self.target, pathname.replace(self.target, ""), mtime, True)
 
     def setDone(self, path):
-        self._db.done_file(self.target, path, self.runid)
+        self._db.done_file(self.target, path.replace(self.target, ""), self.runid)
 
     def removeFile(self, pathname):
-        f = self._db.get_file(self.target, pathname, self.runid)
+        f = self._db.get_file(self.target, pathname.replace(self.target, ""), self.runid)
         if f:
             self._db.remove_file(f[0])
 

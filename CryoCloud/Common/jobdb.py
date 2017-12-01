@@ -64,7 +64,7 @@ class JobDB(mysql):
                     module VARCHAR(256) DEFAULT NULL,
                     args VARCHAR(2560) DEFAULT NULL,
                     nonce INT DEFAULT 0,
-                    tschange TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    tschange TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
             )""",
             """CREATE TABLE IF NOT EXISTS filewatch (
                 fileid INT PRIMARY KEY AUTO_INCREMENT,
@@ -76,7 +76,8 @@ class JobDB(mysql):
                 done BOOL DEFAULT 0,
                 runid INT,
                 tschange TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )"""
+            )""",
+            """ALTER TABLE jobs MODIFY tschange TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)"""
         ]
         self._init_sqls(statements)
 
