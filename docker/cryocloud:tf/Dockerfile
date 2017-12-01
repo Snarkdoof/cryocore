@@ -1,6 +1,5 @@
 # We're using Python3 for CryoCloud
-FROM ubuntu:xenial
-# python:3.5
+FROM tensorflow/tensorflow:latest-devel-py3
 
 WORKDIR /cc
 
@@ -15,14 +14,12 @@ ADD docker/cryocloud/requirements.txt /cc
 
 
 # RUN apt-get update && apt-get install psutil
-RUN apt-get update
-RUN apt-get -y install software-properties-common python-software-properties apt-utils
 
 # Raster IO++
-RUN add-apt-repository ppa:ubuntugis/ppa && \
-  apt-get -y update && \
-  apt-get -y install python-numpy gdal-bin libgdal-dev python3-pip
-  
+RUN add-apt-repository ppa:ubuntugis/ppa
+RUN apt-get -y update
+RUN apt-get -y install python-numpy gdal-bin libgdal-dev
+
 RUN pip3 install rasterio
 
 RUN pip3 install -r requirements.txt
