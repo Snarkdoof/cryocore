@@ -352,7 +352,11 @@ if __name__ == "__main__":
         try:
             psutil.num_cpus()
         except:
-            raise SystemExit("Can't detect number of CPUs, please specify with --cpus")
+            try:
+                import multiprocessing
+                options.cpu_count = multiprocessing.cpu_count()
+            except:
+                raise SystemExit("Can't detect number of CPUs, please specify with --cpus")
 
     import signal
     try:
