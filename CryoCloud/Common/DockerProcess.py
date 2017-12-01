@@ -140,6 +140,7 @@ class DockerProcess():
             if self._retval is not None:
                 # Process exited
                 if self._retval == 0:
+                    self.status["process"] = 100
                     break
                 # Unexpected
                 self._error = "Docker process '%s' exited with value %d" % (self.cmd, self._retval)

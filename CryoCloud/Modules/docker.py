@@ -13,6 +13,7 @@ def process_task(worker, task):
 
     gpu = False
     env = {}
+    dirs = []
 
     if "gpu" in task["args"] and task["args"]["gpu"]:
         gpu = True

@@ -15,10 +15,14 @@ def process_task(worker, task):
     if "directory" not in args:
         raise Exception("Missing directory")
 
-    cmd = ["docker", "build", "-t", args["target"], "."]
-
     os.chdir(args["directory"])
 
+    if os.path.exists("build_docker.sh"):
+        cmd = ["./build_docker.sh", args["target"]]
+    else:
+        cmd = ["docker", "build", "-t", args["target"], "."]
+
+    worker.log.debug("Running command '%s'" % str(cmd))
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     # We set the outputs as nonblocking
