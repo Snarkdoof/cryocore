@@ -14,7 +14,7 @@ class DockerProcess():
     A local config file .dockercfg is read which overrides a few important bits for security reasons
     """
 
-    def __init__(self, cmd, status, log, stop_event, env={}, dirs={}, gpu=False, userid=None, groupid=None, doPrint=False):
+    def __init__(self, cmd, status, log, stop_event, env={}, dirs={}, gpu=False, userid=None, groupid=None, log_all=False, args=[]):
 
         # if not os.path.exists(".dockercfg"):
         #    raise SystemExit("Missing .dockercfg for system wide config")
@@ -47,13 +47,12 @@ class DockerProcess():
             self.userid = self._dockercfg["userid"]
         if "gruopid" in self._dockercfg and self._dockercfg["groupid"]:
             self.groupid = self._dockercfg["groupid"]
-
-        self.doPrint = doPrint
+        self.args = args
+        self.log_all = log_all
         self._retval = None
         self._error = ""
         self._t = None
         self.stop_event = stop_event
-
         if self.cmd.__class__ != list:
             raise Exception("Command needs to be a list")
         if len(self.cmd) == 0:
@@ -90,6 +89,8 @@ class DockerProcess():
         cmd.extend(["-u=%s:%s" % (self.userid, self.groupid)])
 
         cmd.extend(self.cmd)
+        cmd.extend(self.args)
+
         self.log.debug("Running Docker command '%s'" % str(cmd))
         p = subprocess.Popen(cmd, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # We set the outputs as nonblocking
@@ -102,14 +103,15 @@ class DockerProcess():
             ready = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
             for fd in ready:
                 data = fd.read()
-                if self.doPrint:
-                    print(data)
                 buf[fd] += data.decode("utf-8")
 
             # print(buf)
             # Process any stdout data
             while buf[p.stdout].find("\n") > -1:
                 line, buf[p.stdout] = buf[p.stdout].split("\n", 1)
+                if self.log_all:
+                    self.log.info(line)
+
                 m = re.match("\[(\w+)\] (.+)", line)
                 if m:
                     self.status[m.groups()[0]] = m.groups()[1]
@@ -140,7 +142,7 @@ class DockerProcess():
             if self._retval is not None:
                 # Process exited
                 if self._retval == 0:
-                    self.status["process"] = 100
+                    self.status["progress"] = 100
                     break
                 # Unexpected
                 self._error = "Docker process '%s' exited with value %d" % (self.cmd, self._retval)

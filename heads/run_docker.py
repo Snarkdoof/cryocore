@@ -31,12 +31,13 @@ def addArguments(parser):
     parser.add_argument("--gpu", action="store_true", dest="gpu", default=False,
                         help="Use GPU if possible")
 
+    parser.add_argument("--silent", action="store_true", dest="silent", default=False,
+                        help="Don't output all output from docker in logs")
+
 
 class Handler(CryoCloud.DefaultHandler):
 
     def onReady(self, options):
-
-        print(dir(options))
         self._tasks = []
         self._taskid = 1
 
@@ -44,7 +45,8 @@ class Handler(CryoCloud.DefaultHandler):
 
         task = {
             "target": options.target,
-            "gpu": options.gpu
+            "gpu": options.gpu,
+            "log_all": not options.silent
         }
         if options.args:
             task["arguments"] = options.args.split(" ")
@@ -55,25 +57,13 @@ class Handler(CryoCloud.DefaultHandler):
         print("Allocated", task["taskid"], "by node", task["node"], "worker", task["worker"])
 
     def onCompleted(self, task):
-        print("Task completed:", task["taskid"], task["step"])
-        self._tasks.remove(task["taskid"])
-        print("Setting done", task["args"]["src"])
-        self.dir_monitor.setDone(task["args"]["src"])
-
-        print(len(self._tasks), "tasks left")
-        if len(self._tasks) == 0:
-            print("DONE")
-            self.head.stop()
+        print("Completed")
+        self.head.stop()
 
     def onTimeout(self, task):
         print("Task timeout out, requeue")
         self.head.requeue(task)
 
     def onError(self, task):
-        print("Error for task", task)
-        # Notify someone, log the file as failed, try to requeue it or try to figure out what is wrong and how to fix it
-        self._tasks.remove(task["taskid"])
-        print(len(self._tasks), "tasks left")
-        if len(self._tasks) == 0:
-            print("DONE")
-            self.head.stop()
+        print("Failed")
+        self.head.stop()

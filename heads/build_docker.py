@@ -45,8 +45,6 @@ class Handler(CryoCloud.DefaultHandler):
     def onCompleted(self, task):
         print("Task completed:", task["taskid"], task["step"])
         self._tasks.remove(task["taskid"])
-        print("Setting done", task["args"]["src"])
-        self.dir_monitor.setDone(task["args"]["src"])
 
         print(len(self._tasks), "tasks left")
         if len(self._tasks) == 0:
