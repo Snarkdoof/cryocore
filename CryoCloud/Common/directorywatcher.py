@@ -200,7 +200,7 @@ class DirectoryWatcher(threading.Thread):
         self._db.update_file(self.target, pathname, mtime, True)
 
     def setDone(self, path):
-        self._db.done_file(self, self.target, path, self.runid)
+        self._db.done_file(self.target, path, self.runid)
 
     def removeFile(self, pathname):
         f = self._db.get_file(self.target, pathname, self.runid)
