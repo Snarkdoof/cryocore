@@ -24,7 +24,7 @@ fi
 ln -s docker/$target/Dockerfile .
 
 
-sudo docker build -t $target . 
+docker build -t $target . 
 rm Dockerfile
 #if test $2==test; then
 #  sudo docker run $target
