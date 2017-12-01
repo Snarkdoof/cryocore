@@ -96,9 +96,10 @@ class HeadNode(threading.Thread):
         if expire_time is None:
             expire_time = self.options.max_task_time
         self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module)
-        if step > self.status["progress"].size[0]:
-            self.status.new2d("progress", (self.options.steps, self.options.tasks),
-                              expire_time=3 * 81600, initial_value=0)
+        if self.options.steps > 0 and self.options.tasks > 0:
+            if step > self.status["progress"].size[0]:
+                self.status.new2d("progress", (self.options.steps, self.options.tasks),
+                                  expire_time=3 * 81600, initial_value=0)
 
         self.status["progress"].set_value((step - 1, taskid), 1)
         self.status["tasks_created"].inc(1)
@@ -121,18 +122,19 @@ class HeadNode(threading.Thread):
             self._jobdb.remove(i)
 
     def start_step(self, step):
-        print("Starting step", step, "progress size is", self.status["progress"].size)
 
-        if step > self.status["progress"].size[0]:
-            print("MUST RE-configure progress")
-            self.status["total_steps"] = step
+        if self.options.steps > 0 and self.options.tasks > 0:
+            if step > self.status["progress"].size[0]:
+                print("MUST RE-configure progress")
+                self.status["total_steps"] = step
 
         self.step = step
         self.status["step"] = self.step
 
     def run(self):
-        self.status.new2d("progress", (self.options.steps, self.options.tasks),
-                          expire_time=3 * 81600, initial_value=0)
+        if self.options.steps > 0 and self.options.tasks > 0:
+            self.status.new2d("progress", (self.options.steps, self.options.tasks),
+                              expire_time=3 * 81600, initial_value=0)
         self.status["avg_task_time_step"] = 0.0
         self.status["avg_task_time_total"] = 0.0
         self.status["eta_step"] = 0
@@ -241,6 +243,11 @@ if __name__ == "__main__":
     info = imp.find_module(moduleinfo.name)
     mod = imp.load_module(moduleinfo.name, info[0], info[1], info[2])
 
+    supress = []
+    try:
+        supress = mod.supress
+    except:
+        pass
     print("Loaded module")
     try:
         description = mod.description
@@ -249,23 +256,28 @@ if __name__ == "__main__":
 
     parser = ArgumentParser(description=description)
 
-    parser.add_argument("-i", dest="input_dir",
-                        default="./",
-                        help="Source directory to monitor for files")
+    if "-i" not in supress:
+        parser.add_argument("-i", dest="input_dir",
+                            default="./",
+                            help="Source directory to monitor for files")
 
-    parser.add_argument("-o", dest="output_dir",
-                        default="/data/RVL/",
-                        help="Target directory")
+    if "-o" not in supress:
+        parser.add_argument("-o", dest="output_dir",
+                            default="/data/RVL/",
+                            help="Target directory")
 
-    parser.add_argument("-r", "--recursive", action="store_true", dest="recursive", default=False,
-                        help="Recursively monitor input directory for changes")
+    if "-r" not in supress and "--recursive" not in supress:
+        parser.add_argument("-r", "--recursive", action="store_true", dest="recursive", default=False,
+                            help="Recursively monitor input directory for changes")
 
-    parser.add_argument("-f", "--force", action="store_true", dest="force", default=False,
-                        help="Force re-processing of all products even if they have been successfully processed before")
+    if "-f" not in supress and "--force" not in supress:
+        parser.add_argument("-f", "--force", action="store_true", dest="force", default=False,
+                            help="Force re-processing of all products even if they have been successfully processed before")
 
-    parser.add_argument("-t", "--tempdir", dest="temp_dir",
-                        default="./",
-                        help="Temporary directory (on worker nodes) where data will be kept during processing")
+    if "-t" not in supress and "--tempdir" not in supress:
+        parser.add_argument("-t", "--tempdir", dest="temp_dir",
+                            default="./",
+                            help="Temporary directory (on worker nodes) where data will be kept during processing")
 
     parser.add_argument("--runid", dest="runid",
                         default=0,
@@ -279,21 +291,25 @@ if __name__ == "__main__":
                         default="",
                         help="The name of this HeadNode")
 
-    parser.add_argument("--steps", dest="steps",
-                        default=1,
-                        help="Number of steps in this processing")
+    if "--steps" not in supress:
+        parser.add_argument("--steps", dest="steps",
+                            default=1,
+                            help="Number of steps in this processing")
 
-    parser.add_argument("--tasks", dest="tasks",
-                        default=10,
-                        help="Number of tasks for each step in this processing")
+    if "--tasks" not in supress:
+        parser.add_argument("--tasks", dest="tasks",
+                            default=10,
+                            help="Number of tasks for each step in this processing")
 
-    parser.add_argument("--module", dest="module",
-                        default=None,
-                        help="The default module imported by workers to process these jobs")
+    if "--module" not in supress:
+        parser.add_argument("--module", dest="module",
+                            default=None,
+                            help="The default module imported by workers to process these jobs")
 
-    parser.add_argument("--max-task-time", dest="max_task_time",
-                        default=None,
-                        help="Maximum time a task will be allowed to run before it is re-queued")
+    if "--max-task-time" not in supress:
+        parser.add_argument("--max-task-time", dest="max_task_time",
+                            default=None,
+                            help="Maximum time a task will be allowed to run before it is re-queued")
 
     # We allow the module to add more arguments
     try:
@@ -305,15 +321,31 @@ if __name__ == "__main__":
         argcomplete.autocomplete(parser)
 
     options = parser.parse_args(args=sys.argv[2:])
-    options.steps = int(options.steps)
-    options.tasks = int(options.tasks)
-    if options.max_task_time:
-        options.max_task_time = float(options.max_task_time)
+    try:
+        options.steps = int(options.steps)
+    except:
+        options.steps = 0
+    try:
+        options.tasks = int(options.tasks)
+    except:
+        options.task = 0
+
+    try:
+        if options.max_task_time:
+            options.max_task_time = float(options.max_task_time)
+    except:
+        options.max_task_time = None
+
     # if options.module is None:
     #    raise SystemExit("Need a module")
     if options.name == "":
         import socket
         options.name = socket.gethostname()
+
+    try:
+        options.module
+    except:
+        options.module = ""
 
     import signal
 
