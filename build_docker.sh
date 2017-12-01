@@ -2,7 +2,7 @@
 
 target=$1
 
-if test "$target"=="cleanup"; then
+if [ "$target" = "cleanup" ]; then
   echo "Removing dangling docker images"
   # docker rmi $(docker images --filter "dangling=true" -q --no-trunc)
   exit
