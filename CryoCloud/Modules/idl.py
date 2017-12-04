@@ -65,9 +65,8 @@ def process_task(worker, task):
         while not worker._stop_event.isSet():
             ready = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
             for fd in ready:
-
                 data = fd.read()
-                buf[fd] += str(data,'UTF-8')
+                buf[fd] += str(data, 'UTF-8')
 
             # Process any stdout data
             while buf[p.stdout].find("\n") > -1:
@@ -75,6 +74,21 @@ def process_task(worker, task):
                 m = re.match("\[(.+)\] (.+)", line)
                 if m:
                     worker.status[m.groups()[0]] = m.groups()[1]
+
+                m = re.match("\<(\w+)\> (.+)", line)
+                if m:
+                    level = m.groups()[0]
+                    msg = m.groups()[1]
+                    if level == "debug":
+                        worker.log.debug(msg)
+                    elif level == "info":
+                        worker.log.info(msg)
+                    elif level == "warning":
+                        worker.log.warning(msg)
+                    elif level == "error":
+                        worker.log.error(msg)
+                    else:
+                        worker.log.error("Unknown log level '%s'" % level)
 
             # Check for output on stderr - set error message
             if buf[p.stderr]:
