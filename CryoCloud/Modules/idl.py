@@ -62,7 +62,7 @@ def process_task(worker, task):
 
         buf = {p.stdout: "", p.stderr: ""}
 
-        while not worker.stop_event.isSet():
+        while not worker._stop_event.isSet():
             ready = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
             for fd in ready:
 
