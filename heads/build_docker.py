@@ -56,7 +56,7 @@ class Handler(CryoCloud.DefaultHandler):
         self.head.requeue(task)
 
     def onError(self, task):
-        print("Error for task", task)
+        print("Error for task %d:" % task["taskid"], task["retval"])
         # Notify someone, log the file as failed, try to requeue it or try to figure out what is wrong and how to fix it
         self._tasks.remove(task["taskid"])
 
