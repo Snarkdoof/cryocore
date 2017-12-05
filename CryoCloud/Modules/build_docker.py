@@ -7,7 +7,7 @@ import re
 import CryoCore
 
 
-def process_task(worker, task):
+def process_task(worker, task, cancel_event):
     args = task["args"]
     if "target" not in args:
         raise Exception("Missing target")
@@ -66,4 +66,10 @@ def process_task(worker, task):
             # unexpected
             raise Exception("Wrapped process '%s' exited with value %d" % (cmd, _retval))
             break
+
+        # Should we stop?
+        if cancel_event.isSet():
+            worker.log.warning("Cancelling job due to remote command")
+            p.terminate()
+
     return 100, None

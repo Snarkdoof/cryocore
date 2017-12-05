@@ -75,6 +75,10 @@ class Worker(multiprocessing.Process):
         self.wid = "%s-%s_%d" % (self._worker_type, socket.gethostname(), self.workernum)
 
         self._current_job = (None, None)
+        # self._job_in_progress = None
+        # self._monitor_thread = threading.Thread(target=self._monitor)
+        # self._monitor_thread.daemon = True
+        # self._monitor_thread.start()
 
         print("%s %s created" % (self._worker_type, workernum))
 
@@ -119,6 +123,29 @@ class Worker(multiprocessing.Process):
         except:
             self.log.exception("Some other exception")
 
+    def _monitor(self):
+        print("MONITOR RUNNING", self._job_in_progress)
+        print(dir(self))
+        if 1:
+        #while not self._stop_event.isSet() and not API.api_stop_event.isSet():
+            try:
+                # Check if the job we're currently running should be stopped
+                if self._job_in_progress:
+                    state = self._jobdb.get_job_state(self._job_in_progress["id"])
+                    if state is None:
+                        print("JOB WAS REMOVED")
+                        self.stop_job()
+                    elif state is jobdb.STATE_CANCELLED:
+                        print("JOB WAS CANCELLED")
+                        self.stop_job()
+                else:
+                    print("Idle", self._job_in_progress, self.status["current_job"])
+            except Exception as e:
+                print("Woopsie:", e)
+                # self.log.exception("Exception in monitor")
+
+            time.sleep(1.0)
+
     def run(self):
 
         def sighandler(signum, frame):
@@ -138,6 +165,8 @@ class Worker(multiprocessing.Process):
                     time.sleep(1)
                     continue
                 job = jobs[0]
+                self.status["current_job"] = job["id"]
+                self._job_in_progress = job
                 print("Got job", job)
                 self._switchJob(job)
                 if not self._is_ready:
@@ -157,11 +186,23 @@ class Worker(multiprocessing.Process):
                 # Likely a manager crash - reconnect
                 time.sleep(5)
                 continue
+            finally:
+                self._job_in_progress = None
 
         # print(self._worker_type, self.wid, "stopping")
         # self._stop_event.set()
         print(self._worker_type, self.wid, "stopped")
         self.status["state"] = "Stopped"
+
+        # If we were not done we should update the DB
+        self._jobdb.force_stopped(self.workernum, node=socket.gethostname())
+
+    def stop_job(self):
+        try:
+            self._module.stop_job()
+        except Exception as e:
+            print("WARNING: Failed to stop job: %s" % e)
+            pass
 
     def process_task(self, task):
         """
@@ -194,12 +235,43 @@ class Worker(multiprocessing.Process):
         self.log.debug("Processing job %s" % str(task))
         self.status["progress"] = 0
 
+        cancel_event = threading.Event()
+
+        def monitor():
+            while not self._stop_event.isSet() and not cancel_event.isSet():
+                status = self._jobdb.get_job_state(task["id"])
+                if status == jobdb.STATE_CANCELLED:
+                    self.log.info("Cancelling job on request")
+                    cancel_event.set()
+                elif status is None:
+                    self.log.info("Cancelling job as it was removed from the job db")
+                    cancel_event.set()
+                time.sleep(1)
+
         new_state = jobdb.STATE_FAILED
+        canStop = False
+        import inspect
+        members = inspect.getmembers(self._module)
+        for name, member in members:
+            if name == "process_task":
+                if len(inspect.getargspec(member)) > 2:
+                    canStop = True
+                    break
+
+        if canStop:
+            t = threading.Thread(target=monitor)
+            t.daemon = True
+            t.start()
+
         try:
             if self._module is None:
                 progress, ret = self.process_task(task)
             else:
-                progress, ret = self._module.process_task(self, task)
+                if canStop:
+                    progress, ret = self._module.process_task(self, task, cancel_event)
+                else:
+                    progress, ret = self._module.process_task(self, task)
+
             task["progress"] = progress
             if int(progress) != 100:
                 raise Exception("ProcessTask returned unexpected progress: %s vs 100" % progress)
@@ -309,7 +381,6 @@ class NodeController(threading.Thread):
                 except:
                     self._manager = None
                     self.log.exception("Job description failed!")
-
             time_left = max(0, self.cfg["sample_rate"] + time.time() - last_run)
             time.sleep(time_left)
 

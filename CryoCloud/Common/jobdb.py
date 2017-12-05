@@ -20,6 +20,7 @@ STATE_ALLOCATED = 2
 STATE_COMPLETED = 3
 STATE_FAILED = 4
 STATE_TIMEOUT = 5
+STATE_CANCELLED = 6
 
 TASK_TYPE = {
     TYPE_NORMAL: "Worker",
@@ -102,6 +103,23 @@ class JobDB(mysql):
         self._execute("INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                       [self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module])
 
+    def cancel_job(self, jobid):
+        self._execute("UPDATE jobs SET state=%d WHERE jobid=%s", (STATE_CANCELLED, jobid))
+
+    def force_stopped(self, workerid, node):
+        self._execute("UPDATE jobs SET state=%s, retval='Worker killed' WHERE worker=%s AND node=%s",
+                      [STATE_FAILED, workerid, node])
+
+    def get_job_state(self, jobid):
+        """
+        Check that the job hasn't been updated, i.e. cancelled or removed
+        """
+        c = self._execute("SELECT state FROM jobs WHERE jobid=%s", [jobid])
+        row = c.fetchone()
+        if row:
+            return row[0]
+        return None
+
     def allocate_job(self, workerid, type=TYPE_NORMAL, node=None, max_jobs=1):
         # TODO: Check for timeouts here too?
         nonce = random.randint(0, 2147483647)
@@ -131,7 +149,7 @@ class JobDB(mysql):
 
     def list_jobs(self, step=None, state=None, notstate=None, since=None):
         jobs = []
-        SQL = "SELECT jobid, step, taskid, type, priority, args, tschange, state, expiretime, module, tsallocated, node, worker FROM jobs WHERE runid=%s"
+        SQL = "SELECT jobid, step, taskid, type, priority, args, tschange, state, expiretime, module, tsallocated, node, worker, retval FROM jobs WHERE runid=%s"
         args = [self._runid]
         if step:
             SQL += " AND step=%s"
@@ -148,11 +166,11 @@ class JobDB(mysql):
 
         SQL += " ORDER BY tschange"
         c = self._execute(SQL, args)
-        for jobid, step, taskid, t, priority, args, tschange, state, expire_time, module, tsallocated, node, worker in c.fetchall():
+        for jobid, step, taskid, t, priority, args, tschange, state, expire_time, module, tsallocated, node, worker, retval in c.fetchall():
             if args:
                 args = json.loads(args)
             job = {"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority, "node": node, "worker": worker,
-                   "args": args, "tschange": tschange, "state": state, "expire_time": expire_time, "module": module}
+                   "args": args, "tschange": tschange, "state": state, "expire_time": expire_time, "module": module, "retval": retval}
             if tsallocated:
                 job["runtime"] = time.time() - tsallocated
             jobs.append(job)
