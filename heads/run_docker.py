@@ -59,8 +59,6 @@ class Handler(CryoCloud.DefaultHandler):
         if options.args:
             task["arguments"] = options.args.split(" ")
 
-        print(task)
-        self.head.stop()
         self.head.add_job(1, 1, task, module="docker", node=self.options.node)
 
     def onAllocated(self, task):
