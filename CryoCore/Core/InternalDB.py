@@ -76,7 +76,7 @@ class AsyncDB(threading.Thread):
         self._db_name = None
         self.db_conn = None
         self.stop_event = API.api_stop_event
-        self.running = False
+        self.running = True
         if config:
             self._mycfg = config
         else:
@@ -130,7 +130,6 @@ class AsyncDB(threading.Thread):
 
                 task = self.runQueue.get(block=True, timeout=0.5)
                 event, retval, SQL, parameters, ignore_error = task
-                # self.log.debug("Running event %s" % SQL)
                 self._async_execute(event, retval, SQL, parameters, ignore_error)
             except queue.Empty:
                 # print(os.getpid(), "AsyncDB IDLE")
@@ -160,7 +159,7 @@ class AsyncDB(threading.Thread):
         return cfg
 
     def get_connection(self):
-        while not self.stop_event.isSet():
+        while self.running:  # stop_event.isSet():
             cfg = self._get_conn_cfg()
             try:
                 if not self.db_conn:
@@ -188,7 +187,7 @@ class AsyncDB(threading.Thread):
     def _get_cursor(self, temporary_connection=False):
         try:
             return self.get_connection().cursor()
-        except mysql.OperationalError:
+        except MySQLdb.OperationalError:
             self._close_connection()
             return self._get_cursor(temporary_connection)
 
@@ -207,8 +206,12 @@ class AsyncDB(threading.Thread):
                 try:
                     cursor = self._get_cursor()
                 except Exception as e:
-                    if self.stop_event.isSet():
+                    if not self.running:
+                        retval["statue"] = "DB Inteface stopped"
                         break
+                    #if self.stop_event.isSet():
+                    #    print("STOP EVENT IS SET")
+                    #    break
                     print("[%s] No connection, retrying in a bit" % os.getpid(), e)
                     import traceback
                     traceback.print_exc()
