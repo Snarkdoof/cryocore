@@ -153,7 +153,7 @@ class DockerProcess():
                 return
 
             # Should we stop?
-            if self.cancel_event.isSet():
+            if self.cancel_event and self.cancel_event.isSet():
                 self.log.warning("Cancelling job due to remote command")
                 p.terminate()
 

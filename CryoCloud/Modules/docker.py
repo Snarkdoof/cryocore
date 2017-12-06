@@ -43,7 +43,9 @@ def process_task(worker, task, cancel_event):
     if "log_all" in task["args"]:
         log_all = task["args"]["log_all"]
 
-    dp = DockerProcess(target, worker.status, worker.log, API.api_stop_event, dirs=dirs, env=env, gpu=gpu, args=args, log_all=log_all)
+    dp = DockerProcess(target, worker.status, worker.log, API.api_stop_event,
+                       dirs=dirs, env=env, gpu=gpu, args=args, log_all=log_all,
+                       cancel_event=cancel_event)
     dp.run()
 
     worker.log.debug("Docker completed")
