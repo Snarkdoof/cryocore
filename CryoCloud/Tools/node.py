@@ -31,10 +31,11 @@ except:
 
 
 modules = {}
+sys.path.append("CryoCloud/Modules/")
 
 
 def load(modulename):
-    print("LOADING MODULE", modulename)
+    # print("LOADING MODULE", modulename)
     # TODO: Also allow getmodulename here to allow modulename to be a .py file
     if modulename.endswith(".py"):
         import inspect
@@ -44,7 +45,8 @@ def load(modulename):
         try:
             info = imp.find_module(modulename)
             modules[modulename] = imp.load_module(modulename, info[0], info[1], info[2])
-        except:
+        except Exception as e:
+            print("imp load failed", e)
             modules[modulename] = imp.import_module(modulename)
 
     imp.reload(modules[modulename])
@@ -83,8 +85,14 @@ class Worker(multiprocessing.Process):
         print("Switching job from", self._current_job, (job["runname"], job["module"]))
         self._current_job = (job["runname"], job["module"])
         self._module = None
-
+        modulepath = None
+        if "modulepath" in job:
+            modulepath = job["modulepath"]
         try:
+            if modulepath:
+                if modulepath not in sys.path:
+                    sys.path.append(modulepath)
+
             self._module = job["module"]
             if self._module == "test":
                 self._module = None
@@ -298,12 +306,6 @@ class NodeController(threading.Thread):
         self.cfg = API.get_config("NodeController")
         self.cfg.set_default("expire_time", 86400)  # Default one day expire time
         self.cfg.set_default("sample_rate", 5)
-
-        # Set library paths
-        sys.path.append("CryoCloud/Modules/")
-        self.cfg.set_default("pythonpath", "")
-        for p in self.cfg["pythonpath"].split(":"):
-            sys.path.append(p)
 
         # My name
         self.name = "NodeController." + socket.gethostname()
