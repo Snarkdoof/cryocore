@@ -14,7 +14,8 @@ class DockerProcess():
     A local config file .dockercfg is read which overrides a few important bits for security reasons
     """
 
-    def __init__(self, cmd, status, log, stop_event, env={}, dirs={}, gpu=False, userid=None, groupid=None, log_all=False, args=[]):
+    def __init__(self, cmd, status, log, stop_event, env={}, dirs={}, gpu=False,
+                 userid=None, groupid=None, log_all=False, args=[], cancel_event=None):
 
         # if not os.path.exists(".dockercfg"):
         #    raise SystemExit("Missing .dockercfg for system wide config")
@@ -49,6 +50,8 @@ class DockerProcess():
             self.groupid = self._dockercfg["groupid"]
         self.args = args
         self.log_all = log_all
+        self.cancel_event = cancel_event
+
         self._retval = None
         self._error = ""
         self._t = None
@@ -148,6 +151,11 @@ class DockerProcess():
                 self._error = "Docker process '%s' exited with value %d" % (self.cmd, self._retval)
                 self.log.error("Docker process '%s' exited with value %d" % (self.cmd, self._retval))
                 return
+
+            # Should we stop?
+            if self.cancel_event.isSet():
+                self.log.warning("Cancelling job due to remote command")
+                p.terminate()
 
     def start(self, stop_event=None):
         """

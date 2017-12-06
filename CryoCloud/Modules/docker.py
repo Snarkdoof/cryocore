@@ -2,7 +2,7 @@ from CryoCore import API
 from CryoCloud.Common.DockerProcess import DockerProcess
 
 
-def process_task(worker, task):
+def process_task(worker, task, cancel_event):
     """
     worker.status and worker.log are ready here.
 
