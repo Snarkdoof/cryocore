@@ -103,10 +103,11 @@ class HeadNode(threading.Thread):
                                                      recursive=recursive)
 
     def add_job(self, step, taskid, args, jobtype=jobdb.TYPE_NORMAL, priority=jobdb.PRI_NORMAL,
-                node=None, expire_time=None, module=None):
+                node=None, expire_time=None, module=None, modulepath=None):
         if expire_time is None:
             expire_time = self.options.max_task_time
-        self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module, node=node, priority=priority)
+        self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module, node=node, priority=priority,
+                            modulepath=modulepath)
         if self.options.steps > 0 and self.options.tasks > 0:
             if step > self.status["progress"].size[0]:
                 self.status.new2d("progress", (self.options.steps, self.options.tasks),
