@@ -245,8 +245,8 @@ if __name__ == "__main__":
         moduleinfo = inspect.getmoduleinfo(filename)
         path = os.path.dirname(os.path.abspath(filename))
 
-        sys.path.append(path)
-        info = imp.find_module(moduleinfo.name)
+        # sys.path.append(path)
+        info = imp.find_module(moduleinfo.name, [path])
         mod = imp.load_module(moduleinfo.name, info[0], info[1], info[2])
 
         supress = []

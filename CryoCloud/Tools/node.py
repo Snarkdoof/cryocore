@@ -34,7 +34,7 @@ modules = {}
 sys.path.append("CryoCloud/Modules/")
 
 
-def load(modulename):
+def load(modulename, path=None):
     # print("LOADING MODULE", modulename)
     # TODO: Also allow getmodulename here to allow modulename to be a .py file
     if modulename.endswith(".py"):
@@ -43,7 +43,7 @@ def load(modulename):
 
     if modulename not in modules:
         try:
-            info = imp.find_module(modulename)
+            info = imp.find_module(modulename, path)
             modules[modulename] = imp.load_module(modulename, info[0], info[1], info[2])
         except Exception as e:
             print("imp load failed", e)
@@ -89,16 +89,15 @@ class Worker(multiprocessing.Process):
         if "modulepath" in job:
             modulepath = job["modulepath"]
         try:
+            path = None
             if modulepath:
-                if modulepath not in sys.path:
-                    sys.path.append(modulepath)
-
+                path = [modulepath]
             self._module = job["module"]
             if self._module == "test":
                 self._module = None
             else:
                 self.log.debug("Loading module %s" % self._module)
-                self._module = load(self._module)
+                self._module = load(self._module, path)
                 print("Loading of", self._module, "successful")
         except Exception as e:
             self._is_ready = False
