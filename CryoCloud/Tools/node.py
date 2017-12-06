@@ -233,13 +233,11 @@ class Worker(multiprocessing.Process):
         members = inspect.getmembers(self._module)
         for name, member in members:
             if name == "process_task":
-                print(inspect.getargspec(member))
                 if len(inspect.getargspec(member).args) > 2:
                     canStop = True
                     break
 
         if canStop:
-            print("Stoppable module")
             t = threading.Thread(target=monitor)
             t.daemon = True
             t.start()
