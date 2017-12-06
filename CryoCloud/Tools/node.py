@@ -29,8 +29,6 @@ try:
 except:
     import importlib as imp
 
-sys.path.append("CryoCloud/Modules/")
-
 
 modules = {}
 
@@ -62,7 +60,6 @@ class Worker(multiprocessing.Process):
         self._stop_event = threading.Event()
         self._manager = None
         self.workernum = workernum
-
         self._name = None
         self._jobid = None
         self.module = None
@@ -73,12 +70,7 @@ class Worker(multiprocessing.Process):
         self._type = type
         self._worker_type = jobdb.TASK_TYPE[type]
         self.wid = "%s-%s_%d" % (self._worker_type, socket.gethostname(), self.workernum)
-
         self._current_job = (None, None)
-        # self._job_in_progress = None
-        # self._monitor_thread = threading.Thread(target=self._monitor)
-        # self._monitor_thread.daemon = True
-        # self._monitor_thread.start()
 
         print("%s %s created" % (self._worker_type, workernum))
 
@@ -122,29 +114,6 @@ class Worker(multiprocessing.Process):
 
         except:
             self.log.exception("Some other exception")
-
-    def _monitor(self):
-        print("MONITOR RUNNING", self._job_in_progress)
-        print(dir(self))
-        if 1:
-        #while not self._stop_event.isSet() and not API.api_stop_event.isSet():
-            try:
-                # Check if the job we're currently running should be stopped
-                if self._job_in_progress:
-                    state = self._jobdb.get_job_state(self._job_in_progress["id"])
-                    if state is None:
-                        print("JOB WAS REMOVED")
-                        self.stop_job()
-                    elif state is jobdb.STATE_CANCELLED:
-                        print("JOB WAS CANCELLED")
-                        self.stop_job()
-                else:
-                    print("Idle", self._job_in_progress, self.status["current_job"])
-            except Exception as e:
-                print("Woopsie:", e)
-                # self.log.exception("Exception in monitor")
-
-            time.sleep(1.0)
 
     def run(self):
 
@@ -329,6 +298,13 @@ class NodeController(threading.Thread):
         self.cfg = API.get_config("NodeController")
         self.cfg.set_default("expire_time", 86400)  # Default one day expire time
         self.cfg.set_default("sample_rate", 5)
+
+        # Set library paths
+        sys.path.append("CryoCloud/Modules/")
+        self.cfg.set_default("pythonpath", "")
+        for p in self.cfg["pythonpath"].split(":"):
+            sys.path.append(p)
+
         # My name
         self.name = "NodeController." + socket.gethostname()
         # TODO: CHECK IF A NODE CONTROLLER IS ALREADY RUNNING ON THIS DEVICE (remotestatus?)
