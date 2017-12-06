@@ -233,22 +233,29 @@ if __name__ == "__main__":
 
     # We start out by checking that we have a handler specified
     if len(sys.argv) < 2:
-        raise SystemExit("Need module to testrun")
+        raise SystemExit("Need handler")
 
     filename = sys.argv[1]
-    moduleinfo = inspect.getmoduleinfo(filename)
-    path = os.path.dirname(os.path.abspath(filename))
+    if filename in ["-h", "--help"]:
+        mod = None
+        supress = []
+        args = sys.argv
+    else:
+        args = sys.argv[2:]
+        moduleinfo = inspect.getmoduleinfo(filename)
+        path = os.path.dirname(os.path.abspath(filename))
 
-    sys.path.append(path)
-    info = imp.find_module(moduleinfo.name)
-    mod = imp.load_module(moduleinfo.name, info[0], info[1], info[2])
+        sys.path.append(path)
+        info = imp.find_module(moduleinfo.name)
+        mod = imp.load_module(moduleinfo.name, info[0], info[1], info[2])
 
-    supress = []
-    try:
-        supress = mod.supress
-    except:
-        pass
-    print("Loaded module")
+        supress = []
+        try:
+            supress = mod.supress
+        except:
+            pass
+        print("Loaded module")
+
     try:
         description = mod.description
     except:
@@ -320,7 +327,7 @@ if __name__ == "__main__":
     if "argcomplete" in sys.modules:
         argcomplete.autocomplete(parser)
 
-    options = parser.parse_args(args=sys.argv[2:])
+    options = parser.parse_args(args=args)
     try:
         options.steps = int(options.steps)
     except:
@@ -348,6 +355,9 @@ if __name__ == "__main__":
         options.module = ""
 
     import signal
+
+    if mod is None:
+        raise SystemExit("Missing handler")
 
     def handler(signum, frame):
         print("Head stopped by user signal")
