@@ -2,7 +2,7 @@ from CryoCore import API
 from CryoCloud.Common.DockerProcess import DockerProcess
 
 
-def process_task(worker, task, cancel_event):
+def process_task(worker, task):
     """
     worker.status and worker.log are ready here.
 
@@ -44,8 +44,8 @@ def process_task(worker, task, cancel_event):
         log_all = task["args"]["log_all"]
 
     dp = DockerProcess(target, worker.status, worker.log, API.api_stop_event,
-                       dirs=dirs, env=env, gpu=gpu, args=args, log_all=log_all,
-                       cancel_event=cancel_event)
+                       dirs=dirs, env=env, gpu=gpu, args=args, log_all=log_all)
+    # cancel_event=cancel_event)  # Doesn't work
     dp.run()
 
     worker.log.debug("Docker completed")

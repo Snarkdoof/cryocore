@@ -50,7 +50,7 @@ class DockerProcess():
             self.groupid = self._dockercfg["groupid"]
         self.args = args
         self.log_all = log_all
-        self.cancel_event = cancel_event
+        self.cancel_event = None  # cancel_event  - DISABLED, it doesn't work
 
         self._retval = None
         self._error = ""
@@ -101,6 +101,7 @@ class DockerProcess():
         fcntl.fcntl(p.stderr, fcntl.F_SETFL, os.O_NONBLOCK)
 
         buf = {p.stdout: "", p.stderr: ""}
+        terminated = 0
 
         while not self.stop_event.isSet():
             ready = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
@@ -144,6 +145,9 @@ class DockerProcess():
             self._retval = p.poll()
             if self._retval is not None:
                 # Process exited
+                if self.cancel_event and self.cancel_event.isSet():
+                    self.log.error("Docker process '%s' cancelled OK" % (self.cmd))
+                    return
                 if self._retval == 0:
                     self.status["progress"] = 100
                     break
@@ -152,10 +156,15 @@ class DockerProcess():
                 self.log.error("Docker process '%s' exited with value %d" % (self.cmd, self._retval))
                 return
 
-            # Should we stop?
+            # Should we stop?  NOTE: THIS DOESN'T WORK
             if self.cancel_event and self.cancel_event.isSet():
                 self.log.warning("Cancelling job due to remote command")
-                p.terminate()
+                if terminated < 2:
+                    p.terminate()
+                else:
+                    self.log.warning("Not stopping, trying to kill")
+                    p.kill()
+                terminated += 1
 
     def start(self, stop_event=None):
         """
