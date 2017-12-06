@@ -42,6 +42,7 @@ def load(modulename):
 
 
 class HeadNode(threading.Thread):
+
     def __init__(self, handler, options):
         threading.Thread.__init__(self)
 
@@ -62,6 +63,16 @@ class HeadNode(threading.Thread):
         # Load the handler
         self.handler = handler.Handler()  # load(options.handler).Handler()
         print("HANDLER", self.handler.__module__)
+
+        self.handler.PRI_HIGH = jobdb.PRI_HIGH
+        self.handler.PRI_NORMAL = jobdb.PRI_NORMAL
+        self.handler.PRI_LOW = jobdb.PRI_LOW
+        self.handler.PRI_BULK = jobdb.PRI_BULK
+
+        self.handler.TYPE_NORMAL = jobdb.TYPE_NORMAL
+        self.handler.TYPE_ADMIN = jobdb.TYPE_ADMIN
+        self.handler.TYPE_MANUAL = jobdb.TYPE_MANUAL
+
         self.handler.head = self
         self.step = 0
 

@@ -33,7 +33,15 @@ def process_task(worker, task, cancel_event):
     buf = {p.stdout: "", p.stderr: ""}
 
     while not CryoCore.API.api_stop_event.isSet():
-        ready_fds = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
+        # check if the process is still running
+        _retval = p.poll()
+
+        if _retval is not None:
+            timeout = 0.1
+        else:
+            timeout = 1.0
+
+        ready_fds = select.select([p.stdout, p.stderr], [], [], timeout)[0]
         for fd in ready_fds:
             data = fd.read()
             buf[fd] += data.decode("utf-8")
@@ -56,12 +64,12 @@ def process_task(worker, task, cancel_event):
         if data:
             print("stderr", data)
             buf[p.stderr] = ""
+            worker.log.error(data)
 
-        # check if the process is still running
-        _retval = p.poll()
         if _retval is not None:
             # Process exited
             if _retval == 0:
+                print("Command executed successfully")
                 break
             # unexpected
             raise Exception("Wrapped process '%s' exited with value %d" % (cmd, _retval))
@@ -72,4 +80,4 @@ def process_task(worker, task, cancel_event):
             worker.log.warning("Cancelling job due to remote command")
             p.terminate()
 
-    return 100, None
+    return worker.status["progress"].get_value(), None

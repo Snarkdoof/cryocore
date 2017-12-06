@@ -25,8 +25,6 @@ def addArguments(parser):
 class Handler(CryoCloud.DefaultHandler):
 
     def onReady(self, options):
-
-        print(dir(options))
         self._tasks = []
         self._taskid = 1
 
@@ -35,7 +33,9 @@ class Handler(CryoCloud.DefaultHandler):
         for target in self.options.targets:
             print("Should build", target, "on", self.options.node)
             task = {"target": target, "directory": self.options.input_dir}
-            self.head.add_job(1, self._taskid, task, module="build_docker", node=self.options.node)
+            if task["directory"] is None:
+                task["directory"] = "./"
+            self.head.add_job(1, self._taskid, task, module="build_docker", node=self.options.node)  # , jobtype=self.TYPE_ADMIN)
             self._tasks.append(self._taskid)
             self._taskid += 1
 
@@ -56,7 +56,7 @@ class Handler(CryoCloud.DefaultHandler):
         self.head.requeue(task)
 
     def onError(self, task):
-        print("Error for task %d:" % task["taskid"], task["retval"])
+        print("Error for task %d:" % task["taskid"], task["retval"], task)
         # Notify someone, log the file as failed, try to requeue it or try to figure out what is wrong and how to fix it
         self._tasks.remove(task["taskid"])
 

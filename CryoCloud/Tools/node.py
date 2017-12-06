@@ -212,10 +212,13 @@ class Worker(multiprocessing.Process):
         self.status["progress"] = 0
 
         cancel_event = threading.Event()
+        stop_monitor = threading.Event()
 
         def monitor():
-            while not self._stop_event.isSet() and not cancel_event.isSet():
+            while not self._stop_event.isSet() and not cancel_event.isSet() and not stop_monitor.isSet():
                 status = self._jobdb.get_job_state(task["id"])
+                if stop_monitor.isSet():
+                    break
                 if status == jobdb.STATE_CANCELLED:
                     self.log.info("Cancelling job on request")
                     cancel_event.set()
@@ -230,7 +233,6 @@ class Worker(multiprocessing.Process):
         members = inspect.getmembers(self._module)
         for name, member in members:
             if name == "process_task":
-                print(inspect.getargspec(member))
                 if len(inspect.getargspec(member).args) > 2:
                     canStop = True
                     break
@@ -249,6 +251,8 @@ class Worker(multiprocessing.Process):
                 else:
                     progress, ret = self._module.process_task(self, task)
 
+            # Stop the monitor if it's running
+            stop_monitor.set()
             task["progress"] = progress
             if int(progress) != 100:
                 raise Exception("ProcessTask returned unexpected progress: %s vs 100" % progress)
@@ -261,7 +265,7 @@ class Worker(multiprocessing.Process):
             task["result"] = "Failed"
             self.status["num_errors"].inc()
             self.status["last_error"] = str(e)
-            ret = None
+            ret = str(e)
 
         task["state"] = "Stopped"
         task["processing_time"] = time.time() - start_time
