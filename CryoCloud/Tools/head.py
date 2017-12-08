@@ -330,6 +330,11 @@ if __name__ == "__main__":
                             default=None,
                             help="Maximum time a task will be allowed to run before it is re-queued")
 
+    if "--node" not in supress:
+        parser.add_argument("--node", dest="node",
+                            default=None,
+                            help="Request a particular node do all jobs")
+
     # We allow the module to add more arguments
     try:
         mod.addArguments(parser)
