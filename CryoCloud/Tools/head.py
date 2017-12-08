@@ -64,14 +64,14 @@ class HeadNode(threading.Thread):
         self.handler = handler.Handler()  # load(options.handler).Handler()
         print("HANDLER", self.handler.__module__)
 
-        self.handler.PRI_HIGH = jobdb.PRI_HIGH
-        self.handler.PRI_NORMAL = jobdb.PRI_NORMAL
-        self.handler.PRI_LOW = jobdb.PRI_LOW
-        self.handler.PRI_BULK = jobdb.PRI_BULK
+        self.PRI_HIGH = jobdb.PRI_HIGH
+        self.PRI_NORMAL = jobdb.PRI_NORMAL
+        self.PRI_LOW = jobdb.PRI_LOW
+        self.PRI_BULK = jobdb.PRI_BULK
 
-        self.handler.TYPE_NORMAL = jobdb.TYPE_NORMAL
-        self.handler.TYPE_ADMIN = jobdb.TYPE_ADMIN
-        self.handler.TYPE_MANUAL = jobdb.TYPE_MANUAL
+        self.TYPE_NORMAL = jobdb.TYPE_NORMAL
+        self.TYPE_ADMIN = jobdb.TYPE_ADMIN
+        self.TYPE_MANUAL = jobdb.TYPE_MANUAL
 
         self.handler.head = self
         self.step = 0
