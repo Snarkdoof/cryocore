@@ -312,12 +312,12 @@ if __name__ == "__main__":
 
     if "--steps" not in supress:
         parser.add_argument("--steps", dest="steps",
-                            default=1,
+                            default=0,
                             help="Number of steps in this processing")
 
     if "--tasks" not in supress:
         parser.add_argument("--tasks", dest="tasks",
-                            default=10,
+                            default=0,
                             help="Number of tasks for each step in this processing")
 
     if "--module" not in supress:
