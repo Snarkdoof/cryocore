@@ -8,6 +8,12 @@ if [ "$target" = "cleanup" ]; then
   exit
 fi
 
+if test "$target" = ""; then
+  echo "Need target to build, should be one of"
+  dir docker/
+  exit
+fi
+
 if ! test -e docker/$target ; then
   echo "Missing docker target $target"
   echo "Valid options could be:"
@@ -24,14 +30,8 @@ fi
 
 echo "Building docker", $target
 
-if test -L Dockerfile; then 
-  rm Dockerfile
-fi
-ln -s docker/$target/Dockerfile .
+docker build -t docker/$target . 
 
-
-docker build -t $target . 
-rm Dockerfile
 #if test $2==test; then
 #  sudo docker run $target
 #fi
