@@ -271,7 +271,7 @@ class Worker(multiprocessing.Process):
         task["processing_time"] = time.time() - start_time
 
         # Update to indicate we're done
-        self._jobdb.update_job(task["id"], new_state, ret)
+        self._jobdb.update_job(task["id"], new_state, retval=ret)
 
 
 class NodeController(threading.Thread):
