@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
 from __future__ import print_function
@@ -64,14 +64,14 @@ class HeadNode(threading.Thread):
         self.handler = handler.Handler()  # load(options.handler).Handler()
         print("HANDLER", self.handler.__module__)
 
-        self.handler.PRI_HIGH = jobdb.PRI_HIGH
-        self.handler.PRI_NORMAL = jobdb.PRI_NORMAL
-        self.handler.PRI_LOW = jobdb.PRI_LOW
-        self.handler.PRI_BULK = jobdb.PRI_BULK
+        self.PRI_HIGH = jobdb.PRI_HIGH
+        self.PRI_NORMAL = jobdb.PRI_NORMAL
+        self.PRI_LOW = jobdb.PRI_LOW
+        self.PRI_BULK = jobdb.PRI_BULK
 
-        self.handler.TYPE_NORMAL = jobdb.TYPE_NORMAL
-        self.handler.TYPE_ADMIN = jobdb.TYPE_ADMIN
-        self.handler.TYPE_MANUAL = jobdb.TYPE_MANUAL
+        self.TYPE_NORMAL = jobdb.TYPE_NORMAL
+        self.TYPE_ADMIN = jobdb.TYPE_ADMIN
+        self.TYPE_MANUAL = jobdb.TYPE_MANUAL
 
         self.handler.head = self
         self.step = 0
@@ -312,12 +312,12 @@ if __name__ == "__main__":
 
     if "--steps" not in supress:
         parser.add_argument("--steps", dest="steps",
-                            default=1,
+                            default=0,
                             help="Number of steps in this processing")
 
     if "--tasks" not in supress:
         parser.add_argument("--tasks", dest="tasks",
-                            default=10,
+                            default=0,
                             help="Number of tasks for each step in this processing")
 
     if "--module" not in supress:
@@ -329,6 +329,11 @@ if __name__ == "__main__":
         parser.add_argument("--max-task-time", dest="max_task_time",
                             default=None,
                             help="Maximum time a task will be allowed to run before it is re-queued")
+
+    if "--node" not in supress:
+        parser.add_argument("--node", dest="node",
+                            default=None,
+                            help="Request a particular node do all jobs")
 
     # We allow the module to add more arguments
     try:
