@@ -41,6 +41,19 @@ try:
     info = imp.find_module(moduleinfo.name)
     mod = imp.load_module(moduleinfo.name, info[0], info[1], info[2])
     task = {"args": args}
-    mod.process_task(worker, task)
+
+    canStop = False
+    import inspect
+    members = inspect.getmembers(mod)
+    for name, member in members:
+        if name == "process_task":
+            if len(inspect.getargspec(member).args) > 2:
+                canStop = True
+                break
+
+    if canStop:
+        mod.process_task(worker, task, API.api_stop_event)
+    else:
+        mod.process_task(worker, task)
 finally:
     API.shutdown()
