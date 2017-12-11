@@ -14,7 +14,7 @@ class DockerArgs:
         self._d = {}
         self._cmd = cmd
 
-    def get_docker_dirs(self):
+    def get_dirs(self):
         return [(root, volume) for root, path, volume in self._d.values()]
 
     def get_real_path(self, argname):
@@ -38,11 +38,11 @@ class DockerArgs:
     def add_arg(self, argname, argvalue):
         self._args[argname] = argvalue
 
-    def get_docker_args(self):
+    def get_args(self):
         # docker command
         CMD = ["docker", "run"]
         # volumes
-        for path, volume in self.get_docker_dirs():
+        for path, volume in self.get_dirs():
             CMD.extend(['-v', '{}:{}'.format(path, volume)])
         CMD.append(self._docker)
         # command
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     da.add_path('resource', '/path/to/resource_dir', 'resource_file', '/resource')
     da.add_arg('--arg', 'value')
 
-    args = da.get_docker_args()
+    args = da.get_args()
     print(args)
 
     """
