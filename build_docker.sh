@@ -30,7 +30,7 @@ fi
 
 echo "Building docker", $target
 
-docker build -t docker/$target . -f docker/$target/Dockerfile 
+docker build -t $target . -f docker/$target/Dockerfile 
 
 #if test $2==test; then
 #  sudo docker run $target
