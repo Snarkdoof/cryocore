@@ -3,6 +3,6 @@
 import sys
 from CryoCloud.Tools.processwrapper import Wrapper
 
-"""ccwrapworker wraps ccworker and forwards arguments"""
-w = Wrapper(["ccworker"] + sys.argv[1:])
-w.run()
+"""ccwrapworker expects sys.arg[1:] to be and executable command"""
+if len(sys.arg) > 1:	
+	Wrapper(sys.argv[1:]).run()
