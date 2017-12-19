@@ -62,6 +62,29 @@ def process_task(worker, task):
 
         buf = {p.stdout: "", p.stderr: ""}
 
+        def report(line):
+            """
+            Report a line if it should be reported as status or log
+            """
+            m = re.match("\[(.+)\] (.+)", line)
+            if m:
+                worker.status[m.groups()[0]] = m.groups()[1]
+
+            m = re.match("\<(\w+)\> (.+)", line)
+            if m:
+                level = m.groups()[0]
+                msg = m.groups()[1]
+                if level == "debug":
+                    worker.log.debug(msg)
+                elif level == "info":
+                    worker.log.info(msg)
+                elif level == "warning":
+                    worker.log.warning(msg)
+                elif level == "error":
+                    worker.log.error(msg)
+                else:
+                    worker.log.error("Unknown log level '%s'" % level)
+
         while not worker._stop_event.isSet():
             ready = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
             for fd in ready:
@@ -71,30 +94,12 @@ def process_task(worker, task):
             # Process any stdout data
             while buf[p.stdout].find("\n") > -1:
                 line, buf[p.stdout] = buf[p.stdout].split("\n", 1)
-                m = re.match("\[(.+)\] (.+)", line)
-                if m:
-                    worker.status[m.groups()[0]] = m.groups()[1]
-
-                m = re.match("\<(\w+)\> (.+)", line)
-                if m:
-                    level = m.groups()[0]
-                    msg = m.groups()[1]
-                    if level == "debug":
-                        worker.log.debug(msg)
-                    elif level == "info":
-                        worker.log.info(msg)
-                    elif level == "warning":
-                        worker.log.warning(msg)
-                    elif level == "error":
-                        worker.log.error(msg)
-                    else:
-                        worker.log.error("Unknown log level '%s'" % level)
+                report(line)
 
             # Check for output on stderr - set error message
-            if buf[p.stderr]:
-                # Should we parse this for some known stuff?
-                worker.log.error(buf[p.stderr])
-                buf[p.stderr] = ""
+            while buf[p.stderr].find("\n") > -1:
+                line, buf[p.stderr] = buf[p.stderr].split("\n", 1)
+                report(line)
 
             # See if the process is still running
             if p.poll() is not None:
