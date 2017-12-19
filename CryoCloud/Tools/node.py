@@ -34,6 +34,9 @@ modules = {}
 sys.path.append("CryoCloud/Modules/")
 
 
+API.cc_default_expire_time = 24 * 86400  # Default log & status only 7 days
+
+
 def load(modulename, path=None):
     # print("LOADING MODULE", modulename)
     # TODO: Also allow getmodulename here to allow modulename to be a .py file

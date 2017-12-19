@@ -220,7 +220,7 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
                 SQL = "INSERT INTO status2d(timestamp, paramid, chanid, posx, posy, value, expires) "\
                     "VALUES (%s, %s, %s, %s, %s, %s, %s)"
             self._execute(SQL, params)
-        except Exception as e:
+        except Exception:
             self.log.exception("Updating status2d information %s.%s" % (event.status_holder.get_name(), event.get_name()))
 
     def _async_report(self, event, ts, value):
@@ -250,7 +250,7 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
                 SQL = "INSERT INTO status(timestamp, paramid, chanid, value, expires) "\
                     "VALUES (%s, %s, %s, %s, %s)"
             self._execute(SQL, params)
-        except Exception as e:
+        except Exception:
             self.log.exception("Updating status information %s.%s" % (event.status_holder.get_name(), event.get_name()))
 
 if __name__ == "__main__":

@@ -23,6 +23,8 @@ import multiprocessing
 class MissingConfigException(Exception):
     pass
 
+global cc_default_expire_time
+cc_default_expire_time = None  # No default expiry
 
 # coding=utf-8
 
