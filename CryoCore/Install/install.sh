@@ -1,5 +1,6 @@
 #!/bin/bash
 export PYTHONPATH=.
+export LC_ALL="C.UTF-8" 
 
 if ! test -d "CryoCore" ; then
   echo "Must run install from the correct directory (the one with CryoCore in it)"
