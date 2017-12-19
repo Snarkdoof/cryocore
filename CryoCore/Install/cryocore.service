@@ -1,0 +1,11 @@
+# CryoCore systemd service file
+
+[Unit]
+Description=CryoCore System control service
+After=network.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+ExecStart=/home/norut/cryocore/bin/cryocored
