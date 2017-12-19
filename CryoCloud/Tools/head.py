@@ -25,7 +25,7 @@ except:
     import importlib as imp
 modules = {}
 
-API.cc_default_expire_time = 24 * 86400  # Default log & status only 7 days
+API.cc_default_expire_time = 24 * 86400  # Default log & status only 1 days
 
 
 def load(modulename):
