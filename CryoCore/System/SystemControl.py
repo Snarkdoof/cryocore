@@ -44,8 +44,11 @@ class SystemControl(threading.Thread):
         self.cfg = API.get_config(self.name)
         self.cfg.set_default("default_start_delay", 1.0)
         self.cfg.require(["sample_rate", "monitor_sensors"])
-        self.log = API.get_log(self.name)
+        self.cfg.set_default("cc_expire_time", 7 * 24 * 86400)
+        # We set the expire time for status to 7 days if nothing else is set
+        API.cc_default_expire_time = int(self.cfg["cc_expire_time"])
 
+        self.log = API.get_log(self.name)
         self.status = API.get_status(self.name)
         self.status["state"] = "starting"
         self._monitor_processes = {}
