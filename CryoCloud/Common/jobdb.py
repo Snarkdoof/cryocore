@@ -253,7 +253,7 @@ class JobDB(mysql):
         c = self._execute(SQL, (self._runid,))
         for step, state, count in c.fetchall():
             if step not in steps:
-                step[step] = {}
+                steps[step] = {}
             steps[step][state] = count
 
         return steps
