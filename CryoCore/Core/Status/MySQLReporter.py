@@ -33,6 +33,7 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
         self._prepare_db()
         # Thread entry point
         stop_time = None
+        last_clean = 0
         while True:  # Must loop - we only exit when idle, to ensure that we flush all items
             try:
                 (event, ts, value) = self.tasks.get(block=True, timeout=1.0)
@@ -48,7 +49,9 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
                         # We have a few seconds "grace time" to ensure that we get all status messages
                         continue
                     break
-                self._clean_expired()  # Clean, we're idling
+                if time.time() - last_clean > 300:
+                    last_clean = time.time()
+                    self._clean_expired()  # Clean, we're idling
             except Exception as e:
                 self.log.exception("Async status reporting fail")
                 print("Async exception on status reporting", e)
