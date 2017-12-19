@@ -84,6 +84,9 @@ def process_task(worker, task):
                     worker.log.error(msg)
                 else:
                     worker.log.error("Unknown log level '%s'" % level)
+            else:
+                if task["args"]["debug"]:
+                    worker.log.debug(line)
 
         while not worker._stop_event.isSet():
             ready = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
