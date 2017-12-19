@@ -34,6 +34,10 @@ def process_task(worker, task):
 
     if task["args"]["cmd"].__class__ != list:
         raise Exception("Arguments must be a list")
+    debug = False
+    if "debug" in task["args"]:
+        if task["args"]["debug"]:
+            debug = True
 
     cmd = ["idl"]
     cmd.extend(task["args"]["cmd"])
@@ -85,7 +89,7 @@ def process_task(worker, task):
                 else:
                     worker.log.error("Unknown log level '%s'" % level)
             else:
-                if task["args"]["debug"]:
+                if debug:
                     worker.log.debug(line)
 
         while not worker._stop_event.isSet():
