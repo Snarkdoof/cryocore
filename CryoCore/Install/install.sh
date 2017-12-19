@@ -7,6 +7,8 @@ if ! test -d "CryoCore" ; then
   exit -1
 fi
 
+sudo locale-gen "nb_NO.UTF-8"
+sudo locale-gen "en_US.UTF-8"
 
 apt-get --help > /dev/null 
 if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
