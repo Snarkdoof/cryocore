@@ -209,7 +209,7 @@ class AsyncDB(threading.Thread):
                     if not self.running:
                         retval["statue"] = "DB Inteface stopped"
                         break
-                    #if self.stop_event.isSet():
+                    # if self.stop_event.isSet():
                     #    print("STOP EVENT IS SET")
                     #    break
                     print("[%s] No connection, retrying in a bit" % os.getpid(), e)
@@ -361,9 +361,8 @@ class mysql:
                  temporary_connection=False,
                  ignore_error=False):
         if self._is_direct:
-            print("DIRECT")
             try:
-                cursor = AsyncDB.getDB()._get_cursor()
+                cursor = AsyncDB.getDB(None)._get_cursor()
                 cursor.execute(SQL, parameters)
                 return cursor
             except Exception as e:
