@@ -300,10 +300,6 @@ if __name__ == "__main__":
                             default="./",
                             help="Temporary directory (on worker nodes) where data will be kept during processing")
 
-    parser.add_argument("--runid", dest="runid",
-                        default=0,
-                        help="RunID to use")
-
     parser.add_argument("-v", "--version", dest="version",
                         default="default",
                         help="Config version to use on")
