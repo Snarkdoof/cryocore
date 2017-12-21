@@ -48,5 +48,5 @@ def process_task(worker, task):
     # cancel_event=cancel_event)  # Doesn't work
     retval = dp.run()
 
-    worker.log.debug("Docker completed")
+    worker.log.debug("Docker completed %s" % retval)
     return worker.status["progress"].get_value(), retval
