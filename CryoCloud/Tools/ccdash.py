@@ -119,8 +119,10 @@ class DashBoard:
         start = int((width - (2 * pad + len(text))) / 2)
         if start < 0:
             start = 0
-        pad = " " * pad
-        text = "%s%s%s" % (pad, text.encode(code), pad)
+        padding = " " * pad
+        # text = "%s%s%s" % (padding, text.encode(code), padding)
+        text = "%s%s%s" % (padding, text, padding)
+
         if text.__class__ == "bytes":
             text = str(text, "utf-8")
         screen.addstr(line, start, text[0:width], color)
@@ -177,12 +179,14 @@ class DashBoard:
             workerinfo = {}
             for worker in workers:
                 if worker.channel not in workerinfo:
-                    workerinfo[worker.channel] = {"ts": 0, "state": "unknown", "progress": "unknown"}
+                    workerinfo[worker.channel] = {"ts": 0, "state": "unknown", "progress": 0.0}
                 workerinfo[worker.channel][worker.name] = worker.value
                 workerinfo[worker.channel]["ts"] = max(worker.ts, workerinfo[worker.channel]["ts"])
 
             idx = 0
-            for worker in workerinfo:
+            workers = list(workerinfo)
+            workers.sort()
+            for worker in workers:
                 infostr = "%s: %s [%d%%] (%s)" %\
                     (worker, workerinfo[worker]["state"],
                      float(workerinfo[worker]["progress"]),
@@ -212,18 +216,17 @@ class DashBoard:
         since = 0
         while not API.api_stop_event.isSet():
             try:
-                data = self.statusdb.get_updates([param.paramid for param in self.parameters])
+                data = self.statusdb.get_updates([param.paramid for param in self.parameters], since=since)
                 since = data["maxid"]
 
                 for param in self.parameters:
                     if param.paramid in data["params"]:
                         param.ts = data["params"][param.paramid]["ts"]
                         param.value = data["params"][param.paramid]["val"]
-                        self.log.debug("Updated parameter %s -> %s" % (param.name, param.value))
                 # for parameter in self.parameters:
                 #    parameter.ts, parameter.value = self.statusdb.get_last_status_value_by_id(parameter.paramid)
                 while not API.api_stop_event.isSet():
-                    timeleft = last_run + 5 - time.time()
+                    timeleft = last_run + 1 - time.time()
                     if timeleft > 0:
                         time.sleep(min(1, timeleft))
                     else:

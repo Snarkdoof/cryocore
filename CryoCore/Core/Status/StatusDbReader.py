@@ -5,7 +5,7 @@ class StatusDbReader(InternalDB.mysql):
 
     def __init__(self, name="System.Status.MySQL"):
         cfg = API.get_config(name)
-        InternalDB.mysql.__init__(self, name, cfg, is_direct=True)
+        InternalDB.mysql.__init__(self, name, cfg, is_direct=False)
         self._id_cache = {}
 
     def _cache_lookup(self, chan, param):
@@ -40,8 +40,8 @@ class StatusDbReader(InternalDB.mysql):
         """
         paramid = self._cache_lookup(channel, name)
 
-        SQL = "SELECT timestamp, value FROM status WHERE id=(SELECT max(id) FROM status WHERE paramid=%s)"
-        # SQL = "SELECT timestamp, value FROM status WHERE paramid=%s ORDER BY id DESC LIMIT 1"
+        # SQL = "SELECT timestamp, value FROM status WHERE id=(SELECT max(id) FROM status WHERE paramid=%s)"
+        SQL = "SELECT timestamp, value FROM status WHERE paramid=%s ORDER BY id DESC LIMIT 1"
         cursor = self._execute(SQL, [paramid])
         # SQL = "SELECT timestamp, value FROM status,status_parameter,status_channel WHERE status_channel.name=%s AND status_parameter.name=%s AND status_parameter.chanid=status_channel.chanid AND status.paramid=status_parameter.paramid ORDER BY id DESC LIMIT 1"
         # cursor = self._execute(SQL, (channel, name))
@@ -49,6 +49,33 @@ class StatusDbReader(InternalDB.mysql):
         if not row:
             return (None, None)
         return (row[0], row[1])
+
+    def get_updates(self, paramlist, since=0):
+        """
+        Get the values for all parameters in the list since a given time. If since is 0, only the last value is given
+        """
+        retval = {"maxid": since, "params": {}}
+        if since == 0:
+            SQL = "SELECT id, timestamp, value FROM status WHERE paramid=%s ORDER BY id DESC LIMIT 1"
+            for i in paramlist:
+                cursor = self._execute(SQL, [i])
+                row = cursor.fetchone()
+                if row:
+                    id, ts, val = row
+                    retval["params"][i] = {"ts": ts, "val": val}
+                    retval["maxid"] = max(retval["maxid"], id)
+        else:
+            # Get updates
+            SQL = "SELECT id, paramid, timestamp, value FROM status WHERE id>%s AND ("
+            for i in paramlist:
+                SQL += "paramid=%s OR "
+            SQL = SQL[:-4] + ") order by timestamp"
+            cursor = self._execute(SQL, [since] + paramlist)
+            for id, paramid, ts, val in cursor.fetchall():
+                retval["params"][paramid] = {"ts": ts, "val": val}
+                retval["maxid"] = max(retval["maxid"], id)
+
+        return retval
 
     def get_last_status_value_by_id(self, paramid):
         """
@@ -129,3 +156,15 @@ class StatusDbReader(InternalDB.mysql):
                 retval[channel] = {}
             retval[channel][name] = paramid
         return retval
+
+if __name__ == "__main__":
+    # DEBUG
+    db = StatusDbReader()
+    since = 0
+    import time
+    for i in range(0, 10):
+        data = db.get_updates([361, 8, 2, 4, 5], since)
+        since = data["maxid"]
+        print(data)
+        time.sleep(1)
+    API.shutdown()

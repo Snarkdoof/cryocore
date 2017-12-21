@@ -93,14 +93,8 @@ class AsyncDB(threading.Thread):
             self.log.setLevel(logging.DEBUG)
 
     def __del__(self):
-        print("AsyncDB stopped")
-        return  # No commit should be necessary
-        with self._db_lock:
-            for c in list(self.db_connections.values()):
-                try:
-                    c.commit()
-                except:
-                    pass
+        # print("AsyncDB stopped")
+        pass
 
     def execute(self, task):
         if not self.running:
@@ -361,10 +355,11 @@ class mysql:
                  temporary_connection=False,
                  ignore_error=False):
         if self._is_direct:
+            print("IS DIRECT")
             try:
-                cursor = AsyncDB.getDB(None)._get_cursor()
-                cursor.execute(SQL, parameters)
-                return cursor
+                self.cursor = AsyncDB.getDB(None)._get_cursor()
+                self.cursor.execute(SQL, parameters)
+                return self.cursor
             except Exception as e:
                 if ignore_error:
                     return cursor
