@@ -117,11 +117,11 @@ class DockerProcess():
                 if self.log_all:
                     self.log.info(line)
 
-                m = re.match("\[(\w+)\] (.+)", line)
+                m = re.match("^\[(\w+)\] (.+)", line)
                 if m:
                     self.status[m.groups()[0]] = m.groups()[1]
 
-                m = re.match("\<(\w+)\> (.+)", line)
+                m = re.match("^\<(\w+)\> (.+)", line)
                 if m:
                     level = m.groups()[0]
                     msg = m.groups()[1]
@@ -136,7 +136,7 @@ class DockerProcess():
                     else:
                         self.log.error("Unknown log level '%s'" % level)
 
-                m = re.match("\{retval\} (.+)", line)
+                m = re.match("^\{retval\} (.+)", line)
                 if m:
                     try:
                         self.retval = json.loads(m.groups()[0])
