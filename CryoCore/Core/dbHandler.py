@@ -4,7 +4,6 @@ import logging
 import logging.handlers
 import time
 import threading
-import traceback
 import os
 from CryoCore.Core import API, InternalDB
 import sys
@@ -59,11 +58,6 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
         self.cfg = API.get_config("System.LogDB")
         InternalDB.mysql.__init__(self, "SystemLog", self.cfg, can_log=False, num_connections=1)
-
-        # For now we need to add the user id to the auxillary file, we are
-        # running instruments with different users
-        import getpass
-        aux_filename += "." + getpass.getuser()
 
         # We get ready to deal with problems in the database connection
         self.aux_logger = logging.getLogger('dbHandler_exception')
