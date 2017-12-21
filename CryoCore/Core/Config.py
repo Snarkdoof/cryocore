@@ -1510,7 +1510,10 @@ class Configuration(threading.Thread):
         """
         Add a callback for the given parameters.  Returns the ID of the callback (for use with del_callback)
         """
-        if parameter_list.__class__ in [str, unicode]:
+        if sys.version_info.major == 3:
+            if parameter_list.__class__ == str:
+                parameter_list = [parameter_list]
+        elif parameter_list.__class__ in [str, unicode]:
             parameter_list = [parameter_list]
 
         if not self.stop_event:
