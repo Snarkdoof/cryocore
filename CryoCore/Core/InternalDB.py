@@ -93,7 +93,7 @@ class AsyncDB(threading.Thread):
             self.log.setLevel(logging.DEBUG)
 
     def __del__(self):
-        # print("AsyncDB stopped")
+        # print("AsyncDB deleted")
         pass
 
     def execute(self, task):
@@ -114,7 +114,7 @@ class AsyncDB(threading.Thread):
             try:
                 if self.stop_event.isSet() and self.runQueue.empty():
                     if not stop_time:
-                        # print("Should stop*?")
+                        # print("Should stop soon")
                         stop_time = time.time()
                         time.sleep(0.05)
                     elif time.time() - stop_time > 2:
@@ -355,7 +355,6 @@ class mysql:
                  temporary_connection=False,
                  ignore_error=False):
         if self._is_direct:
-            print("IS DIRECT")
             try:
                 self.cursor = AsyncDB.getDB(None)._get_cursor()
                 self.cursor.execute(SQL, parameters)
@@ -370,7 +369,8 @@ class mysql:
         t = time.time()
         event.wait(60.0)
         if time.time() - t > 2.0:
-            print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
+            if SLOW_WARNING:
+                print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
         if not event.isSet():
             raise Exception("Failed to execute Config query in time (%s)" % SQL)
 
