@@ -74,8 +74,8 @@ class Wrapper:
                 if self._retval == 0:
                     break
                 # unexpected
-                self._err = "Wrapped process '%s' exited with value %d" % (self.cmd, self.retval)
-                eprint(self._err)
+                self._err = "Wrapped process '%s' exited with value %d" % (self.cmd, self._retval)
+                self.process_stderr(self._err)
                 break
 
     def join(self):

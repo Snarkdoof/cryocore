@@ -9,7 +9,7 @@ except:
 import inspect
 import sys
 import os.path
-
+import json
 import CryoCloud.Tools.node as node
 from CryoCore import API
 from argparse import ArgumentParser
@@ -25,8 +25,8 @@ sys.path.append(path)
 try:
     # Create the worker
     worker = node.Worker(0, API.api_stop_event)
-    worker.log = API.get_log("ccworker." + moduleinfo.name)
-    worker.status = API.get_status("ccworker." + moduleinfo.name)
+    worker.log = API.get_log("ccdocker." + moduleinfo.name)
+    worker.status = API.get_status("ccdocker." + moduleinfo.name)
 
     # Load module
     info = imp.find_module(moduleinfo.name)
@@ -48,7 +48,9 @@ try:
 
     # run the worker
     args = vars(options)
-    print("Running worker module %s with arguments: '%s'" % (moduleinfo.name, args))
-    mod.process_task(worker, {"args": args})
+    print("<info> Running worker module %s with arguments: '%s'" % (moduleinfo.name, args))
+    progress, retval = mod.process_task(worker, {"args": args})
+    print("{retval} " + json.dumps(retval))
+    print("[progress] 100")
 finally:
     API.shutdown()
