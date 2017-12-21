@@ -138,7 +138,11 @@ class DockerProcess():
 
                 m = re.match("\{retval\} (.+)", line)
                 if m:
-                    self.retval = json.loads(m.groups()[0])
+                    try:
+                        self.retval = json.loads(m.groups()[0])
+                    except:
+                        self.log.exception("Bad return value, expected json")
+                        self.retval = m.groups()
 
             # Check for output on stderr - set error message
             if buf[p.stderr]:
