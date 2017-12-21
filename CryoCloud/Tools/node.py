@@ -142,6 +142,7 @@ class Worker(multiprocessing.Process):
                 jobs = self._jobdb.allocate_job(self.workernum, node=socket.gethostname(), max_jobs=1, type=self._type)
                 if len(jobs) == 0:
                     time.sleep(1)
+                    self.status["state"] = "Idle"
                     continue
                 job = jobs[0]
                 self.status["current_job"] = job["id"]
@@ -210,7 +211,6 @@ class Worker(multiprocessing.Process):
 
         # Report that I'm on it
         start_time = time.time()
-        self.status["state"] = "Processing"
 
         self.log.debug("Processing job %s" % str(task))
         self.status["progress"] = 0
@@ -263,12 +263,14 @@ class Worker(multiprocessing.Process):
             task["result"] = "Ok"
             new_state = jobdb.STATE_COMPLETED
             self.status["last_processing_time"] = time.time() - start_time
+            self.status["state"] = "Done"
         except Exception as e:
             print("Processing failed", e)
             self.log.exception("Processing failed")
             task["result"] = "Failed"
             self.status["num_errors"].inc()
             self.status["last_error"] = str(e)
+            self.status["state"] = "Failed"
             ret = str(e)
 
         task["state"] = "Stopped"
