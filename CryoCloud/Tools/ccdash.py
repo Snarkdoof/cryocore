@@ -20,6 +20,7 @@ import locale
 
 locale.setlocale(locale.LC_ALL, '')
 code = locale.getpreferredencoding()
+DEBUG = True
 
 
 class Parameter():
@@ -39,6 +40,8 @@ class DashBoard:
         curses.noecho()
         curses.cbreak()
         self.screen.keypad(True)
+        self._dbgmin = 24
+        self._dbgidx = self._dbgmin  # Line to start debug statements
 
         self.cfg = API.get_config("Dashboard")
 
@@ -105,7 +108,7 @@ class DashBoard:
         # self.resourceWindow.hline(1, 0, " ", self.width, curses.color_pair(self.resource_color))
 
         # self.screen.hline(self.height - 1, 0, "-", self.width, curses.color_pair(4))
-        self.workerWindow = curses.newwin(10, self.width, 4, 0)
+        self.workerWindow = curses.newwin(20, self.width, 4, 0)
         self.worker_color = 3
         fill(self.workerWindow, self.worker_color)
 
@@ -133,6 +136,14 @@ class DashBoard:
         # curses.echo()
         # curses.endwin()
 
+    def _debug(self, text):
+        if DEBUG:
+            self.screen.addstr(self._dbgidx, 0, text, curses.color_pair(5))
+            self._dbgidx += 1
+            if self._dbgidx >= self.height:
+                self._dbgidx = self._dbgmin
+            self.screen.refresh()
+
     def redraw(self):
 
         # This is a layout kind of thing - we show the total CPU on top
@@ -155,9 +166,9 @@ class DashBoard:
                     workers.append(parameter)
 
             # Draw resource view
-            cpu = "CPU: "
+            cpu = "CPU used: "
             cpu_usage = {}
-            memory = "Memory: "
+            memory = "Available Memory: "
             for parameter in resources:
                 ttl = parameter.channel.split(".")[-1]
                 # self.log.debug("%s %s %s" % (parameter.name, parameter.title, parameter.value))
@@ -187,7 +198,10 @@ class DashBoard:
             workers = list(workerinfo)
             workers.sort()
             for worker in workers:
-                infostr = "%s: %s [%d%%] (%s)" %\
+                # if workerinfo[worker]["state"] == "unknown":
+                    # self._debug("Worker %s has unknown state (%s)" % (worker, time.ctime(workerinfo[worker]["ts"])))
+                    # continue
+                infostr = "% 23s: % 10s [% 4d%%] (%s)" %\
                     (worker, workerinfo[worker]["state"],
                      float(workerinfo[worker]["progress"]),
                      time.ctime(float(workerinfo[worker]["ts"])))
@@ -214,6 +228,8 @@ class DashBoard:
     def _refresher(self):
         last_run = 0
         since = 0
+        self._dbgidx = self._dbgmin  # Line to start debug statements
+
         while not API.api_stop_event.isSet():
             try:
                 data = self.statusdb.get_updates([param.paramid for param in self.parameters], since=since)
@@ -244,34 +260,41 @@ class DashBoard:
         t2 = threading.Thread(target=self._get_input)
         t2.start()
 
-        try:
-            # channels = self.statusdb.get_channels()
-            parameters = self.statusdb.get_channels_and_parameters()
+        last_run = time.time()
+        while not API.api_stop_event.isSet():
+            try:
+                # channels = self.statusdb.get_channels()
+                parameters = self.statusdb.get_channels_and_parameters()
 
-            # Resolve the status parameters and logs we're interested in
-            for param in self.cfg.get("params").children:
-                name = param.get_full_path().replace("Dashboard.", "")
-                for channel in parameters:
-                    if re.match(self.cfg["%s.source" % name], channel):
-                        try:
-                            pname = self.cfg["%s.name" % name]
-                            if pname in parameters[channel]:
-                                paramid = parameters[channel][pname]
-                            # self.log.debug("Resoving %s.%s" % (channel, self.cfg["%s.name" % name]))
+                # Resolve the status parameters and logs we're interested in
+                for param in self.cfg.get("params").children:
+                    name = param.get_full_path().replace("Dashboard.", "")
+                    for channel in parameters:
+                        if re.match(self.cfg["%s.source" % name], channel):
+                            try:
+                                pname = self.cfg["%s.name" % name]
+                                if pname in parameters[channel]:
+                                    paramid = parameters[channel][pname]
+                                # self.log.debug("Resoving %s.%s" % (channel, self.cfg["%s.name" % name]))
 
-                            # paramid = self.statusdb.get_param_id(channel, self.cfg["%s.name" % name])
-                            p = Parameter(paramid, self.cfg["%s.name" % name], channel)
-                            p.title = self.cfg["%s.title" % name]
-                            p.type = self.cfg["%s.type" % name]
-                            self.parameters.append(p)
-                        except:
-                            self.log.exception("Looking up %s %s" % (channel, self.cfg["%s.name" % name]))
+                                # paramid = self.statusdb.get_param_id(channel, self.cfg["%s.name" % name])
+                                p = Parameter(paramid, self.cfg["%s.name" % name], channel)
+                                p.title = self.cfg["%s.title" % name]
+                                p.type = self.cfg["%s.type" % name]
+                                self.parameters.append(p)
+                            except:
+                                self.log.exception("Looking up %s %s" % (channel, self.cfg["%s.name" % name]))
 
-            while not API.api_stop_event.isSet():
-                self.redraw()
-                time.sleep(5)
-        except:
-            self.log.exception("Exception in main loop")
+                while not API.api_stop_event.isSet():
+                    time_left = last_run + 300 - last_run
+                    if time_left < 0:
+                        break
+                    self.redraw()
+                    time.sleep(min(time_left, 1))
+                self._debug("Refreshing " + time.ctime())
+
+            except:
+                self.log.exception("Exception in main loop")
 
 if __name__ == "__main__":
 
