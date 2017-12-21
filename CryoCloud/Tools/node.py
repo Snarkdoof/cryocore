@@ -157,6 +157,7 @@ class Worker(multiprocessing.Process):
                 self.status["state"] = "Idle"
                 continue
             except KeyboardInterrupt:
+                self.status["state"] = "Stopped"
                 break
             except Exception as e:
                 print("No job", e)

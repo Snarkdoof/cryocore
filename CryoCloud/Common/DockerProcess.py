@@ -53,6 +53,7 @@ class DockerProcess():
         self.cancel_event = None  # cancel_event  - DISABLED, it doesn't work
 
         self._retval = None
+        self.retval = None
         self._error = ""
         self._t = None
         self.stop_event = stop_event
@@ -135,6 +136,10 @@ class DockerProcess():
                     else:
                         self.log.error("Unknown log level '%s'" % level)
 
+                m = re.match("\{retval\} (.+)", line)
+                if m:
+                    self.retval = json.loads(m.groups()[0])
+
             # Check for output on stderr - set error message
             if buf[p.stderr]:
                 # Should we parse this for some known stuff?
@@ -165,6 +170,7 @@ class DockerProcess():
                     self.log.warning("Not stopping, trying to kill")
                     p.kill()
                 terminated += 1
+        return self.retval
 
     def start(self, stop_event=None):
         """

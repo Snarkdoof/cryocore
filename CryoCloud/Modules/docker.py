@@ -46,7 +46,7 @@ def process_task(worker, task):
     dp = DockerProcess(target, worker.status, worker.log, API.api_stop_event,
                        dirs=dirs, env=env, gpu=gpu, args=args, log_all=log_all)
     # cancel_event=cancel_event)  # Doesn't work
-    dp.run()
+    retval = dp.run()
 
     worker.log.debug("Docker completed")
-    return worker.status["progress"].get_value(), None
+    return worker.status["progress"].get_value(), retval

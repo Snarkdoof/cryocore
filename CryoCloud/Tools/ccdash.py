@@ -87,17 +87,30 @@ class DashBoard:
         self.resource_color = 5
 
         self.height, self.width = self.screen.getmaxyx()
-        self.log.debug("Initialised %sx%s" % (self.height, self.width))
+
+        def fill(win, color, offset=0, height=None):
+            _height, width = win.getmaxyx()
+            if not height:
+                height = _height
+            for i in range(offset, height):
+                win.hline(i, 0, " ", width, curses.color_pair(color))
+            win.refresh()
 
         self.screen.hline(0, 0, "*", self.width, curses.color_pair(4))
         self.centerText(self.screen, 0, " CryoCloud Dashboard ", curses.color_pair(4), 3)
         self.resourceWindow = curses.newwin(3, self.width, 1, 0)
-        self.resourceWindow.hline(0, 0, " ", self.width, curses.color_pair(self.resource_color))
-        self.resourceWindow.hline(1, 0, " ", self.width, curses.color_pair(self.resource_color))
+        # fill(self.resourceWindow, self.resource_color)
+        fill(self.screen, self.resource_color, offset=1, height=2)
+        # self.resourceWindow.hline(0, 0, " ", self.width, curses.color_pair(self.resource_color))
+        # self.resourceWindow.hline(1, 0, " ", self.width, curses.color_pair(self.resource_color))
 
         # self.screen.hline(self.height - 1, 0, "-", self.width, curses.color_pair(4))
         self.workerWindow = curses.newwin(10, self.width, 4, 0)
         self.worker_color = 3
+        fill(self.workerWindow, self.worker_color)
+
+        self.logWindow = curses.newwin(10, self.width, 4, 0)
+        self.log_color = 2
 
         self.statusdb = StatusDbReader()
 
@@ -164,7 +177,7 @@ class DashBoard:
             workerinfo = {}
             for worker in workers:
                 if worker.channel not in workerinfo:
-                    workerinfo[worker.channel] = {"ts": 0}
+                    workerinfo[worker.channel] = {"ts": 0, "state": "unknown", "progress": "unknown"}
                 workerinfo[worker.channel][worker.name] = worker.value
                 workerinfo[worker.channel]["ts"] = max(worker.ts, workerinfo[worker.channel]["ts"])
 
@@ -196,17 +209,29 @@ class DashBoard:
 
     def _refresher(self):
         last_run = 0
-        # TODO: Write a get_last_changes [idlisit], since=...
+        since = 0
         while not API.api_stop_event.isSet():
-            for parameter in self.parameters:
-                parameter.ts, parameter.value = self.statusdb.get_last_status_value_by_id(parameter.paramid)
-            while not API.api_stop_event.isSet():
-                timeleft = last_run + 1 - time.time()
-                if timeleft > 0:
-                    time.sleep(min(1, timeleft))
-                else:
-                    last_run = time.time()
-                    break
+            try:
+                data = self.statusdb.get_updates([param.paramid for param in self.parameters])
+                since = data["maxid"]
+
+                for param in self.parameters:
+                    if param.paramid in data["params"]:
+                        param.ts = data["params"][param.paramid]["ts"]
+                        param.value = data["params"][param.paramid]["val"]
+                        self.log.debug("Updated parameter %s -> %s" % (param.name, param.value))
+                # for parameter in self.parameters:
+                #    parameter.ts, parameter.value = self.statusdb.get_last_status_value_by_id(parameter.paramid)
+                while not API.api_stop_event.isSet():
+                    timeleft = last_run + 5 - time.time()
+                    if timeleft > 0:
+                        time.sleep(min(1, timeleft))
+                    else:
+                        last_run = time.time()
+                        break
+            except:
+                self.log.exception("Refresh failed, retrying later")
+                time.sleep(10)
 
     def run(self):
 
@@ -257,6 +282,19 @@ if __name__ == "__main__":
         argcomplete.autocomplete(parser)
 
     options = parser.parse_args()
+
+    db_cfg = {}
+    if options.db_name:
+        db_cfg["db_name"] = options.db_name
+    if options.db_user:
+        db_cfg["db_user"] = options.db_user
+    if options.db_host:
+        db_cfg["db_host"] = options.db_host
+    if options.db_password:
+        db_cfg["db_password"] = options.db_password
+
+    if len(db_cfg) > 0:
+        API.set_config_db(db_cfg)
 
     try:
         dash = DashBoard()

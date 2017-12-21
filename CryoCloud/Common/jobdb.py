@@ -119,7 +119,7 @@ class JobDB(mysql):
         self._execute("UPDATE jobs SET state=%d WHERE jobid=%s", (STATE_CANCELLED, jobid))
 
     def force_stopped(self, workerid, node):
-        self._execute("UPDATE jobs SET state=%s, retval='Worker killed' WHERE worker=%s AND node=%s",
+        self._execute("UPDATE jobs SET state=%s, retval='{\"error\":\"Worker killed\"}' WHERE worker=%s AND node=%s",
                       [STATE_FAILED, workerid, node])
 
     def get_job_state(self, jobid):
@@ -185,7 +185,7 @@ class JobDB(mysql):
                 args = json.loads(args)
             job = {"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
                    "node": node, "worker": worker, "args": args, "tschange": tschange, "state": state,
-                   "expire_time": expire_time, "module": module, "modulepath": modulepath, "retval": retval}
+                   "expire_time": expire_time, "module": module, "modulepath": modulepath, "retval": json.loads(retval)}
             if tsallocated:
                 job["runtime"] = time.time() - tsallocated
             jobs.append(job)
