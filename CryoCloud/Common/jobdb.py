@@ -183,9 +183,11 @@ class JobDB(mysql):
         for jobid, step, taskid, t, priority, args, tschange, state, expire_time, module, modulepath, tsallocated, node, worker, retval in c.fetchall():
             if args:
                 args = json.loads(args)
+            if retval:
+                retval = json.loads(retval)
             job = {"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
                    "node": node, "worker": worker, "args": args, "tschange": tschange, "state": state,
-                   "expire_time": expire_time, "module": module, "modulepath": modulepath, "retval": json.loads(retval)}
+                   "expire_time": expire_time, "module": module, "modulepath": modulepath, "retval": retval}
             if tsallocated:
                 job["runtime"] = time.time() - tsallocated
             jobs.append(job)
