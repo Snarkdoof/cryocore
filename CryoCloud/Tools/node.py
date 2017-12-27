@@ -44,7 +44,7 @@ def load(modulename, path=None):
         import inspect
         modulename = inspect.getmodulename(modulename)
 
-    if modulename not in modules:
+    if 1 or modulename not in modules:  # Seems for python3, reload is deprecated. Check for python 2
         try:
             if path and path.__class__ != list:
                 path = [path]
