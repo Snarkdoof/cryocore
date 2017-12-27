@@ -265,7 +265,6 @@ class DashBoard:
 
         # We might want different log messages here - only errors etc?
         def filter(log):
-            return True
             if log[3] < logging.INFO:
                 return False
             if log[5].find("Worker") > -1:
