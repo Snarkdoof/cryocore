@@ -21,7 +21,7 @@ import locale
 
 locale.setlocale(locale.LC_ALL, '')
 code = locale.getpreferredencoding()
-DEBUG = True
+DEBUG = False
 
 
 class Parameter():
@@ -40,6 +40,7 @@ class DashBoard:
         curses.start_color()
         curses.noecho()
         curses.cbreak()
+        self._lock = threading.Lock()
         self.screen.keypad(True)
         self._dbgmin = 24
         self._dbgidx = self._dbgmin  # Line to start debug statements
@@ -158,74 +159,76 @@ class DashBoard:
             resources = []
             tasks = []
             workers = []
+            with self._lock:
+                for parameter in self.parameters:
+                    # parameter.ts, parameter.value = self.statusdb.get_last_status_value_by_id(parameter.paramid)
+                    if parameter.value is None:
+                        continue
+                    # self.log.debug("Parameter %s|%s has value %s" % (parameter.channel, parameter.name, parameter.value))
+                    if parameter.type.lower() == "resource":
+                        resources.append(parameter)
+                    elif parameter.type.lower() == "tasks":
+                        tasks.append(parameter)
+                    elif parameter.type.lower() == "worker":
+                        workers.append(parameter)
 
-            for parameter in self.parameters:
-                # parameter.ts, parameter.value = self.statusdb.get_last_status_value_by_id(parameter.paramid)
-                if parameter.value is None:
-                    continue
-                # self.log.debug("Parameter %s|%s has value %s" % (parameter.channel, parameter.name, parameter.value))
-                if parameter.type.lower() == "resource":
-                    resources.append(parameter)
-                elif parameter.type.lower() == "tasks":
-                    tasks.append(parameter)
-                elif parameter.type.lower() == "worker":
-                    workers.append(parameter)
+                # Draw resource view
+                cpu = "CPU used: "
+                cpu_usage = {}
+                memory = "Available Memory: "
+                for parameter in resources:
+                    ttl = parameter.channel.split(".")[-1]
+                    # self.log.debug("%s %s %s" % (parameter.name, parameter.title, parameter.value))
+                    if parameter.name.startswith("cpu"):
+                        if ttl not in cpu_usage:
+                            cpu_usage[ttl] = [0, 0]
+                        cpu_usage[ttl][1] += float(parameter.value)
+                        if parameter.name != "cpu.idle":
+                            cpu_usage[ttl][0] += float(parameter.value)
 
-            # Draw resource view
-            cpu = "CPU used: "
-            cpu_usage = {}
-            memory = "Available Memory: "
-            for parameter in resources:
-                ttl = parameter.channel.split(".")[-1]
-                # self.log.debug("%s %s %s" % (parameter.name, parameter.title, parameter.value))
-                if parameter.name.startswith("cpu"):
-                    if ttl not in cpu_usage:
-                        cpu_usage[ttl] = [0, 0]
-                    cpu_usage[ttl][1] += float(parameter.value)
-                    if parameter.name != "cpu.idle":
-                        cpu_usage[ttl][0] += float(parameter.value)
+                    elif parameter.name.startswith("memory"):
+                        memory += "%s: %s   " % (ttl, PrettyPrint.bytes_to_string(parameter.value))
+                for ttl in cpu_usage:
+                    cpu += "%s: %s/%s%%   " % (ttl, int(cpu_usage[ttl][0]), int(cpu_usage[ttl][1]))
+                self.resourceWindow.addstr(0, 0, cpu, curses.color_pair(self.resource_color))
+                self.resourceWindow.addstr(1, 0, memory, curses.color_pair(self.resource_color))
 
-                elif parameter.name.startswith("memory"):
-                    memory += "%s: %s   " % (ttl, PrettyPrint.bytes_to_string(parameter.value))
-            for ttl in cpu_usage:
-                cpu += "%s: %s/%s%%   " % (ttl, int(cpu_usage[ttl][0]), int(cpu_usage[ttl][1]))
-            self.resourceWindow.addstr(0, 0, cpu, curses.color_pair(self.resource_color))
-            self.resourceWindow.addstr(1, 0, memory, curses.color_pair(self.resource_color))
+                workerinfo = {}
+                for worker in workers:
+                    if worker.channel not in workerinfo:
+                        workerinfo[worker.channel] = {"ts": 0, "state": "unknown", "progress": 0.0}
+                    workerinfo[worker.channel][worker.name] = worker.value
+                    workerinfo[worker.channel]["ts"] = max(worker.ts, workerinfo[worker.channel]["ts"])
+
+                idx = 0
+                workers = list(workerinfo)
+                workers.sort()
+                for worker in workers:
+                    # if workerinfo[worker]["state"] == "unknown":
+                        # self._debug("Worker %s has unknown state (%s)" % (worker, time.ctime(workerinfo[worker]["ts"])))
+                        # continue
+                    infostr = "% 23s: % 10s [% 4d%%] (%s)" %\
+                        (worker, workerinfo[worker]["state"],
+                         float(workerinfo[worker]["progress"]),
+                         time.ctime(float(workerinfo[worker]["ts"])))
+                    self.workerWindow.addstr(idx, 4, infostr, curses.color_pair(self.worker_color))
+                    idx += 1
+
+                # Logs
+                self._fill(self.logWindow, self.log_color)
+                for log in self.logs:
+                    msg = "%s [%7s][%10s](%25s)[%4s] %s " % \
+                          (time.ctime(log[1]),
+                           API.log_level[log[3]],
+                           log[4], log[5], log[6], log[7])
+                    if idx == self._max_logs:
+                        self.log.warning("Tried to post to many logs %d > %d" % (len(self.logs), self._max_logs))
+                        break  # Not enough room...
+                    self.logWindow.addstr(idx, 2, msg, curses.color_pair(self.log_color))
+                    idx += 1
+
             self.resourceWindow.refresh()
-
-            workerinfo = {}
-            for worker in workers:
-                if worker.channel not in workerinfo:
-                    workerinfo[worker.channel] = {"ts": 0, "state": "unknown", "progress": 0.0}
-                workerinfo[worker.channel][worker.name] = worker.value
-                workerinfo[worker.channel]["ts"] = max(worker.ts, workerinfo[worker.channel]["ts"])
-
-            idx = 0
-            workers = list(workerinfo)
-            workers.sort()
-            for worker in workers:
-                # if workerinfo[worker]["state"] == "unknown":
-                    # self._debug("Worker %s has unknown state (%s)" % (worker, time.ctime(workerinfo[worker]["ts"])))
-                    # continue
-                infostr = "% 23s: % 10s [% 4d%%] (%s)" %\
-                    (worker, workerinfo[worker]["state"],
-                     float(workerinfo[worker]["progress"]),
-                     time.ctime(float(workerinfo[worker]["ts"])))
-                self.workerWindow.addstr(idx, 4, infostr, curses.color_pair(self.worker_color))
-                idx += 1
-
             self.workerWindow.refresh()
-
-            # Logs
-            self._fill(self.logWindow, self.log_color)
-            idx = 0
-            for log in self.logs:
-                msg = "%s [%7s][%10s](%25s)[%4s] %s " % \
-                      (time.ctime(log[1]),
-                       API.log_level[log[3]],
-                       log[4], log[5], log[6], log[7])
-                self.logWindow.addstr(idx, 2, msg, curses.color_pair(self.log_color))
-                idx += 1
             self.logWindow.refresh()
 
         except:
@@ -265,21 +268,22 @@ class DashBoard:
                 # Refresh status
                 data = self.statusdb.get_updates([param.paramid for param in self.parameters], since=since)
                 since = data["maxid"]
-
-                for param in self.parameters:
-                    if param.paramid in data["params"]:
-                        param.ts = data["params"][param.paramid]["ts"]
-                        param.value = data["params"][param.paramid]["val"]
-
                 # Refresh logs
-                data = self.logdb.get_updates(since=sincelogs, filter=filter)
-                sincelogs = data["maxid"]
-                if len(data["logs"]) > 0:
-                    if len(data["logs"]) > self._max_logs:
-                        self.logs = data["logs"][len(data["logs"] - self._max_logs):]
-                    else:
-                        self.logs = self.logs[:-(self._max_logs - len(data["logs"]))]
-                        self.logs.extend(data["logs"])
+                logs = self.logdb.get_updates(since=sincelogs, filter=filter)
+                sincelogs = logs["maxid"]
+
+                with self._lock:
+                    for param in self.parameters:
+                        if param.paramid in data["params"]:
+                            param.ts = data["params"][param.paramid]["ts"]
+                            param.value = data["params"][param.paramid]["val"]
+
+                    if len(logs["logs"]) > 0:
+                        if len(logs["logs"]) > self._max_logs:
+                            self.logs = logs["logs"][len(logs["logs"]) - self._max_logs:]
+                        else:
+                            self.logs = self.logs[:-(self._max_logs - len(logs["logs"]))]
+                            self.logs.extend(logs["logs"])
 
                 # for parameter in self.parameters:
                 #    parameter.ts, parameter.value = self.statusdb.get_last_status_value_by_id(parameter.paramid)
@@ -307,23 +311,22 @@ class DashBoard:
             try:
                 # channels = self.statusdb.get_channels()
                 parameters = self.statusdb.get_channels_and_parameters()
-
                 # Resolve the status parameters and logs we're interested in
                 for param in self.cfg.get("params").children:
                     name = param.get_full_path().replace("Dashboard.", "")
                     for channel in parameters:
+                        paramid = None
                         if re.match(self.cfg["%s.source" % name], channel):
                             try:
                                 pname = self.cfg["%s.name" % name]
                                 if pname in parameters[channel]:
                                     paramid = parameters[channel][pname]
-                                # self.log.debug("Resoving %s.%s" % (channel, self.cfg["%s.name" % name]))
 
-                                # paramid = self.statusdb.get_param_id(channel, self.cfg["%s.name" % name])
-                                p = Parameter(paramid, self.cfg["%s.name" % name], channel)
-                                p.title = self.cfg["%s.title" % name]
-                                p.type = self.cfg["%s.type" % name]
-                                self.parameters.append(p)
+                                if paramid:
+                                    p = Parameter(paramid, self.cfg["%s.name" % name], channel)
+                                    p.title = self.cfg["%s.title" % name]
+                                    p.type = self.cfg["%s.type" % name]
+                                    self.parameters.append(p)
                             except:
                                 self.log.exception("Looking up %s %s" % (channel, self.cfg["%s.name" % name]))
 
