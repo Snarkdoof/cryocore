@@ -217,7 +217,7 @@ class DashBoard:
                     idx += 1
 
                 # Logs
-                if self._last_log_redraw < self.logs[-1][0]:
+                if len(self.logs) > 0 and self._last_log_redraw < self.logs[-1][0]:
                     self._last_log_redraw = self.logs[-1][0]
                     self._fill(self.logWindow, self.log_color)
                     for log in self.logs:
