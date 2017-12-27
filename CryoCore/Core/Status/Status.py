@@ -403,7 +403,8 @@ class StatusHolder(threading.Thread):
         @raise AssertionError: from L{get_or_create_status_element<get_or_create_status_element>}.
         @raise Exception: from L{get_or_create_status_element<get_or_create_status_element>}.
         """
-        self.get_or_create_status_element(key).set_value(value)
+        from CryoCore.Core.API import cc_default_expire_time
+        self.get_or_create_status_element(key, expire_time=cc_default_expire_time).set_value(value)
 
     def __getitem__(self, key):
         """
