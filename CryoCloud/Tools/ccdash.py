@@ -115,6 +115,7 @@ class DashBoard:
         self.statusdb = StatusDbReader()
         self.logs = []
         self.logdb = LogReader.LogDbReader()
+        self._last_log_redraw = 0
 
     def _fill(self, win, color, offset=0, height=None):
         _height, width = win.getmaxyx()
@@ -211,21 +212,25 @@ class DashBoard:
                         (worker, workerinfo[worker]["state"],
                          float(workerinfo[worker]["progress"]),
                          time.ctime(float(workerinfo[worker]["ts"])))
-                    self.workerWindow.addstr(idx, 4, infostr, curses.color_pair(self.worker_color))
+                    infostr = infostr[:self.width - 2]
+                    self.workerWindow.addstr(idx, 2, infostr, curses.color_pair(self.worker_color))
                     idx += 1
 
                 # Logs
-                self._fill(self.logWindow, self.log_color)
-                for log in self.logs:
-                    msg = "%s [%7s][%10s](%25s)[%4s] %s " % \
-                          (time.ctime(log[1]),
-                           API.log_level[log[3]],
-                           log[4], log[5], log[6], log[7])
-                    if idx == self._max_logs:
-                        self.log.warning("Tried to post to many logs %d > %d" % (len(self.logs), self._max_logs))
-                        break  # Not enough room...
-                    self.logWindow.addstr(idx, 2, msg, curses.color_pair(self.log_color))
-                    idx += 1
+                if self._last_log_redraw < self.logs[-1][0]:
+                    self._last_log_redraw = self.logs[-1][0]
+                    self._fill(self.logWindow, self.log_color)
+                    for log in self.logs:
+                        msg = "%s [%7s](%25s) %s " % \
+                              (time.ctime(log[1]),
+                               API.log_level[log[3]],
+                               log[5], log[7])
+                        msg = msg[:self.width - 2]
+                        if idx == self._max_logs:
+                            self.log.warning("Tried to post to many logs %d > %d" % (len(self.logs), self._max_logs))
+                            break  # Not enough room...
+                        self.logWindow.addstr(idx, 2, msg, curses.color_pair(self.log_color))
+                        idx += 1
 
             self.resourceWindow.refresh()
             self.workerWindow.refresh()
