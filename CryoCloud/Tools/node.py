@@ -101,7 +101,7 @@ class Worker(multiprocessing.Process):
             if self._module == "test":
                 self._module = None
             else:
-                self.log.debug("Loading module %s" % self._module)
+                self.log.debug("Loading module %s (%s)" % (self._module, path))
                 self._module = load(self._module, path)
                 print("Loading of", self._module, "successful")
         except Exception as e:
