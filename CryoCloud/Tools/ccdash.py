@@ -12,10 +12,11 @@ import time
 import curses
 import re
 import threading
+import logging
 
 from CryoCore import API
 from CryoCore.Core.Status.StatusDbReader import StatusDbReader
-from CryoCore.Core import PrettyPrint
+from CryoCore.Core import PrettyPrint, LogReader
 import locale
 
 locale.setlocale(locale.LC_ALL, '')
@@ -91,31 +92,35 @@ class DashBoard:
 
         self.height, self.width = self.screen.getmaxyx()
 
-        def fill(win, color, offset=0, height=None):
-            _height, width = win.getmaxyx()
-            if not height:
-                height = _height
-            for i in range(offset, height):
-                win.hline(i, 0, " ", width, curses.color_pair(color))
-            win.refresh()
-
         self.screen.hline(0, 0, "*", self.width, curses.color_pair(4))
         self.centerText(self.screen, 0, " CryoCloud Dashboard ", curses.color_pair(4), 3)
         self.resourceWindow = curses.newwin(3, self.width, 1, 0)
         # fill(self.resourceWindow, self.resource_color)
-        fill(self.screen, self.resource_color, offset=1, height=2)
+        self._fill(self.screen, self.resource_color, offset=1, height=2)
         # self.resourceWindow.hline(0, 0, " ", self.width, curses.color_pair(self.resource_color))
         # self.resourceWindow.hline(1, 0, " ", self.width, curses.color_pair(self.resource_color))
 
         # self.screen.hline(self.height - 1, 0, "-", self.width, curses.color_pair(4))
         self.workerWindow = curses.newwin(20, self.width, 4, 0)
         self.worker_color = 3
-        fill(self.workerWindow, self.worker_color)
+        self._fill(self.workerWindow, self.worker_color)
 
-        self.logWindow = curses.newwin(10, self.width, 4, 0)
+        self.logWindow = curses.newwin(10, self.width, 24, 0)
         self.log_color = 2
+        self._fill(self.logWindow, self.log_color)
 
         self.statusdb = StatusDbReader()
+        self.logs = []
+        self._max_logs = 10
+        self.logdb = LogReader.LogDbReader()
+
+    def _fill(self, win, color, offset=0, height=None):
+        _height, width = win.getmaxyx()
+        if not height:
+            height = _height
+        for i in range(offset, height):
+            win.hline(i, 0, " ", width, curses.color_pair(color))
+        win.refresh()
 
     def centerText(self, screen, line, text, color, pad=0):
         width = screen.getmaxyx()[1]
@@ -209,6 +214,19 @@ class DashBoard:
                 idx += 1
 
             self.workerWindow.refresh()
+
+            # Logs
+            self._fill(self.logWindow, self.log_color)
+            idx = 0
+            for log in self.logs:
+                msg = "%s [%7s][%10s](%25s)[%4s] %s " % \
+                      (time.ctime(log[1]),
+                       API.log_level[log[3]],
+                       log[4], log[5], log[6], log[7])
+                self.logWindow.addstr(idx, 2, msg, curses.color_pair(self.log_color))
+                idx += 1
+            self.logWindow.refresh()
+
         except:
             self.log.exception("Refresh failed")
 
@@ -228,10 +246,22 @@ class DashBoard:
     def _refresher(self):
         last_run = 0
         since = 0
+        sincelogs = 0
         self._dbgidx = self._dbgmin  # Line to start debug statements
+
+        # We might want different log messages here - only errors etc?
+        def filter(log):
+            if log[3] < logging.INFO:
+                return False
+            if log[5].find("Worker") > -1:
+                return True
+            if log[5].endswith("HeadNode"):
+                return True
+            return False
 
         while not API.api_stop_event.isSet():
             try:
+                # Refresh status
                 data = self.statusdb.get_updates([param.paramid for param in self.parameters], since=since)
                 since = data["maxid"]
 
@@ -239,6 +269,17 @@ class DashBoard:
                     if param.paramid in data["params"]:
                         param.ts = data["params"][param.paramid]["ts"]
                         param.value = data["params"][param.paramid]["val"]
+
+                # Refresh logs
+                data = self.logdb.get_updates(since=sincelogs, filter=filter)
+                sincelogs = data["maxid"]
+                if len(data["logs"]) > 0:
+                    if len(data["logs"]) > self._max_logs:
+                        self.logs = data["logs"][len(data["logs"] - self._max_logs):]
+                    else:
+                        self.logs = self.logs[:-(self._max_logs - len(data["logs"]))]
+                        self.logs.extend(data["logs"])
+
                 # for parameter in self.parameters:
                 #    parameter.ts, parameter.value = self.statusdb.get_last_status_value_by_id(parameter.paramid)
                 while not API.api_stop_event.isSet():
