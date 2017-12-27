@@ -32,6 +32,8 @@ class LogDbReader(InternalDB.mysql):
         else:
             SQL = SQL[:-3] + ")"
 
+        SQL += "ORDER BY id"
+
         cursor = self._execute(SQL, args)
         for id, ts, msecs, level, module, logger, line, function, message in cursor.fetchall():
             log = (id, ts, msecs, level, module, logger, line, function, message)
