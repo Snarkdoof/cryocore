@@ -103,13 +103,13 @@ class Worker(multiprocessing.Process):
             else:
                 self.log.debug("Loading module %s (%s)" % (self._module, path))
                 self._module = load(self._module, path)
-                print("Loading of", self._module, "successful")
+                self.log.debug("Loading of %s successful", job["module"])
         except Exception as e:
             self._is_ready = False
             print("Import error:", e)
             self.status["state"] = "Import error"
             self.status["state"].set_expire_time(3 * 86400)
-            self.log.exception("Failed to get module")
+            self.log.exception("Failed to get module %s" % job["module"])
             raise e
         try:
             self.log.info("%s allocated to job %s of %s (%s)" % (self._worker_type, job["id"], job["runname"], job["module"]))
