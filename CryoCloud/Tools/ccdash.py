@@ -224,7 +224,7 @@ class DashBoard:
                         msg = "%s [%7s](%25s) %s " % \
                               (time.ctime(log[1]),
                                API.log_level[log[3]],
-                               log[5], log[7])
+                               log[5], log[8])
                         msg = msg[:self.width - 2]
                         if idx == self._max_logs:
                             self.log.warning("Tried to post to many logs %d > %d" % (len(self.logs), self._max_logs))
