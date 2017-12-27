@@ -107,7 +107,7 @@ class DashBoard:
         self.worker_color = 3
         self._fill(self.workerWindow, self.worker_color)
 
-        self._max_logs = self.height - 4 - height
+        self._max_logs = self.height - 4 - height - 1
         self.logWindow = curses.newwin(self._max_logs, self.width, 4 + height, 0)
         self.log_color = 2
         self._fill(self.logWindow, self.log_color)
@@ -224,12 +224,17 @@ class DashBoard:
                         msg = "%s [%7s](%25s) %s " % \
                               (time.ctime(log[1]),
                                API.log_level[log[3]],
-                               log[5], log[8])
-                        msg = msg[:self.width - 2]
-                        if idx == self._max_logs:
+                               log[5], log[8].replace("\n", " "))
+                        if len(msg) > self.width - 3:
+                            msg = msg[:self.width - 4] + ".."
+                        if idx > self._max_logs:
                             self.log.warning("Tried to post to many logs %d > %d" % (len(self.logs), self._max_logs))
                             break  # Not enough room...
-                        self.logWindow.addstr(idx, 2, msg, curses.color_pair(self.log_color))
+                        try:
+                            self.logWindow.addstr(idx, 1, msg, curses.color_pair(self.log_color))
+                        except:
+                            self.log.exception("Adding log statement on position %d of %d" % (idx, self._max_logs))
+                            break
                         idx += 1
 
             self.resourceWindow.refresh()
@@ -260,6 +265,7 @@ class DashBoard:
 
         # We might want different log messages here - only errors etc?
         def filter(log):
+            return True
             if log[3] < logging.INFO:
                 return False
             if log[5].find("Worker") > -1:
@@ -284,10 +290,10 @@ class DashBoard:
                             param.value = data["params"][param.paramid]["val"]
 
                     if len(logs["logs"]) > 0:
-                        if len(logs["logs"]) > self._max_logs:
-                            self.logs = logs["logs"][len(logs["logs"]) - self._max_logs:]
+                        if len(logs["logs"]) >= self._max_logs:
+                            self.logs = logs["logs"][- self._max_logs:]
                         else:
-                            self.logs = self.logs[:-(self._max_logs - len(logs["logs"]))]
+                            self.logs = self.logs[-(self._max_logs - len(logs["logs"])):]
                             self.logs.extend(logs["logs"])
 
                 # for parameter in self.parameters:
