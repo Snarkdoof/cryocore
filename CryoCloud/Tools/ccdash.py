@@ -101,17 +101,18 @@ class DashBoard:
         # self.resourceWindow.hline(1, 0, " ", self.width, curses.color_pair(self.resource_color))
 
         # self.screen.hline(self.height - 1, 0, "-", self.width, curses.color_pair(4))
-        self.workerWindow = curses.newwin(20, self.width, 4, 0)
+        height = int((self.height - 4)/2)
+        self.workerWindow = curses.newwin(height, self.width, 4, 0)
         self.worker_color = 3
         self._fill(self.workerWindow, self.worker_color)
 
-        self.logWindow = curses.newwin(10, self.width, 24, 0)
+        self._max_logs = self.height - 4 - height
+        self.logWindow = curses.newwin(self._max_logs, self.width, 4 + height, 0)
         self.log_color = 2
         self._fill(self.logWindow, self.log_color)
 
         self.statusdb = StatusDbReader()
         self.logs = []
-        self._max_logs = 10
         self.logdb = LogReader.LogDbReader()
 
     def _fill(self, win, color, offset=0, height=None):
