@@ -53,8 +53,8 @@ def load(modulename, path=None):
         except Exception as e:
             print("imp load failed", e)
             modules[modulename] = imp.import_module(modulename)
-
-    imp.reload(modules[modulename])
+    else:
+        imp.reload(modules[modulename])
     return modules[modulename]
 
 
