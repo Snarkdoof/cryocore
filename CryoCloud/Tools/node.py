@@ -46,6 +46,8 @@ def load(modulename, path=None):
 
     if modulename not in modules:
         try:
+            if path.__class__ != list:
+                path = [path]
             info = imp.find_module(modulename, path)
             modules[modulename] = imp.load_module(modulename, info[0], info[1], info[2])
         except Exception as e:
