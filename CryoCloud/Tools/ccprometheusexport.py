@@ -24,7 +24,6 @@ class PrometheusExport():
         self.cfg = API.get_config("Prometheus")
 
         self.cfg.set_default("enabled", True)
-        self.cfg.require(["export"])
         if set_defaults:
             defaults = {"NC": {"channel": "NodeController.*", "name": "cpu.*"},
                         "disk": {"name": "disk_available"},
@@ -34,6 +33,7 @@ class PrometheusExport():
                 for thing in defaults[key]:
                     self.cfg.set_default("export.%s.%s" % (key, thing), defaults[key][thing])
 
+        self.cfg.require(["export"])
         self.subscribe()
 
     def subscribe(self):
