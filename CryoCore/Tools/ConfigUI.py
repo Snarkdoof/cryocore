@@ -509,6 +509,9 @@ class ConsoleUI:
         s.setPrompt(s.promptStack[-1][0], s.promptStack[-1][1])
 
 if __name__ == "__main__":
+    API.__is_direct = True
+    API.auto_init = False
+
     parser = ArgumentParser(description="Tree view of CryoCore configuration")
     parser.add_argument("--fullkeys", action="store_true", default=False, help="Use full keys")
     parser.add_argument("-v", "--version", dest="version", default=None, help="Version to operate on")

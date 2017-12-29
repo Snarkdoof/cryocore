@@ -90,6 +90,8 @@ class ConfigParameter:
         """
         parents is a sorted list of parent ID's for the full path
         """
+        if len(parents) == 0:
+            raise Exception("Need parents")
         self.id = id
         self.name = name
         self.parents = parents
@@ -355,7 +357,7 @@ class Configuration(threading.Thread):
     It is thread-safe.
     """
 
-    def __init__(self, version=None, root="", stop_event=None, db_cfg=None, is_direct=False):
+    def __init__(self, version=None, root="", stop_event=None, db_cfg=None, is_direct=False, auto_init=True):
         """
         DO NOT USE this, use CryoCore.API.get_config instead
         """
@@ -379,12 +381,14 @@ class Configuration(threading.Thread):
         self.db_conn = None
 
         self._load_lock = threading.RLock()
-        self.lock = threading.Lock()
+        self._lock = threading.Lock()
         self.callbackCondition = threading.Condition()
         self._notify_counter = 0
         self._runQueue = queue.Queue()
+        self._condition = threading.Condition()
+        self.cursor = None
 
-        # self._id_cache = {}
+        self._id_cache = {}
         self.cache = {}
         self._version_cache = {}
         self._update_callbacks = {}
@@ -407,7 +411,8 @@ class Configuration(threading.Thread):
         if not is_direct:
             self.start()
 
-        self._prepare_tables()
+        if auto_init:
+            self._prepare_tables()
 
         if not version or version == "default":
             try:
@@ -420,11 +425,32 @@ class Configuration(threading.Thread):
 
         self.set_version(version, create=True)
         self.version = version  # self._get_version_id(version)
+        self.version_id = self._get_version_id(self.version)
+
+        self._init_id_cache()
+
+    def _init_id_cache(self):
+        SQL = "SELECT id, parent, name FROM config WHERE version=%s ORDER BY id"
+        cursor = self._execute(SQL, [self.version_id])
+
+        if self.version_id not in self._id_cache:
+            self._id_cache[self.version_id] = {}
+
+        paths = {}
+        for id, parent, name in cursor.fetchall():
+            if parent in paths:
+                name = paths[parent][0] + "." + name
+                id_path = paths[parent][1][:]
+            else:
+                id_path = [0]
+            id_path.append(id)
+            paths[id] = name, id_path
+            self._id_cache[self.version_id][name] = id_path
 
     def _cache_update(self, version, full_path, cp, expires):
         if version not in self.cache:
             self.cache[version] = {}
-        self.cache[version][full_path] = cp, time.time() + 0.2
+        self.cache[version][full_path] = cp, time.time() + 0.3
         # print("+", version, full_path, self.cache[version].keys())
 
     def _cache_remove(self, version, full_path):
@@ -450,6 +476,18 @@ class Configuration(threading.Thread):
                     self._cache_remove(version, full_path)
                 else:
                     # self.log.debug("** HIT %s %s %s" % (version, full_path, self.cache[version].keys()))
+                    return val
+        # self.log.debug("** FAIL %s %s %s" % (version, full_path, self.cache[version].keys()))
+        raise CacheException("Missing parameter")
+
+    def _cache_lookup_by_id(self, version, id):
+        if version in self.cache:
+            # Must SEARCH the cache, no index for now - still faster than n sql statements
+            now = time.time()
+            for val, expires in self.cache[version].values():
+                if expires < now:
+                    continue  # Don't clean the entire cache
+                if val.id == id:
                     return val
         # self.log.debug("** FAIL %s %s %s" % (version, full_path, self.cache[version].keys()))
         raise CacheException("Missing parameter")
@@ -493,6 +531,7 @@ class Configuration(threading.Thread):
                 time.sleep(5)
 
     def _close_connection(self):
+        self.cursor = None
         try:
             self.db_conn.close()
         except:
@@ -502,7 +541,9 @@ class Configuration(threading.Thread):
 
     def _get_cursor(self, temporary_connection=False):
         try:
-            return self.get_connection().cursor()
+            if self.cursor is None:
+                self.cursor = self.get_connection().cursor()
+            return self.cursor
         except mysql.OperationalError:
             self._close_connection()
             return self._get_cursor(temporary_connection)
@@ -511,11 +552,10 @@ class Configuration(threading.Thread):
                  temporary_connection=False,
                  ignore_error=False):
 
-        if not self.running:
-            raise Exception("Can't execute more commands - have stopped")
-
         if self._is_direct:
             try:
+                if DEBUG:
+                    self.log.debug("%s (%s)" % (SQL, parameters))
                 cursor = self._get_cursor()
                 cursor.execute(SQL, parameters)
                 return cursor
@@ -525,11 +565,16 @@ class Configuration(threading.Thread):
                 raise e
         event = threading.Event()
         retval = {}
-        self._runQueue.put([event, retval, SQL, parameters, ignore_error])
-        t = time.time()
+
+        with self._lock:
+            if not self.running:
+                raise Exception("Can't execute more commands - have stopped")
+            self._runQueue.put([event, retval, SQL, parameters, ignore_error])
+
+        # t = time.time()
         event.wait(60.0)
-        if time.time() - t > 2.0:
-            print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
+        # if time.time() - t > 2.0:
+        #    print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
         if not event.isSet():
             raise Exception("Failed to execute Config query in time (%s)" % SQL)
 
@@ -543,25 +588,30 @@ class Configuration(threading.Thread):
         should_stop = False
         # print(os.getpid(), threading.currentThread().ident, "RUNNING")
         while not should_stop:  # We wait for a bit after stop has been called to ensure that we finish all tasks
-            if self.stop_event.isSet() and self._runQueue.empty():
-                if not stop_time:
-                    stop_time = time.time()
-                elif time.time() - stop_time > 2:
-                    # print("Async config DB stopped")
-                    self.running = False
-                    should_stop = True
+            with self._lock:
+                if self.stop_event.isSet() and self._runQueue.empty():
+                    if not stop_time:
+                        # print("Async config should stop soon")
+                        stop_time = time.time()
+                    elif time.time() - stop_time > 2:
+                        # print("Async config DB stopped")
+                        self.running = False
+                        should_stop = True
             try:
-                task = self._runQueue.get(block=True, timeout=0.5)
+                task = self._runQueue.get(block=False, timeout=0.5)
                 event, retval, SQL, parameters, ignore_error = task
                 self._async_execute(event, retval, SQL, parameters, ignore_error)
             except queue.Empty:
-                # print(os.getpid(), "AsyncConfig IDLE")
+                # print(os.getpid(), "AsyncConfig IDLE", self.stop_event.isSet(), self._runQueue.empty(), should_stop)
+                time.sleep(0.1)  # Condition variables, blocking queue, doesn't work
                 continue
             except:
                 print("Unhandled exception")
                 import traceback
                 import sys
                 traceback.print_exc(file=sys.stdout)
+        if DEBUG:
+            print("*** Async config STOPPED *** ")
 
     def _async_execute(self, event, retval, SQL, parameters=[],
                        temporary_connection=False,
@@ -797,48 +847,51 @@ class Configuration(threading.Thread):
             SQL = "INSERT INTO config (version, parent, name, value, datatype) SELECT %s,parent,name,value,datatype FROM config WHERE version=%s"
             self._execute(SQL, [new_id, old_id])
 
-    def _get_parent_ids(self, full_path, version, create=True, overwrite=False):
-        if DEBUG:  # Makes it loop???
-            self.log.debug("_get_parent_ids(%s)" % full_path)
+    def _get_id_path(self, full_path, version, create=True, overwrite=False, is_leaf=True):
+        if DEBUG:
+            self.log.debug("_get_id_path(%s)" % full_path)
+
+        if version not in self._id_cache:
+            self._id_cache[version] = {}
+
+        if full_path in self._id_cache[version]:
+            return self._id_cache[version][full_path][:]
 
         # First find the parent
         if full_path.count(".") == 0:
             if DEBUG:
                 self.log.debug("%s is in the root" % full_path)
-            return [0]
+            id_path = [0]
+            parent_path = "root"
+            name = full_path
+        else:
+            parent_name, name = full_path.rsplit(".", 2)[-2:]
+            parent_path = full_path.rsplit(".", 1)[0]
 
-        parent_name, name = full_path.rsplit(".", 2)[-2:]
-        parent_path = full_path.rsplit(".", 1)[0]
+            id_path = self._get_id_path(parent_path, version, create,
+                                        overwrite=overwrite, is_leaf=False)
 
-        parent_ids = self._get_parent_ids(parent_path, version, create,
-                                          overwrite=overwrite)
-        parent_id = self._get_parent_id(parent_ids[-1], parent_name, version)
-        if parent_id is None:
-            if not create:
-                raise NoSuchParameterException("Parent of %s does not exist, full path: '%s'" % (name, full_path))
+        if id_path is None:
+            return None
 
-            if 0 and DEBUG:
-                self.log.debug("No such parent - creating: %s, %s, %s" %
-                               (parent_ids[-1], parent_name, version))
+        my_id = self._get_param_id(id_path[-1], name, version)
+        if my_id:
+            id_path.append(my_id)
+        else:
+            if create and not is_leaf:
+                self.add(full_path, datatype="folder", version_id=version)
+            else:
+                raise NoSuchParameterException(full_path)
+            my_id = self._get_param_id(id_path[-1], name, version)
+            if my_id:
+                id_path.append(my_id)
 
-            self.add(parent_name, datatype="folder",
-                     parent_id=parent_ids[-1],
-                     overwrite=overwrite)
-            parent_id = self._get_parent_id(parent_ids[-1], parent_name, version)
-            if parent_id is None:
-                raise NoSuchParameterException("Failed to create %s" % name)
+        self._id_cache[version][full_path] = id_path[:]
+        return id_path
 
-        parent_ids.append(parent_id)
-        return parent_ids
-
-    def _get_parent_id(self, parent_id, name, version):
+    def _get_param_id(self, parent_id, name, version):
         if name == "root":
             return 0
-
-        # if version not in self._id_cache:
-        #     self._id_cache[version] = {}
-        # if (parent_id, name) in self._id_cache[version]:
-        #    return self._id_cache[version][(parent_id, name)]
 
         SQL = "SELECT id FROM config WHERE parent=%s AND name=%s "
         params = [parent_id, name]
@@ -850,8 +903,8 @@ class Configuration(threading.Thread):
         row = cursor.fetchone()
         if not row:
             if DEBUG:
-                self.log.debug("Tried to get parent id for %s but failed" %
-                               parent_id)
+                self.log.debug("Tried to get param id for %s but failed" %
+                               name)
             return None
 
         # self._id_cache[version][(parent_id, name)] = row[0]
@@ -881,10 +934,12 @@ class Configuration(threading.Thread):
         """
         Search the config for a partial match
         """
+        # if not version:
+        #    version = self._cfg["version"]
+        #else:
+        #    version = self._get_version_id(version)
         if not version:
-            version = self._cfg["version"]
-        else:
-            version = self._get_version_id(version)
+            version = self.version_id
 
         found = []
         with self._load_lock:
@@ -902,11 +957,22 @@ class Configuration(threading.Thread):
             if param_id == 0:
                 return [(0, "")]
 
+            # Do we already have this?
+            if 1:
+                try:
+                    item = self._cache_lookup_by_id(self.version_id, param_id)
+                    if item:
+                        return item
+                    else:
+                        raise NoSuchParameterException("Parameter number: %s (cache hit)" % param_id)
+                except CacheException:
+                    pass  # cache miss
+
             SQL = "SELECT id, parent, name, value, datatype, version, last_modified, comment FROM config WHERE id=%s"
             cursor = self._execute(SQL, [param_id])
             row = cursor.fetchone()
             if not row:
-                raise NoSuchParameterException("parameter number: %s" % param_id)
+                raise NoSuchParameterException("Parameter number: %s" % param_id)
 
             id, parent_id, name, value, datatype, version, timestamp, comment = row
             parent_ids = []
@@ -942,7 +1008,6 @@ class Configuration(threading.Thread):
         if version_id is specified, no text-to-id lookup is performed.
         if absolute_path is True, no root is added to the _full_path
         """
-
         if root is None:
             root = self.root
 
@@ -971,6 +1036,7 @@ class Configuration(threading.Thread):
             except CacheException:
                 # Cache miss
                 pass
+
             if DEBUG:
                 self.log.debug("get(%s, %s, %s, %s)" % (_full_path, full_path, version, root))
 
@@ -983,17 +1049,26 @@ class Configuration(threading.Thread):
                 (path, name) = full_path.rsplit(".", 1)
 
             if full_path != "root" and full_path != "":  # special case for root node
-                if len(parent_ids) == 0:
-                    parent_ids = self._get_parent_ids(full_path, version, create=False)
+
+                # Do we have this in the cache?
+                id_path = self._get_id_path(full_path, version)
+                # print("ID path of", full_path, "is", id_path)
+                if not id_path:
+                    parent_path = full_path[:full_path.rfind(".")]
+                    print("Didn't find it, look for the parent", parent_path)
+                    parent_ids = self._get_id_path(parent_path, version)
+                    if parent_ids is None:
+                        print("No parent either, if add, add", parent_path)
+                        if add:
+                            self.add(parent_path, datatype="folder", version=version)
+
+                        print("Added")
+                    raise NoSuchParameterException("No such parameter: " + full_path)
 
                 # Find the thingy
                 SQL = "SELECT id, value, datatype, version, " + \
-                    "last_modified, comment FROM config WHERE " +\
-                    "name=%s AND parent=%s"
-                params = [name, parent_ids[-1]]
-                if version != _ANY_VERSION:
-                    SQL += " AND version=%s"
-                    params.append(version)
+                    "last_modified, comment FROM config WHERE id=%s"
+                params = [id_path[-1]]
                 cursor = self._execute(SQL, params)
                 row = cursor.fetchone()
                 if not row:
@@ -1001,7 +1076,7 @@ class Configuration(threading.Thread):
                     # self._cache_update(version, full_path, None, time.time() + 0.2)
                     raise NoSuchParameterException("No such parameter: " + full_path)
                 id, value, datatype, version, timestamp, comment = row
-                cp = ConfigParameter(self, id, name, parent_ids, path,
+                cp = ConfigParameter(self, id, name, id_path[:-1], path,
                                      datatype, value,
                                      version, timestamp, config=self,
                                      comment=comment)
@@ -1073,13 +1148,15 @@ class Configuration(threading.Thread):
             for row in c.fetchall():
                 ret.extend(_rec_delete(row[0], version, path + "." + row[1]))
             self._cache_remove(version, path)
+            if path in self._id_cache[version]:
+                del self._id_cache[version][path]
             ret.append((id, path))
             return ret
 
         with self._load_lock:
+
             param = self.get(full_path, version)
             params = _rec_delete(param._get_id(), param.get_version(), full_path)
-
             SQL = "DELETE FROM config WHERE "
             args = []
             for i, p in params:
@@ -1088,6 +1165,8 @@ class Configuration(threading.Thread):
             SQL = SQL[:-4]
             self._execute(SQL, args)
             self._execute(SQL.replace("FROM config", "FROM config_callback"), args)
+            if full_path in self._id_cache:
+                del self._id_cache[full_path]
 
     def add(self, _full_path, value=None, datatype=None, comment=None,
             version=None,
@@ -1099,15 +1178,14 @@ class Configuration(threading.Thread):
         """
         if root is None:
             root = self.root
+
         with self._load_lock:
             full_path = self._get_full_path(_full_path, root)
             assert full_path
-
             if full_path.count(".") == 0:
                 name = full_path
             else:
                 (path, name) = full_path.rsplit(".", 1)
-
             if version_id:
                 version = version_id
             elif not version:
@@ -1118,8 +1196,12 @@ class Configuration(threading.Thread):
             if DEBUG:
                 self.log.debug("Add (" + str(full_path) + ", " + str(value) + ", " + str(datatype) + ", " + str(version) + ")")
             if parent_id is None:
-                parent_ids = self._get_parent_ids(full_path, version)
-                parent_id = parent_ids[-1]
+                if full_path.find(".") > -1:
+                    parent_path = full_path.rsplit(".", 1)[0]
+                    id_path = self._get_id_path(parent_path, version, create=False, is_leaf=False)
+                    parent_id = id_path[-1]
+                else:  # root
+                    parent_id = 0
 
             # Determine datatype
             if not datatype:
@@ -1414,19 +1496,14 @@ class Configuration(threading.Thread):
         # Check if the root of this thing exists
         if root is None:
             root = self.root
-        try:
-            self.keys(root=root)
-        except Exception:
-            try:
-                self.add(root + name, value, datatype=datatype)
-            except Exception:     # Debug really
-                self.log.exception("Addition of %s failed" % name)
 
-            # Missing root!
-            # raise Exception("Missing root %s for '%s'"%(self.root, name))
+        # Do a quick cache lookup - if we have the path, we don't need to create it
+        if root + name in self._id_cache[self.version_id]:
+            return
+
         try:
             self.get(name, root=root, absolute_path=True)
-        except Exception:
+        except Exception:  # Could this be a NoSuchParameterException?
             # self.log.exception("Get %s failed, adding" % name)
             self.add(name, value, datatype=datatype, root=root)
 
@@ -1494,6 +1571,7 @@ class Configuration(threading.Thread):
                         last_notified = self._notify_counter
             except:
                 self.log.exception("INTERNAL: Callback handler crashed badly")
+                time.sleep(1)
 
     def del_callback(self, callback_id):
         """

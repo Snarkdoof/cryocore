@@ -123,7 +123,7 @@ class ConfigTest(unittest.TestCase):
         self.cfg.get("TestBasic.Float").set_value(2.3)
         self.cfg.get("TestBasic.One").set_comment("A comment")
 
-        time.sleep(0.2)  # Allow a bit of time for async callbacks
+        time.sleep(1.0)  # Allow a bit of time for async callbacks
 
         # Verify
         self.assertTrue("UnitTest.TestBasic.One" in last_val, "Missing change on One")

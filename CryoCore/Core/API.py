@@ -62,6 +62,8 @@ reporter_collection = None
 
 __is_direct = False
 
+api_auto_init = True
+
 
 def get_status_reporter():
     global glblStatusReporter
@@ -242,7 +244,11 @@ def get_config(name=None, version="default", db_cfg=None):
 
     global main_configs
     if version not in main_configs:
-        main_configs[version] = Configuration(stop_event=api_stop_event, version=version, db_cfg=db_cfg, is_direct=__is_direct)
+        main_configs[version] = Configuration(stop_event=api_stop_event,
+                                              version=version,
+                                              db_cfg=db_cfg,
+                                              is_direct=__is_direct,
+                                              auto_init=api_auto_init)
 
     global CONFIGS
     if not (name, version) in CONFIGS:

@@ -231,6 +231,8 @@ def usage():
     """ % (sys.argv[0])
 
 if __name__ == "__main__":
+    API.auto_init = False
+    API.__is_direct = True
 
     try:
         tail = None

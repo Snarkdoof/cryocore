@@ -109,7 +109,9 @@ class DbHandler(logging.Handler, InternalDB.mysql):
                            "CREATE INDEX log_module ON log(module)",
                            "CREATE INDEX log_logger ON log(logger)"]
 
-        self._init_sqls(init_statements)
+        if API.api_auto_init:
+            self._init_sqls(init_statements)
+
         # Thread entry point
         while not self.stop_event.is_set():
             self.get_log_entry_and_insert(True, 1.0)

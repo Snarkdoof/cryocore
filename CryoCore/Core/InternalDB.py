@@ -77,10 +77,12 @@ class AsyncDB(threading.Thread):
         self.db_conn = None
         self.stop_event = API.api_stop_event
         self.running = True
+        self.cursor = None
         if config:
             self._mycfg = config
         else:
             self._mycfg = {}
+        self._lock = threading.Lock()
 
         self.log = logging.getLogger("DB")
         if len(self.log.handlers) < 1:
@@ -97,11 +99,13 @@ class AsyncDB(threading.Thread):
         pass
 
     def execute(self, task):
-        if not self.running:
-            raise Exception("Can't execute queries when not running")
+        with self._lock:  # We protect the shutdown phase - if we queue something as we shut down, we'll hang
+            if not self.running:
+                raise Exception("Can't execute queries when not running")
+            # if API.api_stop_event.isSet():
+            #    print("*** WARNING: executing statements after API shutdown", task)
 
-        # self.log.debug("Adding %s" % task)
-        self.runQueue.put(task)
+            self.runQueue.put(task)
 
     def run(self):
         self.running = True
@@ -112,29 +116,33 @@ class AsyncDB(threading.Thread):
         # print(os.getpid(), threading.currentThread().ident, "o")
         while not should_stop:  # We wait for a bit after stop has been called to ensure that we finish all tasks
             try:
-                if self.stop_event.isSet() and self.runQueue.empty():
-                    if not stop_time:
-                        # print("Should stop soon")
-                        stop_time = time.time()
-                        time.sleep(0.05)
-                    elif time.time() - stop_time > 2:
-                        # print("ASYNCDB should stop")
-                        should_stop = True
-                        self.running = False
+                with self._lock:
+                    if self.stop_event.isSet() and self.runQueue.empty():
+                        if not stop_time:
+                            stop_time = time.time()
+                        elif time.time() - stop_time > 2:
+                            should_stop = True
+                            self.running = False
 
-                task = self.runQueue.get(block=True, timeout=0.5)
+                if self.runQueue.empty():
+                    time.sleep(0.1)
+                    continue
+
+                task = self.runQueue.get(block=False, timeout=0.5)
                 event, retval, SQL, parameters, ignore_error = task
                 self._async_execute(event, retval, SQL, parameters, ignore_error)
             except queue.Empty:
-                # print(os.getpid(), "AsyncDB IDLE")
+                time.sleep(0.1)  # Condition variables, blocking queue - it all doesn't work...
+                print(os.getpid(), "AsyncDB IDLE")
                 continue
             except:
                 print("Unhandled exception")
                 import traceback
                 import sys
                 traceback.print_exc(file=sys.stdout)
+                time.sleep(0.25)
 
-        if DEBUG:
+        if 0 or DEBUG:
             self.log.debug("ASYNC_DB STOPPED")
 
     def _get_conn_cfg(self):
@@ -171,6 +179,7 @@ class AsyncDB(threading.Thread):
                 time.sleep(5)
 
     def _close_connection(self):
+        self.cursor = None
         try:
             self.db_conn.close()
         except:
@@ -180,7 +189,9 @@ class AsyncDB(threading.Thread):
 
     def _get_cursor(self, temporary_connection=False):
         try:
-            return self.get_connection().cursor()
+            if self.cursor is None:
+                self.cursor = self.get_connection().cursor()
+            return self.cursor
         except MySQLdb.OperationalError:
             self._close_connection()
             return self._get_cursor(temporary_connection)
@@ -211,6 +222,7 @@ class AsyncDB(threading.Thread):
                     traceback.print_exc()
                     time.sleep(1)
                     continue
+
                 if len(parameters) > 0:
                     cursor.execute(SQL, tuple(parameters))
                 else:
@@ -356,7 +368,8 @@ class mysql:
                  ignore_error=False):
         if self._is_direct:
             try:
-                self.cursor = AsyncDB.getDB(None)._get_cursor()
+                if not self.cursor:
+                    self.cursor = AsyncDB.getDB(None)._get_cursor()
                 self.cursor.execute(SQL, parameters)
                 return self.cursor
             except Exception as e:

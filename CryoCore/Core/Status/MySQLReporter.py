@@ -22,7 +22,7 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
         self.name = name
         self.cfg = API.get_config(name)
         self.log = API.get_log(name)
-        InternalDB.mysql.__init__(self, "MySQLStatusReporter", self.cfg, num_connections=1)
+        InternalDB.mysql.__init__(self, "MySQLStatusReporter", self.cfg)
         self.cfg.set_default("isconfigured", False)
         self._channels = {}
         self._parameters = {}
@@ -30,7 +30,9 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
         self.start()
 
     def run(self):
-        self._prepare_db()
+        if API.api_auto_init:
+            self._prepare_db()
+
         # Thread entry point
         stop_time = None
         last_clean = 0
