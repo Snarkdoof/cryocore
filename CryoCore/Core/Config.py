@@ -356,7 +356,7 @@ class NamedConfiguration:
                 if val.__class__ == str:
                     return val.encode("utf-8")
             return val
-        except:
+        except Exception:
             return None
 
 
@@ -436,7 +436,8 @@ class Configuration(threading.Thread):
         self.version = version  # self._get_version_id(version)
         self.version_id = self._get_version_id(self.version)
 
-        self._init_id_cache()
+        # self._init_id_cache()
+        self._fill_full_cache()
 
     def _init_id_cache(self):
         SQL = "SELECT id, parent, name FROM config WHERE version=%s ORDER BY id"
@@ -456,10 +457,44 @@ class Configuration(threading.Thread):
             paths[id] = name, id_path
             self._id_cache[self.version_id][name] = id_path
 
-    def _cache_update(self, version, full_path, cp, expires):
+    def _fill_full_cache(self):
+        SQL = "SELECT id, parent, name, value, datatype, version, " + \
+            "last_modified, comment FROM config WHERE " +\
+            "version=%s ORDER BY id"
+        cursor = self._execute(SQL, [self.version_id])
+
+        if self.version_id not in self._id_cache:
+            self._id_cache[self.version_id] = {}
+
+        for id, parentid, name, value, datatype, version, last_modified, comment in cursor.fetchall():
+
+            if parentid == 0:
+                parent_ids = [0]
+                path = None
+                full_path = name
+                parent = None
+            else:
+                parent = self._cache_lookup_by_id(self.version_id, parentid)
+                path = parent.get_full_path()
+                full_path = path + "." + name
+                parent_ids = self._id_cache[self.version_id][path]
+
+            param = ConfigParameter(self, id, name, parent_ids, path,
+                                    datatype, value, version, last_modified,
+                                    config=self, comment=comment)
+
+            self._cache_update(self.version_id, full_path, param, 1)
+            id_path = parent_ids[:] + [id]
+            self._id_cache[self.version_id][full_path] = id_path
+
+            # If I have a parent, add me to it as child
+            if parent:
+                parent.children.append(param)
+
+    def _cache_update(self, version, full_path, cp, expires=0.3):
         if version not in self.cache:
             self.cache[version] = {}
-        self.cache[version][full_path] = cp, time.time() + 0.3
+        self.cache[version][full_path] = cp, time.time() + expires
         # print("+", version, full_path, self.cache[version].keys())
 
     def _cache_remove(self, version, full_path):
@@ -487,19 +522,21 @@ class Configuration(threading.Thread):
                     # self.log.debug("** HIT %s %s %s" % (version, full_path, self.cache[version].keys()))
                     return val
         # self.log.debug("** FAIL %s %s %s" % (version, full_path, self.cache[version].keys()))
-        raise CacheException("Missing parameter")
+        raise CacheException("Missing parameter %s (version %s)" % (full_path, version))
 
     def _cache_lookup_by_id(self, version, id):
         if version in self.cache:
             # Must SEARCH the cache, no index for now - still faster than n sql statements
             now = time.time()
             for val, expires in self.cache[version].values():
+                if not val:
+                    break
                 if expires < now:
                     continue  # Don't clean the entire cache
                 if val.id == id:
                     return val
         # self.log.debug("** FAIL %s %s %s" % (version, full_path, self.cache[version].keys()))
-        raise CacheException("Missing parameter")
+        raise CacheException("Missing parameter %d (version %s)" % (id, version))
 
     def __del__(self):
         try:
@@ -892,6 +929,8 @@ class Configuration(threading.Thread):
             if create and not is_leaf:
                 self.add(full_path, datatype="folder", version_id=version)
             else:
+                # No parameter - add it to the full cache
+                self._cache_update(self.version_id, full_path, None)
                 raise NoSuchParameterException(full_path)
             my_id = self._get_param_id(id_path[-1], name, version)
             if my_id:
@@ -914,6 +953,7 @@ class Configuration(threading.Thread):
         row = cursor.fetchone()
         if not row:
             if DEBUG:
+                # Cache this too
                 self.log.debug("Tried to get param id for %s but failed" %
                                name)
             return None
@@ -1085,6 +1125,7 @@ class Configuration(threading.Thread):
                 if not row:
                     # Caching failures fails - a create is typically called
                     # self._cache_update(version, full_path, None, time.time() + 0.2)
+                    print("No parameter", full_path)
                     raise NoSuchParameterException("No such parameter: " + full_path)
                 id, value, datatype, version, timestamp, comment = row
                 cp = ConfigParameter(self, id, name, id_path[:-1], path,
@@ -1099,7 +1140,7 @@ class Configuration(threading.Thread):
                 timestamp, cp.children = self._get_children(cp)
                 cp._set_last_modified(timestamp)
 
-            self._cache_update(version, full_path, cp, time.time() + 0.2)
+            self._cache_update(version, full_path, cp)
             return cp
 
     def _get_children(self, config_parameter):
@@ -1499,7 +1540,7 @@ class Configuration(threading.Thread):
                 if val.__class__ == str:
                     return val.encode("utf-8")
             return val
-        except:
+        except Exception as e:
             return None
 
     def set_default(self, name, value, datatype=None, root=None):

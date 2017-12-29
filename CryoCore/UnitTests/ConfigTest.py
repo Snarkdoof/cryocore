@@ -148,6 +148,7 @@ class ConfigTest(unittest.TestCase):
             pass
 
     def testLookupSpeed(self):
+        Config.DEBUG = True
         start_time = time.time()
         self.cfg["TestBasic.One"]
         first_lookup = time.time() - start_time
@@ -157,6 +158,8 @@ class ConfigTest(unittest.TestCase):
         for i in range(0, 100):
             self.cfg["TestBasic.One"]
         second_lookup = time.time() - start_time
+        print(first_lookup, "vs", second_lookup)
+        Config.DEBUG = False
         self.assertTrue(first_lookup > (second_lookup / 10))
 
 if __name__ == "__main__":
