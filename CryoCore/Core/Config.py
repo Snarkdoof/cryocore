@@ -239,6 +239,15 @@ class FakeCursor():
         else:
             self.resultset = result["return"]
         self.index = 0
+        if "rowcount" in result:
+            self.rowcount = result["rowcount"]
+        else:
+            self.rowcount = None
+
+        if "lastrowid" in result:
+            self.lastrowid = result["lastrowid"]
+        else:
+            self.lastrowid = None
 
     def fetchone(self):
         if self.index >= len(self.resultset):
@@ -642,6 +651,8 @@ class Configuration(threading.Thread):
                 retval["status"] = "ok"
                 retval["return"] = []
                 res = []
+                retval["rowcount"] = cursor.rowcount
+                retval["lastrowid"] = cursor.lastrowid
                 if cursor.rowcount != 0:
                     try:
                         for row in cursor.fetchall():
@@ -936,7 +947,7 @@ class Configuration(threading.Thread):
         """
         # if not version:
         #    version = self._cfg["version"]
-        #else:
+        # else:
         #    version = self._get_version_id(version)
         if not version:
             version = self.version_id
@@ -1084,7 +1095,7 @@ class Configuration(threading.Thread):
                 cp = ConfigParameter(self, 0, "root", [0], "",
                                      "folder", "", version, None, config=self)
 
-            if 1 or cp.datatype == "folder":
+            if 0 or cp.datatype == "folder":
                 timestamp, cp.children = self._get_children(cp)
                 cp._set_last_modified(timestamp)
 
@@ -1192,13 +1203,13 @@ class Configuration(threading.Thread):
                 version = self._cfg["version"]
             else:
                 version = self._get_version_id(version)
-
             if DEBUG:
                 self.log.debug("Add (" + str(full_path) + ", " + str(value) + ", " + str(datatype) + ", " + str(version) + ")")
             if parent_id is None:
                 if full_path.find(".") > -1:
                     parent_path = full_path.rsplit(".", 1)[0]
                     id_path = self._get_id_path(parent_path, version, create=False, is_leaf=False)
+                    self._id_cache[version][parent_path] = id_path
                     parent_id = id_path[-1]
                 else:  # root
                     parent_id = 0
@@ -1217,7 +1228,9 @@ class Configuration(threading.Thread):
             if DEBUG:
                 self.log.debug(SQL + " (" + str((version, parent_id, name, value, datatype)) + ")")
 
-            self._execute(SQL, (version, parent_id, name, value, datatype, comment))
+            c = self._execute(SQL, (version, parent_id, name, value, datatype, comment))
+            id_path.append(c.lastrowid)
+            self._id_cache[version][full_path] = id_path
 
     def _clean_up(self):
         """

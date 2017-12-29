@@ -147,6 +147,18 @@ class ConfigTest(unittest.TestCase):
         except:
             pass
 
+    def testLookupSpeed(self):
+        start_time = time.time()
+        self.cfg["TestBasic.One"]
+        first_lookup = time.time() - start_time
+
+        # The next ones should be much, much quicker
+        start_time = time.time()
+        for i in range(0, 100):
+            self.cfg["TestBasic.One"]
+        second_lookup = time.time() - start_time
+        self.assertTrue(first_lookup > (second_lookup / 10))
+
 if __name__ == "__main__":
 
     print("Testing Configuration module")
