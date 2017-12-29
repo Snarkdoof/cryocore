@@ -293,13 +293,16 @@ class NamedConfiguration:
         self.last_updated = self._parent.last_updated
         self.del_callback = self._parent.del_callback
 
+    def clear_all(self):
+        self._parent.clear_all(self.version)
+
     def get_leaves(self, root=None, recursive=True):
         leaves = []
         if root is None:
             root = self.root[:-1]
         else:
             root = self.root + root
-
+        print("getleaves for root", root)
         for leave in self._parent.get_leaves(root, True, recursive=recursive):
             leaves.append(leave.replace(root + ".", ""))
 
@@ -318,6 +321,7 @@ class NamedConfiguration:
             absolute_path=False, add=True):
         if not version:
             version = self.version
+
         return self._parent.get(_full_path, version, version_id,
                                 absolute_path, add, self.root)
 
@@ -371,7 +375,6 @@ class Configuration(threading.Thread):
         DO NOT USE this, use CryoCore.API.get_config instead
         """
         threading.Thread.__init__(self)
-
         self.stop_event = stop_event
         self._internal_stop_event = threading.Event()
         self._db_cfg = db_cfg
@@ -459,14 +462,12 @@ class Configuration(threading.Thread):
 
     def _fill_full_cache(self):
         SQL = "SELECT id, parent, name, value, datatype, version, " + \
-            "last_modified, comment FROM config WHERE " +\
-            "version=%s ORDER BY id"
+            "last_modified, comment FROM config WHERE version=%s ORDER BY id"
         cursor = self._execute(SQL, [self.version_id])
 
-        if self.version_id not in self._id_cache:
-            self._id_cache[self.version_id] = {}
-
         for id, parentid, name, value, datatype, version, last_modified, comment in cursor.fetchall():
+            if version not in self._id_cache:
+                self._id_cache[version] = {}
 
             if parentid == 0:
                 parent_ids = [0]
@@ -474,24 +475,24 @@ class Configuration(threading.Thread):
                 full_path = name
                 parent = None
             else:
-                parent = self._cache_lookup_by_id(self.version_id, parentid)
+                parent = self._cache_lookup_by_id(version, parentid)
                 path = parent.get_full_path()
                 full_path = path + "." + name
-                parent_ids = self._id_cache[self.version_id][path]
+                parent_ids = self._id_cache[version][path]
 
             param = ConfigParameter(self, id, name, parent_ids, path,
                                     datatype, value, version, last_modified,
                                     config=self, comment=comment)
 
-            self._cache_update(self.version_id, full_path, param, 1)
+            self._cache_update(version, full_path, param)
             id_path = parent_ids[:] + [id]
-            self._id_cache[self.version_id][full_path] = id_path
+            self._id_cache[version][full_path] = id_path
 
             # If I have a parent, add me to it as child
             if parent:
                 parent.children.append(param)
 
-    def _cache_update(self, version, full_path, cp, expires=0.3):
+    def _cache_update(self, version, full_path, cp, expires=0.5):
         if version not in self.cache:
             self.cache[version] = {}
         self.cache[version][full_path] = cp, time.time() + expires
@@ -511,13 +512,17 @@ class Configuration(threading.Thread):
         #            del self._id_cache[version][(parent_id, name)]
         #            break
 
+    def _cache_refresh(self, version, full_path):
+        # Todo: Check if there is any new config - if there is, remove this?
+        return self._cache_remove(version, full_path)
+
     def _cache_lookup(self, version, full_path):
         if version in self.cache:
             if full_path in self.cache[version]:
                 val, expires = self.cache[version][full_path]
                 if expires < time.time():
                     # self.log.debug("** EXPIRE %s %s %s" % (version, full_path, self.cache[version].keys()))
-                    self._cache_remove(version, full_path)
+                    self._cache_refresh(version, full_path)
                 else:
                     # self.log.debug("** HIT %s %s %s" % (version, full_path, self.cache[version].keys()))
                     return val
@@ -808,6 +813,19 @@ class Configuration(threading.Thread):
         """
         self._execute("DELETE FROM config_callback")
 
+    def clear_all(self, version):
+        """
+        Removes ALL config parameters - use with extreme caution - also, might not work
+        """
+        version_id = self._get_version_id(version)
+        SQL = "DELETE FROM config WHERE version=%s"
+        self._execute(SQL, [version_id])
+
+        if version_id in self._id_cache:
+            self._id_cache[version_id] = {}
+        if version_id in self.cache:
+            self.cache[version_id] = {}
+
     def add_version(self, version):
         """
         Add an empty configuration
@@ -838,8 +856,17 @@ class Configuration(threading.Thread):
         Delete a version (and all config parameters of it!)
         """
         with self._load_lock:
+            c = self._execute("SELECT id FROM config_version WHERE name=%s")
+            version_id = c.fetchone()
+
+            if not version_id:
+                return
+
             SQL = "DELETE FROM config_version WHERE name=%s"
             self._execute(SQL, [version])
+
+            SQL = "DELETE FROM config WHERE version=%s"
+            self._execute(SQL, [version_id])
 
     def set_version(self, version, create=False):
         """
@@ -1126,6 +1153,8 @@ class Configuration(threading.Thread):
                     # Caching failures fails - a create is typically called
                     # self._cache_update(version, full_path, None, time.time() + 0.2)
                     print("No parameter", full_path)
+                    # No parameter - add it to the full cache
+                    self._cache_update(self.version_id, full_path, None)
                     raise NoSuchParameterException("No such parameter: " + full_path)
                 id, value, datatype, version, timestamp, comment = row
                 cp = ConfigParameter(self, id, name, id_path[:-1], path,
@@ -1250,7 +1279,7 @@ class Configuration(threading.Thread):
                 if full_path.find(".") > -1:
                     parent_path = full_path.rsplit(".", 1)[0]
                     id_path = self._get_id_path(parent_path, version, create=False, is_leaf=False)
-                    self._id_cache[version][parent_path] = id_path
+                    self._id_cache[version][parent_path] = id_path[:]
                     parent_id = id_path[-1]
                 else:  # root
                     parent_id = 0
@@ -1272,6 +1301,21 @@ class Configuration(threading.Thread):
             c = self._execute(SQL, (version, parent_id, name, value, datatype, comment))
             id_path.append(c.lastrowid)
             self._id_cache[version][full_path] = id_path
+            if full_path.find(".") > -1:  # Add myself to the cache
+                parent_path = full_path.rsplit(".", 1)[0]
+                parent_ids = id_path[:][:-1]
+                cp = ConfigParameter(self, c.lastrowid, name, parent_ids, parent_path,
+                                     datatype, value,
+                                     version, None, config=self,
+                                     comment=comment)
+                try:
+                    parent = self.get(parent_path)
+                    if parent:
+                        parent.children.append(cp)
+                    self._cache_update(self.version_id, full_path, cp, 1.0)
+                except:
+                    # This is bad stuff
+                    pass
 
     def _clean_up(self):
         """
@@ -1348,21 +1392,27 @@ class Configuration(threading.Thread):
         """
         Recursively return all leaves of the given path
         """
+        raise Exception("Deprecated, use children instead")
+        print("***Get leave", _full_path, absolute_path)
         with self._load_lock:
             param = self.get(_full_path, absolute_path=absolute_path)
             leaves = []
             folders = []
-            for child in self._get_children(param)[1]:  # .children:
+            for child in param.children:
+                print("Checking", child.name, len(param.children))
                 if child.datatype == "folder":
                     folders.append(child)
-                else:
+                elif len(child.children) == 0:
+                    print("Found leave", child.get_full_path())
                     leaves.append(child.get_full_path()[len(self.root):])
 
             for folder in folders:
+                print("Checking", folder.name, len(param.children))
                 if recursive:
                     leaves += self.get_leaves(folder.get_full_path(),
                                               absolute_path=True)
-                else:
+                elif len(folder.children) == 0:
+                    print("No children either in folder", folder.get_full_path())
                     leaves.append(folder.get_full_path()[len(self.root):])
 
             return leaves
@@ -1373,10 +1423,10 @@ class Configuration(threading.Thread):
         """
         with self._load_lock:
             param = self.get(path, root=root)
-            leaves = []
+            children = []
             for child in param.children:
-                leaves.append(child.name)
-            return leaves
+                children.append(child.name)
+            return children
 
     def get_version_info_by_id(self, version_id):
         """
