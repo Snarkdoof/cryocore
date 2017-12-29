@@ -233,7 +233,7 @@ class SystemControl(threading.Thread):
                 self.log.error("Refusing to kill my own process group")
         except:
             self.log.exception("Exception terminating process!")
-        
+
         if self.status["process.%s.status" % name] == "stopped":
             return
 
@@ -419,6 +419,7 @@ class SystemControl(threading.Thread):
                 print("Stopping due to parent exit")
                 self.stop()
 
+
 def check_and_set_pid_running(path):
     # Check if we have a running system control already
     if (os.path.exists(path)):
@@ -443,7 +444,7 @@ if __name__ == "__main__":
     to the separate process groups, killing the SystemControl process (which happens
     when calling service uav stop, for instance), no longer brings down the child processes
     started by SystemControl.
-    
+
     The work around consists of the first SystemControl process starting a new child
     process in a separate process group, and waiting for that to exit. The child periodically
     checks that the parent is still alive, and if not, exits. Currently, the parent-exists check
@@ -478,4 +479,3 @@ if __name__ == "__main__":
         print("Starting child: %s" % (" ".join(sys.argv)))
         ret = subprocess.call(["python"]+sys.argv+["--child"], preexec_fn=os.setsid)
         print("Parent exiting; child sys control returned with status %d" % (ret))
-

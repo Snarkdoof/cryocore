@@ -44,15 +44,17 @@ def load(modulename, path=None):
         import inspect
         modulename = inspect.getmodulename(modulename)
 
-    if modulename not in modules:
+    if 1 or modulename not in modules:  # Seems for python3, reload is deprecated. Check for python 2
         try:
+            if path and path.__class__ != list:
+                path = [path]
             info = imp.find_module(modulename, path)
             modules[modulename] = imp.load_module(modulename, info[0], info[1], info[2])
         except Exception as e:
             print("imp load failed", e)
             modules[modulename] = imp.import_module(modulename)
-
-    imp.reload(modules[modulename])
+    else:
+        imp.reload(modules[modulename])
     return modules[modulename]
 
 
@@ -99,15 +101,15 @@ class Worker(multiprocessing.Process):
             if self._module == "test":
                 self._module = None
             else:
-                self.log.debug("Loading module %s" % self._module)
+                self.log.debug("Loading module %s (%s)" % (self._module, path))
                 self._module = load(self._module, path)
-                print("Loading of", self._module, "successful")
+                self.log.debug("Loading of %s successful", job["module"])
         except Exception as e:
             self._is_ready = False
             print("Import error:", e)
             self.status["state"] = "Import error"
             self.status["state"].set_expire_time(3 * 86400)
-            self.log.exception("Failed to get module")
+            self.log.exception("Failed to get module %s" % job["module"])
             raise e
         try:
             self.log.info("%s allocated to job %s of %s (%s)" % (self._worker_type, job["id"], job["runname"], job["module"]))

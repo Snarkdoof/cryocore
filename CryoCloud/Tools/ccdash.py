@@ -12,15 +12,16 @@ import time
 import curses
 import re
 import threading
+import logging
 
 from CryoCore import API
 from CryoCore.Core.Status.StatusDbReader import StatusDbReader
-from CryoCore.Core import PrettyPrint
+from CryoCore.Core import PrettyPrint, LogReader
 import locale
 
 locale.setlocale(locale.LC_ALL, '')
 code = locale.getpreferredencoding()
-DEBUG = True
+DEBUG = False
 
 
 class Parameter():
@@ -39,6 +40,7 @@ class DashBoard:
         curses.start_color()
         curses.noecho()
         curses.cbreak()
+        self._lock = threading.Lock()
         self.screen.keypad(True)
         self._dbgmin = 24
         self._dbgidx = self._dbgmin  # Line to start debug statements
@@ -91,31 +93,37 @@ class DashBoard:
 
         self.height, self.width = self.screen.getmaxyx()
 
-        def fill(win, color, offset=0, height=None):
-            _height, width = win.getmaxyx()
-            if not height:
-                height = _height
-            for i in range(offset, height):
-                win.hline(i, 0, " ", width, curses.color_pair(color))
-            win.refresh()
-
         self.screen.hline(0, 0, "*", self.width, curses.color_pair(4))
         self.centerText(self.screen, 0, " CryoCloud Dashboard ", curses.color_pair(4), 3)
         self.resourceWindow = curses.newwin(3, self.width, 1, 0)
         # fill(self.resourceWindow, self.resource_color)
-        fill(self.screen, self.resource_color, offset=1, height=2)
+        self._fill(self.screen, self.resource_color, offset=1, height=2)
         # self.resourceWindow.hline(0, 0, " ", self.width, curses.color_pair(self.resource_color))
         # self.resourceWindow.hline(1, 0, " ", self.width, curses.color_pair(self.resource_color))
 
         # self.screen.hline(self.height - 1, 0, "-", self.width, curses.color_pair(4))
-        self.workerWindow = curses.newwin(20, self.width, 4, 0)
+        height = int((self.height - 4)/2)
+        self.workerWindow = curses.newwin(height, self.width, 4, 0)
         self.worker_color = 3
-        fill(self.workerWindow, self.worker_color)
+        self._fill(self.workerWindow, self.worker_color)
 
-        self.logWindow = curses.newwin(10, self.width, 4, 0)
+        self._max_logs = self.height - 4 - height - 1
+        self.logWindow = curses.newwin(self._max_logs, self.width, 4 + height, 0)
         self.log_color = 2
+        self._fill(self.logWindow, self.log_color)
 
         self.statusdb = StatusDbReader()
+        self.logs = []
+        self.logdb = LogReader.LogDbReader()
+        self._last_log_redraw = 0
+
+    def _fill(self, win, color, offset=0, height=None):
+        _height, width = win.getmaxyx()
+        if not height:
+            height = _height
+        for i in range(offset, height):
+            win.hline(i, 0, " ", width, curses.color_pair(color))
+        win.refresh()
 
     def centerText(self, screen, line, text, color, pad=0):
         width = screen.getmaxyx()[1]
@@ -152,63 +160,87 @@ class DashBoard:
             resources = []
             tasks = []
             workers = []
+            with self._lock:
+                for parameter in self.parameters:
+                    # parameter.ts, parameter.value = self.statusdb.get_last_status_value_by_id(parameter.paramid)
+                    if parameter.value is None:
+                        continue
+                    # self.log.debug("Parameter %s|%s has value %s" % (parameter.channel, parameter.name, parameter.value))
+                    if parameter.type.lower() == "resource":
+                        resources.append(parameter)
+                    elif parameter.type.lower() == "tasks":
+                        tasks.append(parameter)
+                    elif parameter.type.lower() == "worker":
+                        workers.append(parameter)
 
-            for parameter in self.parameters:
-                # parameter.ts, parameter.value = self.statusdb.get_last_status_value_by_id(parameter.paramid)
-                if parameter.value is None:
-                    continue
-                # self.log.debug("Parameter %s|%s has value %s" % (parameter.channel, parameter.name, parameter.value))
-                if parameter.type.lower() == "resource":
-                    resources.append(parameter)
-                elif parameter.type.lower() == "tasks":
-                    tasks.append(parameter)
-                elif parameter.type.lower() == "worker":
-                    workers.append(parameter)
+                # Draw resource view
+                cpu = "CPU used: "
+                cpu_usage = {}
+                memory = "Available Memory: "
+                for parameter in resources:
+                    ttl = parameter.channel.split(".")[-1]
+                    # self.log.debug("%s %s %s" % (parameter.name, parameter.title, parameter.value))
+                    if parameter.name.startswith("cpu"):
+                        if ttl not in cpu_usage:
+                            cpu_usage[ttl] = [0, 0]
+                        cpu_usage[ttl][1] += float(parameter.value)
+                        if parameter.name != "cpu.idle":
+                            cpu_usage[ttl][0] += float(parameter.value)
 
-            # Draw resource view
-            cpu = "CPU used: "
-            cpu_usage = {}
-            memory = "Available Memory: "
-            for parameter in resources:
-                ttl = parameter.channel.split(".")[-1]
-                # self.log.debug("%s %s %s" % (parameter.name, parameter.title, parameter.value))
-                if parameter.name.startswith("cpu"):
-                    if ttl not in cpu_usage:
-                        cpu_usage[ttl] = [0, 0]
-                    cpu_usage[ttl][1] += float(parameter.value)
-                    if parameter.name != "cpu.idle":
-                        cpu_usage[ttl][0] += float(parameter.value)
+                    elif parameter.name.startswith("memory"):
+                        memory += "%s: %s   " % (ttl, PrettyPrint.bytes_to_string(parameter.value))
+                for ttl in cpu_usage:
+                    cpu += "%s: %s/%s%%   " % (ttl, int(cpu_usage[ttl][0]), int(cpu_usage[ttl][1]))
+                self.resourceWindow.addstr(0, 0, cpu, curses.color_pair(self.resource_color))
+                self.resourceWindow.addstr(1, 0, memory, curses.color_pair(self.resource_color))
 
-                elif parameter.name.startswith("memory"):
-                    memory += "%s: %s   " % (ttl, PrettyPrint.bytes_to_string(parameter.value))
-            for ttl in cpu_usage:
-                cpu += "%s: %s/%s%%   " % (ttl, int(cpu_usage[ttl][0]), int(cpu_usage[ttl][1]))
-            self.resourceWindow.addstr(0, 0, cpu, curses.color_pair(self.resource_color))
-            self.resourceWindow.addstr(1, 0, memory, curses.color_pair(self.resource_color))
+                workerinfo = {}
+                for worker in workers:
+                    if worker.channel not in workerinfo:
+                        workerinfo[worker.channel] = {"ts": 0, "state": "unknown", "progress": 0.0}
+                    workerinfo[worker.channel][worker.name] = worker.value
+                    workerinfo[worker.channel]["ts"] = max(worker.ts, workerinfo[worker.channel]["ts"])
+
+                idx = 0
+                workers = list(workerinfo)
+                workers.sort()
+                for worker in workers:
+                    # if workerinfo[worker]["state"] == "unknown":
+                        # self._debug("Worker %s has unknown state (%s)" % (worker, time.ctime(workerinfo[worker]["ts"])))
+                        # continue
+                    infostr = "% 23s: % 10s [% 4d%%] (%s)" %\
+                        (worker, workerinfo[worker]["state"],
+                         float(workerinfo[worker]["progress"]),
+                         time.ctime(float(workerinfo[worker]["ts"])))
+                    infostr = infostr[:self.width - 2]
+                    self.workerWindow.addstr(idx, 2, infostr, curses.color_pair(self.worker_color))
+                    idx += 1
+
+                # Logs
+                if len(self.logs) > 0 and self._last_log_redraw < self.logs[-1][0]:
+                    self._last_log_redraw = self.logs[-1][0]
+                    self._fill(self.logWindow, self.log_color)
+                    for log in self.logs:
+                        msg = "%s [%7s](%25s) %s " % \
+                              (time.ctime(log[1]),
+                               API.log_level[log[3]],
+                               log[5], log[8].replace("\n", " "))
+                        if len(msg) > self.width - 3:
+                            msg = msg[:self.width - 4] + ".."
+                        if idx > self._max_logs:
+                            self.log.warning("Tried to post to many logs %d > %d" % (len(self.logs), self._max_logs))
+                            break  # Not enough room...
+                        try:
+                            self.logWindow.addstr(idx, 1, msg, curses.color_pair(self.log_color))
+                        except:
+                            self.log.exception("Adding log statement on position %d of %d" % (idx, self._max_logs))
+                            break
+                        idx += 1
+
             self.resourceWindow.refresh()
-
-            workerinfo = {}
-            for worker in workers:
-                if worker.channel not in workerinfo:
-                    workerinfo[worker.channel] = {"ts": 0, "state": "unknown", "progress": 0.0}
-                workerinfo[worker.channel][worker.name] = worker.value
-                workerinfo[worker.channel]["ts"] = max(worker.ts, workerinfo[worker.channel]["ts"])
-
-            idx = 0
-            workers = list(workerinfo)
-            workers.sort()
-            for worker in workers:
-                # if workerinfo[worker]["state"] == "unknown":
-                    # self._debug("Worker %s has unknown state (%s)" % (worker, time.ctime(workerinfo[worker]["ts"])))
-                    # continue
-                infostr = "% 23s: % 10s [% 4d%%] (%s)" %\
-                    (worker, workerinfo[worker]["state"],
-                     float(workerinfo[worker]["progress"]),
-                     time.ctime(float(workerinfo[worker]["ts"])))
-                self.workerWindow.addstr(idx, 4, infostr, curses.color_pair(self.worker_color))
-                idx += 1
-
             self.workerWindow.refresh()
+            self.logWindow.refresh()
+
         except:
             self.log.exception("Refresh failed")
 
@@ -228,17 +260,41 @@ class DashBoard:
     def _refresher(self):
         last_run = 0
         since = 0
+        sincelogs = 0
         self._dbgidx = self._dbgmin  # Line to start debug statements
+
+        # We might want different log messages here - only errors etc?
+        def filter(log):
+            if log[3] < logging.INFO:
+                return False
+            if log[5].find("Worker") > -1:
+                return True
+            if log[5].endswith("HeadNode"):
+                return True
+            return False
 
         while not API.api_stop_event.isSet():
             try:
+                # Refresh status
                 data = self.statusdb.get_updates([param.paramid for param in self.parameters], since=since)
                 since = data["maxid"]
+                # Refresh logs
+                logs = self.logdb.get_updates(since=sincelogs, filter=filter)
+                sincelogs = logs["maxid"]
 
-                for param in self.parameters:
-                    if param.paramid in data["params"]:
-                        param.ts = data["params"][param.paramid]["ts"]
-                        param.value = data["params"][param.paramid]["val"]
+                with self._lock:
+                    for param in self.parameters:
+                        if param.paramid in data["params"]:
+                            param.ts = data["params"][param.paramid]["ts"]
+                            param.value = data["params"][param.paramid]["val"]
+
+                    if len(logs["logs"]) > 0:
+                        if len(logs["logs"]) >= self._max_logs:
+                            self.logs = logs["logs"][- self._max_logs:]
+                        else:
+                            self.logs = self.logs[-(self._max_logs - len(logs["logs"])):]
+                            self.logs.extend(logs["logs"])
+
                 # for parameter in self.parameters:
                 #    parameter.ts, parameter.value = self.statusdb.get_last_status_value_by_id(parameter.paramid)
                 while not API.api_stop_event.isSet():
@@ -265,23 +321,22 @@ class DashBoard:
             try:
                 # channels = self.statusdb.get_channels()
                 parameters = self.statusdb.get_channels_and_parameters()
-
                 # Resolve the status parameters and logs we're interested in
                 for param in self.cfg.get("params").children:
                     name = param.get_full_path().replace("Dashboard.", "")
                     for channel in parameters:
+                        paramid = None
                         if re.match(self.cfg["%s.source" % name], channel):
                             try:
                                 pname = self.cfg["%s.name" % name]
                                 if pname in parameters[channel]:
                                     paramid = parameters[channel][pname]
-                                # self.log.debug("Resoving %s.%s" % (channel, self.cfg["%s.name" % name]))
 
-                                # paramid = self.statusdb.get_param_id(channel, self.cfg["%s.name" % name])
-                                p = Parameter(paramid, self.cfg["%s.name" % name], channel)
-                                p.title = self.cfg["%s.title" % name]
-                                p.type = self.cfg["%s.type" % name]
-                                self.parameters.append(p)
+                                if paramid:
+                                    p = Parameter(paramid, self.cfg["%s.name" % name], channel)
+                                    p.title = self.cfg["%s.title" % name]
+                                    p.type = self.cfg["%s.type" % name]
+                                    self.parameters.append(p)
                             except:
                                 self.log.exception("Looking up %s %s" % (channel, self.cfg["%s.name" % name]))
 
