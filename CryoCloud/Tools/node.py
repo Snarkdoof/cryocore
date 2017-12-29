@@ -62,6 +62,7 @@ class Worker(multiprocessing.Process):
 
     def __init__(self, workernum, stopevent, type=jobdb.TYPE_NORMAL):
         super(Worker, self).__init__()
+        API.api_auto_init = False  # Faster startup
 
         # self._stop_event = stopevent
         self._stop_event = threading.Event()
@@ -138,13 +139,18 @@ class Worker(multiprocessing.Process):
         self.log = API.get_log(self.wid)
         self.status = API.get_status(self.wid)
         self._jobdb = jobdb.JobDB(None, None)
-
+        self.status["state"].set_expire_time(600)
+        last_reported = 0  # We force periodic updates of state as we might be idle for a long time
         while not self._stop_event.is_set():
             try:
                 jobs = self._jobdb.allocate_job(self.workernum, node=socket.gethostname(), max_jobs=1, type=self._type)
                 if len(jobs) == 0:
                     time.sleep(1)
-                    self.status["state"] = "Idle"
+                    if last_reported + 300 > time.time():
+                        self.status["state"] = "Idle"
+                    else:
+                        self.status["state"].set_value("Idle", force_update=True)
+                        last_reported = time.time()
                     continue
                 job = jobs[0]
                 self.status["current_job"] = job["id"]
