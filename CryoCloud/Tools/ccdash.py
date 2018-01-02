@@ -102,7 +102,7 @@ class DashBoard:
         # self.resourceWindow.hline(1, 0, " ", self.width, curses.color_pair(self.resource_color))
 
         # self.screen.hline(self.height - 1, 0, "-", self.width, curses.color_pair(4))
-        height = int((self.height - 4)/2)
+        height = int((self.height - 4) / 2)
         self.workerWindow = curses.newwin(height, self.width, 4, 0)
         self.worker_color = 3
         self._fill(self.workerWindow, self.worker_color)
@@ -321,11 +321,15 @@ class DashBoard:
             try:
                 # channels = self.statusdb.get_channels()
                 parameters = self.statusdb.get_channels_and_parameters()
+                # self.log.debug("Checking %s" % str(parameters))
                 # Resolve the status parameters and logs we're interested in
+                # self.log.debug("Number of children: %d" % len(self.cfg.get("params").children))
                 for param in self.cfg.get("params").children:
                     name = param.get_full_path().replace("Dashboard.", "")
+                    # self.log.debug("Checking %s, %d" % (name, len(parameters)))
                     for channel in parameters:
                         paramid = None
+                        # self.log.debug("Checking channel %s" % channel)
                         if re.match(self.cfg["%s.source" % name], channel):
                             try:
                                 pname = self.cfg["%s.name" % name]
@@ -333,13 +337,15 @@ class DashBoard:
                                     paramid = parameters[channel][pname]
 
                                 if paramid:
-                                    p = Parameter(paramid, self.cfg["%s.name" % name], channel)
+                                    # self.log.debug("Got param %d" % paramid)
+                                    p = Parameter(paramid, pname, channel)
                                     p.title = self.cfg["%s.title" % name]
                                     p.type = self.cfg["%s.type" % name]
                                     self.parameters.append(p)
                             except:
                                 self.log.exception("Looking up %s %s" % (channel, self.cfg["%s.name" % name]))
-
+                # self.log.debug("Subscribing to %s" % str(self.parameters))
+                print("DONE", time.time() - last_run)
                 while not API.api_stop_event.isSet():
                     time_left = last_run + 300 - last_run
                     if time_left < 0:
