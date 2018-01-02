@@ -319,17 +319,12 @@ class DashBoard:
         last_run = time.time()
         while not API.api_stop_event.isSet():
             try:
-                # channels = self.statusdb.get_channels()
                 parameters = self.statusdb.get_channels_and_parameters()
-                # self.log.debug("Checking %s" % str(parameters))
                 # Resolve the status parameters and logs we're interested in
-                # self.log.debug("Number of children: %d" % len(self.cfg.get("params").children))
                 for param in self.cfg.get("params").children:
                     name = param.get_full_path().replace("Dashboard.", "")
-                    # self.log.debug("Checking %s, %d" % (name, len(parameters)))
                     for channel in parameters:
                         paramid = None
-                        # self.log.debug("Checking channel %s" % channel)
                         if re.match(self.cfg["%s.source" % name], channel):
                             try:
                                 pname = self.cfg["%s.name" % name]
@@ -337,23 +332,18 @@ class DashBoard:
                                     paramid = parameters[channel][pname]
 
                                 if paramid:
-                                    # self.log.debug("Got param %d" % paramid)
                                     p = Parameter(paramid, pname, channel)
                                     p.title = self.cfg["%s.title" % name]
                                     p.type = self.cfg["%s.type" % name]
                                     self.parameters.append(p)
                             except:
                                 self.log.exception("Looking up %s %s" % (channel, self.cfg["%s.name" % name]))
-                # self.log.debug("Subscribing to %s" % str(self.parameters))
-                print("DONE", time.time() - last_run)
                 while not API.api_stop_event.isSet():
                     time_left = last_run + 300 - last_run
                     if time_left < 0:
                         break
                     self.redraw()
                     time.sleep(min(time_left, 1))
-                self._debug("Refreshing " + time.ctime())
-
             except:
                 self.log.exception("Exception in main loop")
 

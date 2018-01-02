@@ -492,7 +492,7 @@ class Configuration(threading.Thread):
             if parent:
                 parent.children.append(param)
 
-    def _cache_update(self, version, full_path, cp, expires=0.5):
+    def _cache_update(self, version, full_path, cp, expires=1):
         if version not in self.cache:
             self.cache[version] = {}
         self.cache[version][full_path] = cp, time.time() + expires
@@ -617,7 +617,8 @@ class Configuration(threading.Thread):
         event = threading.Event()
         retval = {}
 
-        with self._lock:
+        #with self._lock:
+        if 1:
             if not self.running:
                 raise Exception("Can't execute more commands - have stopped")
             self._runQueue.put([event, retval, SQL, parameters, ignore_error])
@@ -639,7 +640,8 @@ class Configuration(threading.Thread):
         should_stop = False
         # print(os.getpid(), threading.currentThread().ident, "RUNNING")
         while not should_stop:  # We wait for a bit after stop has been called to ensure that we finish all tasks
-            with self._lock:
+            # with self._lock:
+            if 1:
                 if self.stop_event.isSet() and self._runQueue.empty():
                     if not stop_time:
                         # print("Async config should stop soon")
@@ -1094,7 +1096,7 @@ class Configuration(threading.Thread):
                 version = version_id
             else:
                 if not version:
-                    version = self._cfg["version"]
+                    version = self.version_id  # self._cfg["version"]
                 else:
                     version = self._get_version_id(version)
 
@@ -1133,14 +1135,11 @@ class Configuration(threading.Thread):
                 # print("ID path of", full_path, "is", id_path)
                 if not id_path:
                     parent_path = full_path[:full_path.rfind(".")]
-                    print("Didn't find it, look for the parent", parent_path)
                     parent_ids = self._get_id_path(parent_path, version)
                     if parent_ids is None:
-                        print("No parent either, if add, add", parent_path)
                         if add:
                             self.add(parent_path, datatype="folder", version=version)
 
-                        print("Added")
                     raise NoSuchParameterException("No such parameter: " + full_path)
 
                 # Find the thingy
