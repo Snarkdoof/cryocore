@@ -103,14 +103,19 @@ class ConfigTest(unittest.TestCase):
         cfg = API.get_config(version="unittest")
         cfg2 = API.get_config(version="SecondTest")
 
-        if cfg2["UnitTest"]:
+        # Config.DEBUG = True
+        try:
+            cfg2.get("UnitTest")
             print("Cleaning up old crud - bad cleanup?")
             cfg2.remove("UnitTest")
+        except:
+            pass  # Wasn't supposed to be there, all good
 
         cfg2.set_default("UnitTest.TestParam", "TestValue")
         self.assertEqual(cfg2["UnitTest.TestParam2"], None, "Have a parameter I wasn't expecting")
 
         cfg2["UnitTest.TestParam2"] = "TestValue2"
+        Config.DEBUG = False
         self.assertEqual(cfg2["UnitTest.TestParam2"], "TestValue2", "Implicit create failed")
         self.assertEqual(cfg2["UnitTest.TestParam"], "TestValue", "Set default create failed")
 
@@ -185,6 +190,18 @@ class ConfigTest(unittest.TestCase):
         second_lookup = time.time() - start_time
         # print(first_lookup, "vs", second_lookup)
         self.assertTrue(first_lookup > (second_lookup / 10))
+
+    def testEmpty(self):
+        cfg = API.get_config("This.does.not.exist", version="unittest")
+        self.assertEqual(cfg.keys(), [])
+        cfg.set_default("it_does_now", True)
+
+        self.assertEqual(cfg["it_does_now"], True)
+        self.assertEqual(cfg.keys(), ["it_does_now"])
+
+        self.cfg.remove("This")
+        self.assertEqual(cfg.keys(), [])
+
 
 if __name__ == "__main__":
 
