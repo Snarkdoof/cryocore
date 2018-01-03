@@ -55,8 +55,10 @@ class SystemControl(threading.Thread):
         self._process = {}
 
         self._configured_services = []
-        for name in self.cfg.get_leaves():
-            m = re.match("process\.(\S*)\.command", name)
+        for param in self.cfg.get("process").children:
+            name = param.name
+            print("Checking:", name)
+            m = re.match("(\S*)\.command", name)
             if m:
                 self._configured_services.append(m.groups()[0])
 
@@ -451,31 +453,34 @@ if __name__ == "__main__":
     is done by sending a 0-signal to the parent process. Not perfect if it should exit
     and a new process gets the old pid, but in practice this shouldn't be very likely.)
     """
-    child_mode = False
-    if "--child" in sys.argv:
-        child_mode = True
-        sys.argv.remove("--child")
-    if len(sys.argv) > 1:
-        interval = int(sys.argv[1])
-    if child_mode:
-        check_and_set_pid_running("/var/run/uav-child.pid")
-        s = SystemControl(interval=interval)
+    try:
+        child_mode = False
+        if "--child" in sys.argv:
+            child_mode = True
+            sys.argv.remove("--child")
+        if len(sys.argv) > 1:
+            interval = int(sys.argv[1])
+        if child_mode:
+            check_and_set_pid_running("/var/run/uav-child.pid")
+            s = SystemControl(interval=interval)
 
-        signal.signal(signal.SIGINT, s.sighandler)
-        try:
-            s.run()
-        except Exception as e:
-            print(e)
-            pass
+            signal.signal(signal.SIGINT, s.sighandler)
+            try:
+                s.run()
+            except Exception as e:
+                print(e)
+                pass
 
-        print("Requesting nice shutdown of processes")
-        s.stop()
-        print("Shutting down")
+            print("Requesting nice shutdown of processes")
+            s.stop()
+            print("Shutting down")
+            API.shutdown()
+        else:
+            # Launch new instance with child flag. The new instance will notice that we
+            # exit, and exit itself as well.
+            check_and_set_pid_running("/var/run/uav.pid")
+            print("Starting child: %s" % (" ".join(sys.argv)))
+            ret = subprocess.call(["python"] + sys.argv + ["--child"], preexec_fn=os.setsid)
+            print("Parent exiting; child sys control returned with status %d" % (ret))
+    finally:
         API.shutdown()
-    else:
-        # Launch new instance with child flag. The new instance will notice that we
-        # exit, and exit itself as well.
-        check_and_set_pid_running("/var/run/uav.pid")
-        print("Starting child: %s" % (" ".join(sys.argv)))
-        ret = subprocess.call(["python"]+sys.argv+["--child"], preexec_fn=os.setsid)
-        print("Parent exiting; child sys control returned with status %d" % (ret))
