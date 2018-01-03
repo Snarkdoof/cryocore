@@ -18,7 +18,7 @@ import time
 import logging
 import logging.handlers
 
-from CryoCore.Core.Utils import logTiming
+# from CryoCore.Core.Utils import logTiming
 
 if sys.version_info.major == 3:
     import queue
@@ -286,7 +286,6 @@ class NamedConfiguration:
         self.remove = self._parent.remove
         self.add = self._parent.add
         self.set = self._parent.set
-        self.keys = self._parent.keys
         self.get_version_info_by_id = self._parent.get_version_info_by_id
         self.serialize = self._parent.serialize
         self.deserialize = self._parent.deserialize
@@ -295,6 +294,13 @@ class NamedConfiguration:
 
     def clear_all(self):
         self._parent.clear_all(self.version)
+
+    def keys(self, path=None, root=None):
+        if not root:
+            root = self.root
+        elif self.root:
+            root = self.root + "." + root
+        return self._parent.keys(path=path, root=root)
 
     def get_leaves(self, root=None, recursive=True):
         leaves = []
@@ -857,8 +863,9 @@ class Configuration(threading.Thread):
         """
         Delete a version (and all config parameters of it!)
         """
+        print("Deleting version", version)
         with self._load_lock:
-            c = self._execute("SELECT id FROM config_version WHERE name=%s")
+            c = self._execute("SELECT id FROM config_version WHERE name=%s", [version])
             version_id = c.fetchone()
 
             if not version_id:
@@ -879,6 +886,7 @@ class Configuration(threading.Thread):
             try:
                 self._cfg["version"] = self._get_version_id(version)
                 self._cfg["version_string"] = version
+                self.version_id = self._cfg["version"]
             except NoSuchVersionException as e:
                 if not create:
                     raise e
@@ -982,9 +990,11 @@ class Configuration(threading.Thread):
         row = cursor.fetchone()
         if not row:
             if DEBUG:
-                # Cache this too
-                self.log.debug("Tried to get param id for %s but failed" %
-                               name)
+                # Cache this too?
+                self.log.debug("Tried to get param id for %s (version %s) but failed" %
+                               (name, version))
+                c = self._execute("SELECT name, parent from config where version=%s", [version])
+                print(c.fetchall())
             return None
 
         # self._id_cache[version][(parent_id, name)] = row[0]
@@ -1118,7 +1128,7 @@ class Configuration(threading.Thread):
                 pass
 
             if DEBUG:
-                self.log.debug("get(%s, %s, %s, %s)" % (_full_path, full_path, version, root))
+                self.log.debug("get(%s, %s, %s, %s, %s)" % (_full_path, full_path, version, root, add))
 
             parent_ids = []
             if full_path.count(".") == 0:
@@ -1131,11 +1141,11 @@ class Configuration(threading.Thread):
             if full_path != "root" and full_path != "":  # special case for root node
 
                 # Do we have this in the cache?
-                id_path = self._get_id_path(full_path, version)
+                id_path = self._get_id_path(full_path, version, create=add)
                 # print("ID path of", full_path, "is", id_path)
                 if not id_path:
                     parent_path = full_path[:full_path.rfind(".")]
-                    parent_ids = self._get_id_path(parent_path, version)
+                    parent_ids = self._get_id_path(parent_path, version, create=add)
                     if parent_ids is None:
                         if add:
                             self.add(parent_path, datatype="folder", version=version)
@@ -1235,7 +1245,7 @@ class Configuration(threading.Thread):
 
         with self._load_lock:
 
-            param = self.get(full_path, version)
+            param = self.get(full_path, version, add=False)
             params = _rec_delete(param._get_id(), param.get_version(), full_path)
             SQL = "DELETE FROM config WHERE "
             args = []
@@ -1256,9 +1266,13 @@ class Configuration(threading.Thread):
         we'll guess.  If version is not specified, the current version
         is used.
         """
+        if not root:
+            id_path = []
+        else:
+            id_path = None
+
         if root is None:
             root = self.root
-
         with self._load_lock:
             full_path = self._get_full_path(_full_path, root)
             assert full_path
@@ -1282,6 +1296,9 @@ class Configuration(threading.Thread):
                     parent_id = id_path[-1]
                 else:  # root
                     parent_id = 0
+
+            if id_path is None:
+                raise Exception("ID path is None, full_path is", full_path, "root", root)
 
             # Determine datatype
             if not datatype:
@@ -1394,7 +1411,7 @@ class Configuration(threading.Thread):
         raise Exception("Deprecated, use children instead")
         print("***Get leave", _full_path, absolute_path)
         with self._load_lock:
-            param = self.get(_full_path, absolute_path=absolute_path)
+            param = self.get(_full_path, absolute_path=absolute_path, add=False)
             leaves = []
             folders = []
             for child in param.children:
@@ -1421,11 +1438,14 @@ class Configuration(threading.Thread):
         List the keys of this node (names of the children)
         """
         with self._load_lock:
-            param = self.get(path, root=root)
-            children = []
-            for child in param.children:
-                children.append(child.name)
-            return children
+            try:
+                param = self.get(path, root=root, add=False)
+                children = []
+                for child in param.children:
+                    children.append(child.name)
+                return children
+            except NoSuchParameterException:
+                return []
 
     def get_version_info_by_id(self, version_id):
         """
@@ -1446,7 +1466,7 @@ class Configuration(threading.Thread):
         """
         Internal, recursive function for serialization
         """
-        param = self.get(root, version_id=version_id, absolute_path=True)
+        param = self.get(root, version_id=version_id, absolute_path=True, add=False)
         children = []
         for child in param.children:
             children.append(self._serialize_recursive(child.get_full_path(),
@@ -1618,7 +1638,7 @@ class Configuration(threading.Thread):
         with self._load_lock:
             # This could be done faster, but who cares
             for param in param_list:
-                self.get(param, root=root)
+                self.get(param, root=root, add=False)
 
     def last_updated(self, version=None):
         """
