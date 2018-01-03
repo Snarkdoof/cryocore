@@ -55,22 +55,25 @@ class SystemControl(threading.Thread):
         self._process = {}
 
         self._configured_services = []
-        for param in self.cfg.get("process").children:
-            name = param.name
-            print("Checking:", name)
-            m = re.match("(\S*)\.command", name)
-            if m:
-                self._configured_services.append(m.groups()[0])
-
-        for name in self._configured_services:
-            print("process.%s.status = stopped" % name)
-            self.status["process.%s.status" % name] = "stopped"
+        self._refresh_services()
 
     def __del__(self):
         try:
             self.status["state"] = "stopped"
         except:
             pass
+
+    def _refresh_services(self):
+        for param in self.cfg.get("process").children:
+            name = param.name
+            if name not in self._configured_services:
+                self._configured_services.append(name)
+                if self.cfg["process.%s.command" % name]:
+                    self.status["process.%s.status" % name] = "stopped"
+
+            # m = re.match("(\S*)\.command", name)
+            # if m:
+            #    self._configured_services.append(m.groups()[0])
 
     def _add_process_monitor(self, pid, name):
         if name in self._monitor_processes:
@@ -192,6 +195,8 @@ class SystemControl(threading.Thread):
 
         self.log.debug(str(command))
         cwd = self.cfg["process.%s.dir" % name]
+        if not cwd:
+            cwd = self.cfg["default_cwd"]
         self._process[name] = subprocess.Popen(command, cwd=cwd, preexec_fn=os.setsid)
         self.status["process.%s.pid" % name] = self._process[name].pid
         self._add_process_monitor(self._process[name].pid, name)
@@ -262,7 +267,7 @@ class SystemControl(threading.Thread):
 
         last_run = 0
         adapter = None
-
+        last_refresh = 0
         while not self.stop_event.is_set():
 
             # First we update the uptime
@@ -318,6 +323,10 @@ class SystemControl(threading.Thread):
                         self.status["batt_ok"].set_value(batt_ok, force_update=True)
                 except:
                     self.log.exception("Reading ORDROID status")
+
+                if time.time() - last_refresh > 60:
+                    last_refresh = time.time()
+                    self._refresh_services()
 
                 # Sleep until next run
                 while time.time() - last_run < int(self.cfg["sample_rate"]):
@@ -432,8 +441,8 @@ def check_and_set_pid_running(path):
             os.kill(pid, 0)
             print("SystemControl process already running, NOT starting")
             raise SystemExit(1)
-        except Exception as e:
-            print(e)
+        except Exception:
+            # print(e)
             pass  # Process is NOT running
     with open(path, "w") as fd:
         fd.write(str(os.getpid()))
