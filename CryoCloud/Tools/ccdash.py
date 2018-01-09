@@ -80,6 +80,8 @@ class DashBoard:
         self.cfg.set_default("params.state.name", "state")
         self.cfg.set_default("params.state.type", "Worker")
 
+        self.cfg.set_default("worker_lines", 4)
+
         self.log = API.get_log("Dashboard")
         self.parameters = []
 
@@ -107,7 +109,8 @@ class DashBoard:
         # self.resourceWindow.hline(1, 0, " ", self.width, curses.color_pair(self.resource_color))
 
         # self.screen.hline(self.height - 1, 0, "-", self.width, curses.color_pair(4))
-        height = int((self.height - 4) / 2)
+        # height = int((self.height - 4) / 2)
+        height = self.cfg["worker_lines"]
         self.workerWindow = curses.newwin(height, self.width, 4, 0)
         self.worker_color = 3
         self._fill(self.workerWindow, self.worker_color)
