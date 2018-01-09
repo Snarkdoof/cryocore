@@ -62,6 +62,11 @@ class DashBoard:
         self.cfg.set_default("params.cpu_idle.title", "Idle")
         self.cfg.set_default("params.cpu_idle.type", "Resource")
 
+        self.cfg.set_default("params.disk_free.source", "NodeController.*")
+        self.cfg.set_default("params.disk_free.name", "root.free")
+        self.cfg.set_default("params.disk_free.title", "Free")
+        self.cfg.set_default("params.disk_free.type", "Resource")
+
         self.cfg.set_default("params.memory.source", "NodeController.*")
         self.cfg.set_default("params.memory.name", "memory.available")
         self.cfg.set_default("params.memory.title", "Free memory")
@@ -177,6 +182,7 @@ class DashBoard:
                 cpu = "CPU used: "
                 cpu_usage = {}
                 memory = "Available Memory: "
+                disk = "Free disk: "
                 for parameter in resources:
                     ttl = parameter.channel.split(".")[-1]
                     # self.log.debug("%s %s %s" % (parameter.name, parameter.title, parameter.value))
@@ -189,10 +195,13 @@ class DashBoard:
 
                     elif parameter.name.startswith("memory"):
                         memory += "%s: %s   " % (ttl, PrettyPrint.bytes_to_string(parameter.value))
+                    elif parameter.name.endswith("free"):
+                        disk += "%s: %s" % (ttl, PrettyPrint.bytes_to_string(parameter.value))
                 for ttl in cpu_usage:
                     cpu += "%s: %s/%s%%   " % (ttl, int(cpu_usage[ttl][0]), int(cpu_usage[ttl][1]))
                 self.resourceWindow.addstr(0, 0, cpu, curses.color_pair(self.resource_color))
                 self.resourceWindow.addstr(1, 0, memory, curses.color_pair(self.resource_color))
+                self.resourceWindow.addstr(2, 0, disk, curses.color_pair(self.resource_color))
 
                 workerinfo = {}
                 for worker in workers:
