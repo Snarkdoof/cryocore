@@ -15,6 +15,7 @@ stop_event = threading.Event()
 class Listener:
     def __init__(self):
         self.added = []
+        self.added_full = []
         self.modified = []
         self.removed = []
         self.errors = []
@@ -22,6 +23,7 @@ class Listener:
     def onAdd(self, info):
         # print("ADDED", info)
         self.added.append(info["relpath"])
+        self.added_full.append(info["fullpath"])
         self.added.sort()
 
     def onModify(self, info):
@@ -308,8 +310,58 @@ class DirectoryWatcherTest(unittest.TestCase):
         self.assertEquals(self.listener.errors, [])
 
     def testSetDone(self):
-        pass
-        # TODO: Create test also for setDone
+
+        dw = DirectoryWatcher(self.runid,
+                              self.target,
+                              onAdd=self.listener.onAdd,
+                              onModify=self.listener.onModify,
+                              onRemove=self.listener.onRemove,
+                              onError=self.listener.onError,
+                              stabilize=1.0)
+        dw.start()
+
+        # Add a few files
+        f = open(os.path.join(self.target, "1"), "w")
+        f.write("1")
+        f.close()
+        f = open(os.path.join(self.target, "2"), "w")
+        f.write("2")
+        f.close()
+        time.sleep(2)
+
+        self.assertEquals(self.listener.added, ["1", "2"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        self.listener.added = []
+        self.listener.added_full = []
+
+        dw.setDone(os.path.join(self.target, "1"))
+        dw.setDone(os.path.join(self.target, "2"))
+
+        # Now we create a new directorywatcher and see that it doesn't rediscover the files
+        dw2 = DirectoryWatcher(self.runid,
+                               self.target,
+                               onAdd=self.listener.onAdd,
+                               onModify=self.listener.onModify,
+                               onRemove=self.listener.onRemove,
+                               onError=self.listener.onError,
+                               stabilize=1.0)
+        dw2.start()
+        time.sleep(1.0)  # Allow time for stabilizing
+        self.assertEquals(self.listener.added, [])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
+
+        # Now we reset the thing and expect them to be rediscovered
+        dw2.reset()
+        time.sleep(1.0)  # Allow time for stabilizing
+        self.assertEquals(self.listener.added, ["1", "2"])
+        self.assertEquals(self.listener.modified, [])
+        self.assertEquals(self.listener.removed, [])
+        self.assertEquals(self.listener.errors, [])
 
 if __name__ == "__main__":
 
