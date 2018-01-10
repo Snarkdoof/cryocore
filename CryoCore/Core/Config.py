@@ -1550,7 +1550,7 @@ class Configuration(threading.Thread):
                 full_path = "root"
             elif full_path[-1] == ".":
                 full_path = full_path[:-1]
-            serialized = {root: serialized,
+            serialized = {full_path: serialized,
                           "version": version_info}
 
             return json.dumps(serialized, indent=1)
