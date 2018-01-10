@@ -287,10 +287,14 @@ class NamedConfiguration:
         self.add = self._parent.add
         self.set = self._parent.set
         self.get_version_info_by_id = self._parent.get_version_info_by_id
-        self.serialize = self._parent.serialize
         self.deserialize = self._parent.deserialize
         self.last_updated = self._parent.last_updated
         self.del_callback = self._parent.del_callback
+
+    def serialize(self, path=None, version=None):
+        if not version:
+            version = self.version
+        return self._parent.serialize(path, root=self.root, version=version)
 
     def clear_all(self):
         self._parent.clear_all(self.version)
@@ -1525,7 +1529,7 @@ class Configuration(threading.Thread):
 
     # ##################    JSON functionality for (de)serializing ###
 
-    def serialize(self, root="", version=None):
+    def serialize(self, path="", root=None, version=None):
         """
         Return a JSON serialized block of config
         """
@@ -1536,10 +1540,10 @@ class Configuration(threading.Thread):
                 version_id = self._cfg["version"]
 
             version_info = self.get_version_info_by_id(version_id)
-            root = self._get_full_path(root, root=self.root)
-            serialized = self._serialize_recursive(root, version_id)
-            if not root:
-                root = "root"
+            full_path = self._get_full_path(path, root=root)
+            serialized = self._serialize_recursive(full_path, version_id)
+            if not full_path:
+                full_path = "root"
             serialized = {root: serialized,
                           "version": version_info}
 
