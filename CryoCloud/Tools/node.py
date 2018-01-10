@@ -111,7 +111,7 @@ class Worker(multiprocessing.Process):
             os.chdir(CC_DIR)
 
         print("Switching job from", self._current_job, (job["runname"], job["module"]))
-
+        print("Current dir:", os.getcwd(), "\nPATH:", sys.path)
         self._current_job = (job["runname"], job["module"])
         self._module = None
         modulepath = None
