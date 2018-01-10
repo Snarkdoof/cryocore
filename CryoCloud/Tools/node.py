@@ -56,10 +56,12 @@ def load(modulename, path=None):
             modules[modulename] = imp.load_module(modulename, info[0], info[1], info[2])
         except ImportError as e:
             try:
+                print("Trying importlib")
                 import importlib
                 modules[modulename] = importlib.import_module(modulename)
                 return
-            except:
+            except Exception as e2:
+                print("Exception using importlib too", e2)
                 pass
             raise e
         except Exception as e:
