@@ -105,14 +105,10 @@ class Worker(multiprocessing.Process):
         if "workdir" in job and job["workdir"]:
             if not os.path.exists(job["workdir"]):
                 raise Exception("Working directory '%s' does not exist" % job["workdir"])
-            print("Changing dir to", job["workdir"])
             os.chdir(job["workdir"])
         else:
-            print("Changing to cc dir", CC_DIR)
             os.chdir(CC_DIR)
 
-        print("Switching job from", self._current_job, (job["runname"], job["module"]))
-        print("Current dir:", os.getcwd(), "\nPATH:", sys.path)
         self._current_job = (job["runname"], job["module"])
         self._module = None
         modulepath = None
