@@ -54,6 +54,14 @@ def load(modulename, path=None):
                 path = [path]
             info = imp.find_module(modulename, path)
             modules[modulename] = imp.load_module(modulename, info[0], info[1], info[2])
+        except ImportError as e:
+            try:
+                import importlib
+                modules[modulename] = importlib.import_module(modulename)
+                return
+            except:
+                pass
+            raise e
         except Exception as e:
             print("imp load failed", e)
             modules[modulename] = imp.import_module(modulename)
