@@ -1121,6 +1121,11 @@ class Configuration(threading.Thread):
                     full_path = root + _full_path
                 else:
                     full_path = _full_path
+
+            if full_path.startswith("root."):
+                full_path = full_path[5:]
+            elif full_path.startswith("root"):
+                full_path = full_path[4:]
             try:
                 item = self._cache_lookup(version, full_path)
                 if item:
@@ -1143,7 +1148,6 @@ class Configuration(threading.Thread):
                 (path, name) = full_path.rsplit(".", 1)
 
             if full_path != "root" and full_path != "":  # special case for root node
-
                 # Do we have this in the cache?
                 id_path = self._get_id_path(full_path, version, create=add)
                 # print("ID path of", full_path, "is", id_path)
@@ -1544,6 +1548,8 @@ class Configuration(threading.Thread):
             serialized = self._serialize_recursive(full_path, version_id)
             if not full_path:
                 full_path = "root"
+            elif full_path[-1] == ".":
+                full_path = full_path[:-1]
             serialized = {root: serialized,
                           "version": version_info}
 
