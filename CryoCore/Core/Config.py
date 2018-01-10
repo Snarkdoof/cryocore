@@ -1536,7 +1536,7 @@ class Configuration(threading.Thread):
                 version_id = self._cfg["version"]
 
             version_info = self.get_version_info_by_id(version_id)
-            root = self._get_full_path(root=root)
+            root = self._get_full_path(root, root=self.root)
             serialized = self._serialize_recursive(root, version_id)
             if not root:
                 root = "root"
