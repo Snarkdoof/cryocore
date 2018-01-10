@@ -35,6 +35,7 @@ modules = {}
 
 CC_DIR = os.getcwd()
 sys.path.append(os.path.join(CC_DIR, "CryoCloud/Modules/"))  # Add CC modules with full path
+sys.path.append(".")  # Add module path for the working dir of the job
 sys.path.append("./Modules/")  # Add module path for the working dir of the job
 
 
