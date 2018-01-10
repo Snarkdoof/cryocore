@@ -6,6 +6,7 @@ import sys
 import psutil
 import time
 import socket
+import os
 from argparse import ArgumentParser
 try:
     import argcomplete
@@ -31,7 +32,10 @@ except:
 
 
 modules = {}
-sys.path.append("CryoCloud/Modules/")
+
+CC_DIR = os.getcwd()
+sys.path.append(os.path.join(CC_DIR, "CryoCloud/Modules/"))  # Add CC modules with full path
+sys.path.append("./Modules/")  # Add module path for the working dir of the job
 
 
 API.cc_default_expire_time = 24 * 86400  # Default log & status only 7 days
@@ -79,7 +83,6 @@ class Worker(multiprocessing.Process):
         self._worker_type = jobdb.TASK_TYPE[type]
         self.wid = "%s-%s_%d" % (self._worker_type, socket.gethostname(), self.workernum)
         self._current_job = (None, None)
-
         print("%s %s created" % (self._worker_type, workernum))
 
     def _switchJob(self, job):
@@ -88,7 +91,17 @@ class Worker(multiprocessing.Process):
             # return
             pass
 
+        if "workdir" in job and job["workdir"]:
+            if not os.path.exists(job["workdir"]):
+                raise Exception("Working directory '%s' does not exist" % job["workdir"])
+            print("Changing dir to", job["workdir"])
+            os.chdir(job["workdir"])
+        else:
+            print("Changing to cc dir", CC_DIR)
+            os.chdir(CC_DIR)
+
         print("Switching job from", self._current_job, (job["runname"], job["module"]))
+
         self._current_job = (job["runname"], job["module"])
         self._module = None
         modulepath = None
