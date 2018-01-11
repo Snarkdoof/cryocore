@@ -250,7 +250,7 @@ class DashBoard:
                         try:
                             self.logWindow.addstr(idx, 1, msg, curses.color_pair(self.log_color))
                         except:
-                            self.log.exception("Adding log statement on position %d of %d" % (idx, self._max_logs))
+                            # self.log.exception("Adding log statement on position %d of %d" % (idx, self._max_logs))
                             break
                         idx += 1
 
