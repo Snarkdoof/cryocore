@@ -112,7 +112,7 @@ var CryoCore = function(_CRYOCORE_) {
           "value": value
         },
         function(res) {
-          refresh();
+          refresh(options.onchanged);
         });
     };
 
@@ -153,7 +153,7 @@ var CryoCore = function(_CRYOCORE_) {
 
     // Use timing object if available
     if (options.timingObject) {
-      TIMINGSRC.setInrvalCallback(options.timingObject, update, options.refres/1000);
+      TIMINGSRC.setInrvalCallback(options.timingObject, update, options.refresh/1000);
     } else {
       setInterval(refresh, 5000); // Auto update 5 seconds          
     }
