@@ -296,7 +296,8 @@ class JobDB(mysql):
         return c.rowcount
 
     def reset_files(self, rootpath, runid):
-        SQL = "UPDATE filewatch SET done=0, public=0 WHERE rootpath=%s AND runid=%s"
+        # SQL = "UPDATE filewatch SET done=0, public=0 WHERE rootpath=%s AND runid=%s"
+        SQL = "DELETE FROM filewatch WHERE rootpath=%s AND runid=%s"
         c = self._execute(SQL, (rootpath, runid))
         return c.rowcount
 
