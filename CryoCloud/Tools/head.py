@@ -333,6 +333,11 @@ if __name__ == "__main__":
                             default=None,
                             help="Request a particular node do all jobs")
 
+    if "--workdir" not in supress:
+        parser.add_argument("--workdir", dest="workdir",
+                            default=None,
+                            help="Specify a working directory for the job")
+
     # We allow the module to add more arguments
     try:
         mod.addArguments(parser)
