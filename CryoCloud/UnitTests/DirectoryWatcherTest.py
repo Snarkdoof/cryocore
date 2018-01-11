@@ -74,10 +74,10 @@ class DirectoryWatcherTest(unittest.TestCase):
         f.close()
         time.sleep(2)
 
-        self.assertEquals(self.listener.added, ["1", "2"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["1", "2"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         f = open(os.path.join(self.target, "1"), "w")
         f.write("1a")
@@ -86,18 +86,18 @@ class DirectoryWatcherTest(unittest.TestCase):
         f.write("2a")
         f.close()
         time.sleep(2)
-        self.assertEquals(self.listener.added, ["1", "2"])
-        self.assertEquals(self.listener.modified, ["1", "2"])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["1", "2"])
+        self.assertEqual(self.listener.modified, ["1", "2"])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         os.remove(os.path.join(self.target, "1"))
         os.remove(os.path.join(self.target, "2"))
         time.sleep(1.0)
-        self.assertEquals(self.listener.added, ["1", "2"])
-        self.assertEquals(self.listener.modified, ["1", "2"])
-        self.assertEquals(self.listener.removed, ["1", "2"])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["1", "2"])
+        self.assertEqual(self.listener.modified, ["1", "2"])
+        self.assertEqual(self.listener.removed, ["1", "2"])
+        self.assertEqual(self.listener.errors, [])
 
     def testMove(self):
         dw = DirectoryWatcher(self.runid,
@@ -113,26 +113,26 @@ class DirectoryWatcherTest(unittest.TestCase):
         f = open(target, "w")
         f.close()
         time.sleep(2)
-        self.assertEquals(self.listener.added, ["1"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["1"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         # Move the file
         os.rename(target, "/tmp/.tmptmp")
         time.sleep(1)
-        self.assertEquals(self.listener.added, ["1"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, ["1"])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["1"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, ["1"])
+        self.assertEqual(self.listener.errors, [])
 
         # Move the file back
         os.rename("/tmp/.tmptmp", target)
         time.sleep(1)
-        self.assertEquals(self.listener.added, ["1", "1"])  # What is the correct effect here?
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, ["1"])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["1", "1"])  # What is the correct effect here?
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, ["1"])
+        self.assertEqual(self.listener.errors, [])
 
     def testRecursive(self):
         dw = DirectoryWatcher(self.runid,
@@ -149,34 +149,34 @@ class DirectoryWatcherTest(unittest.TestCase):
         os.mkdir(target)
         time.sleep(0.5)
         # Should still not be stable
-        self.assertEquals(self.listener.added, [])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, [])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         time.sleep(1.)
         # Should be stable
-        self.assertEquals(self.listener.added, ["dir1"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         target2 = os.path.join(target, "dir2")
         os.mkdir(target2)
 
         time.sleep(0.5)
         # Should still not be stable
-        self.assertEquals(self.listener.added, ["dir1"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         time.sleep(1)
         # Should be stable
-        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1", "dir1/dir2"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         filename = os.path.join(target2, "file1")
         f = open(filename, "w")
@@ -184,39 +184,39 @@ class DirectoryWatcherTest(unittest.TestCase):
         f.close()
         time.sleep(0.5)
         # Should still not be stable
-        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1", "dir1/dir2"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         time.sleep(1)
         # Should be stable
-        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         # Remove
         os.remove(filename)
         time.sleep(0.5)
-        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, ["dir1/dir2/file1"])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, ["dir1/dir2/file1"])
+        self.assertEqual(self.listener.errors, [])
 
         os.rmdir(target2)
         time.sleep(0.5)
-        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, ["dir1/dir2", "dir1/dir2/file1"])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, ["dir1/dir2", "dir1/dir2/file1"])
+        self.assertEqual(self.listener.errors, [])
 
         os.rmdir(target)
         time.sleep(0.5)
-        self.assertEquals(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, ["dir1", "dir1/dir2", "dir1/dir2/file1"])
+        self.assertEqual(self.listener.errors, [])
 
     def testDirectories(self):
         dw = DirectoryWatcher(self.runid,
@@ -240,17 +240,17 @@ class DirectoryWatcherTest(unittest.TestCase):
             f.close()
 
         # Should still not be stable
-        self.assertEquals(self.listener.added, [])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, [])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         time.sleep(2.0)
         # Should be stable
-        self.assertEquals(self.listener.added, ["dir1"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         target = os.path.join(self.target, "dir2")
         os.mkdir(target)
@@ -263,17 +263,17 @@ class DirectoryWatcherTest(unittest.TestCase):
         f.close()
 
         # Should still not be stable
-        self.assertEquals(self.listener.added, ["dir1"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         time.sleep(2.0)
         # Should be stable
-        self.assertEquals(self.listener.added, ["dir1", "dir2"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["dir1", "dir2"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
     def testReset(self):
 
@@ -295,19 +295,19 @@ class DirectoryWatcherTest(unittest.TestCase):
         f.close()
         time.sleep(2)
 
-        self.assertEquals(self.listener.added, ["1", "2"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["1", "2"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         # Reset
         dw.reset()
 
-        time.sleep(0.5)
-        self.assertEquals(self.listener.added, ["1", "1", "2", "2"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        time.sleep(2.0)
+        self.assertEqual(self.listener.added, ["1", "1", "2", "2"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
     def testSetDone(self):
 
@@ -329,10 +329,10 @@ class DirectoryWatcherTest(unittest.TestCase):
         f.close()
         time.sleep(2)
 
-        self.assertEquals(self.listener.added, ["1", "2"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["1", "2"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         self.listener.added = []
         self.listener.added_full = []
@@ -350,18 +350,18 @@ class DirectoryWatcherTest(unittest.TestCase):
                                stabilize=1.0)
         dw2.start()
         time.sleep(1.0)  # Allow time for stabilizing
-        self.assertEquals(self.listener.added, [])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, [])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
         # Now we reset the thing and expect them to be rediscovered
         dw2.reset()
         time.sleep(1.0)  # Allow time for stabilizing
-        self.assertEquals(self.listener.added, ["1", "2"])
-        self.assertEquals(self.listener.modified, [])
-        self.assertEquals(self.listener.removed, [])
-        self.assertEquals(self.listener.errors, [])
+        self.assertEqual(self.listener.added, ["1", "2"])
+        self.assertEqual(self.listener.modified, [])
+        self.assertEqual(self.listener.removed, [])
+        self.assertEqual(self.listener.errors, [])
 
 if __name__ == "__main__":
 
