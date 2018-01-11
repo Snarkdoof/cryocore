@@ -10,6 +10,19 @@ cfg = API.get_config()
 db = db.DBWrapper()
 
 
+def shutdown(sure):
+    if cfg["System.WebServer.allow_shutdown"] and sure:
+        import subprocess
+        try:
+            subprocess.call(["sudo", "halt", "-p"])
+            ret = {"result": "Shutting down"}
+        except Exception as e:
+            ret = {"error": e}
+    else:
+        ret = {"error": "Remote shutdown not allowed by config"}
+    return json.dumps(ret)
+
+
 def cfg_isupdated(req, since):
     since = float(since)
     last_updated = cfg.last_updated()

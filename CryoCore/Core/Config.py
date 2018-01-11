@@ -287,10 +287,14 @@ class NamedConfiguration:
         self.add = self._parent.add
         self.set = self._parent.set
         self.get_version_info_by_id = self._parent.get_version_info_by_id
-        self.serialize = self._parent.serialize
         self.deserialize = self._parent.deserialize
         self.last_updated = self._parent.last_updated
         self.del_callback = self._parent.del_callback
+
+    def serialize(self, path=None, version=None):
+        if not version:
+            version = self.version
+        return self._parent.serialize(path, root=self.root, version=version)
 
     def clear_all(self):
         self._parent.clear_all(self.version)
@@ -1117,6 +1121,11 @@ class Configuration(threading.Thread):
                     full_path = root + _full_path
                 else:
                     full_path = _full_path
+
+            if full_path.startswith("root."):
+                full_path = full_path[5:]
+            elif full_path.startswith("root"):
+                full_path = full_path[4:]
             try:
                 item = self._cache_lookup(version, full_path)
                 if item:
@@ -1139,7 +1148,6 @@ class Configuration(threading.Thread):
                 (path, name) = full_path.rsplit(".", 1)
 
             if full_path != "root" and full_path != "":  # special case for root node
-
                 # Do we have this in the cache?
                 id_path = self._get_id_path(full_path, version, create=add)
                 # print("ID path of", full_path, "is", id_path)
@@ -1525,7 +1533,7 @@ class Configuration(threading.Thread):
 
     # ##################    JSON functionality for (de)serializing ###
 
-    def serialize(self, root="", version=None):
+    def serialize(self, path="", root=None, version=None):
         """
         Return a JSON serialized block of config
         """
@@ -1536,11 +1544,13 @@ class Configuration(threading.Thread):
                 version_id = self._cfg["version"]
 
             version_info = self.get_version_info_by_id(version_id)
-            root = self._get_full_path(root=root)
-            serialized = self._serialize_recursive(root, version_id)
-            if not root:
-                root = "root"
-            serialized = {root: serialized,
+            full_path = self._get_full_path(path, root=root)
+            serialized = self._serialize_recursive(full_path, version_id)
+            if not full_path:
+                full_path = "root"
+            elif full_path[-1] == ".":
+                full_path = full_path[:-1]
+            serialized = {full_path: serialized,
                           "version": version_info}
 
             return json.dumps(serialized, indent=1)
