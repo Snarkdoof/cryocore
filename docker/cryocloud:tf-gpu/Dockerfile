@@ -15,6 +15,8 @@ RUN add-apt-repository ppa:ubuntugis/ppa; apt-get -y update; apt-get -y install 
 # Trim away cache files - no need for these
 RUN apt-get clean
 
+RUN pip3 install keras scikit-learn
+
 ADD . /cc
 ADD docker/cryocloud:tf/requirements.txt /cc
 WORKDIR /cc
@@ -28,6 +30,7 @@ RUN rm /usr/bin/python; ln -s python3.5 /usr/bin/python
 
 # Copy CryoCore & CryoCloud 
 ADD ksat/.config /root/.cryoconfig
+ADD ksat/.config /.cryoconfig
 RUN mkdir /cclib
 
 # Do we have an application to run?
