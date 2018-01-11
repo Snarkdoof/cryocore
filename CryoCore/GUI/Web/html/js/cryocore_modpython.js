@@ -838,6 +838,14 @@ var CryoCore = function(_CRYOCORE_) {
     return self;
   };
 
+  _CRYOCORE_.shutdown = function() {
+    if (!confirm("Shut down?")) {
+      return;
+    }
+    XHR.get(SERVER + "/JSON.py/shutdown?sure=True");
+  };
+
+
   _CRYOCORE_.setServer = function(server) { SERVER = server; };
   _CRYOCORE_.getLogs = Logs;
   _CRYOCORE_.Config = Config;
