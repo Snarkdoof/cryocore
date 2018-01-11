@@ -34,7 +34,7 @@ class Parameter():
 
 class DashBoard:
 
-    def __init__(self):
+    def __init__(self, options):
 
         self.screen = curses.initscr()
         curses.start_color()
@@ -80,7 +80,8 @@ class DashBoard:
         self.cfg.set_default("params.state.name", "state")
         self.cfg.set_default("params.state.type", "Worker")
 
-        self.cfg.set_default("worker_lines", 4)
+        self.cfg.set_default("worker_lines", 20)
+        self._worker_lines = options.num_workers
 
         self.log = API.get_log("Dashboard")
         self.parameters = []
@@ -110,7 +111,11 @@ class DashBoard:
 
         # self.screen.hline(self.height - 1, 0, "-", self.width, curses.color_pair(4))
         # height = int((self.height - 4) / 2)
-        height = self.cfg["worker_lines"]
+        if self._worker_lines:
+            height = int(self._worker_lines)
+        else:
+            height = self.cfg["worker_lines"]
+
         self.workerWindow = curses.newwin(height, self.width, 4, 0)
         self.worker_color = 3
         self._fill(self.workerWindow, self.worker_color)
@@ -367,6 +372,8 @@ if __name__ == "__main__":
     parser.add_argument("--db_host", type=str, dest="db_host", default="", help="localhost or from .config")
     parser.add_argument("--db_password", type=str, dest="db_password", default="", help="defaultpw or from .config")
 
+    parser.add_argument("--num_workers", type=str, dest="num_workers", default="", help="Number of lines in worker window (default get from config)")
+
     if "argcomplete" in sys.modules:
         argcomplete.autocomplete(parser)
 
@@ -386,7 +393,7 @@ if __name__ == "__main__":
         API.set_config_db(db_cfg)
 
     try:
-        dash = DashBoard()
+        dash = DashBoard(options=options)
         dash.run()
     finally:
         print("Shutting down")
