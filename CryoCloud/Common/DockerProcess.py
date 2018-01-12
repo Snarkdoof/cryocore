@@ -80,9 +80,9 @@ class DockerProcess():
         for source, destination in self.dirs:
             if destination.startswith("/scratch"):
                 continue  # We ignore scratch
-            options = ":ro"
-            if destination == "/output":
-                options = ":rw"
+            options = ":rw"
+            if destination == "/input":
+                options = ":ro"
             cmd.extend(["-v", "%s:%s%s" % (source, destination, options)])
 
         # We also add "/scratch"
