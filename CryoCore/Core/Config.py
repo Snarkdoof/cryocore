@@ -737,7 +737,6 @@ class Configuration(threading.Thread):
                 self._close_connection()
                 retval["error"] = "DBError: %s" % str(e)
                 time.sleep(1.0)
-                raise Exception("DEBUG")
             except mysql.ProgrammingError as e:
                 if ignore_error:
                     try:
@@ -1299,7 +1298,7 @@ class Configuration(threading.Thread):
             if parent_id is None:
                 if full_path.find(".") > -1:
                     parent_path = full_path.rsplit(".", 1)[0]
-                    id_path = self._get_id_path(parent_path, version, create=False, is_leaf=False)
+                    id_path = self._get_id_path(parent_path, version, create=True, is_leaf=False)
                     self._id_cache[version][parent_path] = id_path[:]
                     parent_id = id_path[-1]
                 else:  # root
