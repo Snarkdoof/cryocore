@@ -15,7 +15,7 @@ RUN add-apt-repository ppa:ubuntugis/ppa; apt-get -y update; apt-get -y install 
 # Trim away cache files - no need for these
 RUN apt-get clean
 
-RUN pip3 install keras scikit-learn
+RUN pip3 install keras scikit-learn pandas matplotlib
 
 ADD . /cc
 ADD docker/cryocloud:tf/requirements.txt /cc
