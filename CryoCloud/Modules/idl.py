@@ -34,6 +34,10 @@ def process_task(worker, task):
 
     if task["args"]["cmd"].__class__ != list:
         raise Exception("Arguments must be a list")
+    debug = False
+    if "debug" in task["args"]:
+        if task["args"]["debug"]:
+            debug = True
 
     cmd = ["idl"]
     cmd.extend(task["args"]["cmd"])
@@ -44,7 +48,7 @@ def process_task(worker, task):
             if not os.path.isdir(task["args"]["dir"]):
                 raise Exception("Specified directory '%s' does not exist (or is not a directory)" % task["args"]["dir"])
             os.chdir(task["args"]["dir"])
-            print "Change dir to", (task["args"]["dir"])
+            print("Change dir to", (task["args"]["dir"]))
 
         env = os.environ
         if "env" in task["args"]:
@@ -53,7 +57,7 @@ def process_task(worker, task):
                 env[key] = task["args"]["env"][key]
 
         worker.log.debug("IDLCommand is: '%s'" % cmd)
-        print " ".join(cmd).join(" ")
+        print(" ".join(cmd).join(" "))
 
         p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # We set the outputs as nonblocking
@@ -62,25 +66,47 @@ def process_task(worker, task):
 
         buf = {p.stdout: "", p.stderr: ""}
 
-        while not worker.stop_event.isSet():
+        def report(line):
+            """
+            Report a line if it should be reported as status or log
+            """
+            m = re.match("\[(.+)\] (.+)", line)
+            if m:
+                worker.status[m.groups()[0]] = m.groups()[1]
+
+            m = re.match("\<(\w+)\> (.+)", line)
+            if m:
+                level = m.groups()[0]
+                msg = m.groups()[1]
+                if level == "debug":
+                    worker.log.debug(msg)
+                elif level == "info":
+                    worker.log.info(msg)
+                elif level == "warning":
+                    worker.log.warning(msg)
+                elif level == "error":
+                    worker.log.error(msg)
+                else:
+                    worker.log.error("Unknown log level '%s'" % level)
+            else:
+                if debug:
+                    worker.log.debug(line)
+
+        while not worker._stop_event.isSet():
             ready = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
             for fd in ready:
-
                 data = fd.read()
-                buf[fd] += data
+                buf[fd] += str(data, 'UTF-8')
 
             # Process any stdout data
             while buf[p.stdout].find("\n") > -1:
                 line, buf[p.stdout] = buf[p.stdout].split("\n", 1)
-                m = re.match("\[(.+)\] (.+)", line)
-                if m:
-                    worker.status[m.groups()[0]] = m.groups()[1]
+                report(line)
 
             # Check for output on stderr - set error message
-            if buf[p.stderr]:
-                # Should we parse this for some known stuff?
-                worker.log.error(buf[p.stderr])
-                buf[p.stderr] = ""
+            while buf[p.stderr].find("\n") > -1:
+                line, buf[p.stderr] = buf[p.stderr].split("\n", 1)
+                report(line)
 
             # See if the process is still running
             if p.poll() is not None:

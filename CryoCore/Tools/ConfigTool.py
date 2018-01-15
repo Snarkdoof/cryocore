@@ -14,11 +14,36 @@ from argparse import ArgumentParser
 
 try:
     import argcomplete
-except:
-    print("Missing argcomplete, autocomplete not available")
+except Exception as e:
+    print("Missing argcomplete, autocomplete not available", e)
 
 from CryoCore import API
 import CryoCore.Core.Config as Config
+
+
+def toUnicode(string):
+    """
+    Function to change a string (unicode or not) into a unicode string
+    Will try utf-8 first, then latin-1.
+    TODO: Is there a better way?  There HAS to be!!!
+    """
+    if sys.version_info.major == 3:
+        if string.__class__ == str:
+            return string
+        try:
+            return str(string, "utf-8")
+        except:
+            pass
+        if string.__class__ == bytes:
+            return str(string, "latin-1")
+        return str(string)
+    if string.__class__ == unicode:
+        return string
+    try:
+        return unicode(string, "utf-8")
+    except:
+        pass
+    return unicode(string, "latin-1")
 
 
 class XMLImport:
@@ -80,6 +105,7 @@ def yn(message):
 
 if __name__ == "__main__":
     debug_ac = False
+    API.__is_direct = True  # We KNOW we're single threaded and can be quicker
     try:
         def completer(prefix, parsed_args, **kwargs):
             if debug_ac:
@@ -100,11 +126,11 @@ if __name__ == "__main__":
             add = 0
             for elem in elems:
                 print("**", p + elem.name, prefix)
-                if (p + elem.name).startswith(prefix):
+                if (toUnicode(p + elem.name)).startswith(toUnicode(prefix)):
                     add += 1
 
             for elem in elems:
-                if not (p + elem.name).startswith(prefix):
+                if not (toUnicode(p + elem.name)).startswith(toUnicode(prefix)):
                     continue
                 if elem.datatype == "folder":
                     print(p + elem.name, prefix)
@@ -112,9 +138,9 @@ if __name__ == "__main__":
                         print("Going recursive for", p + elem.name)
                         ret.extend(completer(p + elem.name + ".", parsed_args, recursive=True))
                     else:
-                        ret.append(p + elem.name)
+                        ret.append(toUnicode(p + elem.name))
                 else:
-                    ret.append(p + elem.name)
+                    ret.append(toUnicode(p + elem.name))
             return ret
 
         parser = ArgumentParser(description="View and update CryoCore configuration", usage=usage())

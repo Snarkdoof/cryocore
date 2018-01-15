@@ -271,6 +271,9 @@ class TailLog(mysql):
 if __name__ == "__main__":
 
     tail = None
+    # We're single threaded and don't want to make any tables
+    API.__is_direct = True
+    API.auto_init = False
 
     def module_completer(prefix, parsed_args, **kwargs):
         items = tail.get_list("modules")

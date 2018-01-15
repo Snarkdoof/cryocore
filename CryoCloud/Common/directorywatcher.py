@@ -10,385 +10,277 @@ except:
     import queue as Queue
 
 import traceback
-from . import jobdb
+from CryoCloud.Common import jobdb
 
 # watched events
-MASK = pyinotify.IN_CREATE | pyinotify.IN_MOVED_TO
-MASK = MASK | pyinotify.IN_MODIFY
-MASK = MASK | pyinotify.IN_MOVED_FROM | pyinotify.IN_DELETE
-MASK = MASK | pyinotify.IN_MOVE_SELF | pyinotify.IN_DELETE_SELF
+MASK = pyinotify.IN_CREATE
+MASK |= pyinotify.IN_MOVED_TO
+MASK |= pyinotify.IN_MODIFY
+MASK |= pyinotify.IN_MOVED_FROM
+MASK |= pyinotify.IN_DELETE
+MASK |= pyinotify.IN_MOVE_SELF
+# | pyinotify.IN_DELETE_SELF
 
 
-class WatchThread(threading.Thread, pyinotify.ProcessEvent):
-    """
-    Thread uses pyinotify to watch for file system events.
-    Events are forwarded to DirectoryWatcher main thread on a queue.
-    """
+class Dispatcher(pyinotify.ProcessEvent):
 
-    def __init__(self, queue, rootpath, rec, stop_ev):
-        threading.Thread.__init__(self)
-        self._rootpath = rootpath
-        self._recursive = rec
-        self._queue = queue
-        self._stop_ev = stop_ev
+    def __init__(self, path, watcher):
+        self._path = path
+        self._watcher = watcher
 
-    # PyInotify Callbacks
+    def onAdd(self, info):
+        pass
+
+    def onModify(self, info):
+        pass
+
+    def onRemove(self, info):
+        pass
+
+    def onError(self, info):
+        pass
+
+    def _make_info(self, event, is_delete=False):
+        info = {}
+        # print(event)
+
+        info["fullpath"] = event.pathname
+        info["relpath"] = event.pathname.replace(self._path, "")
+        if info["relpath"] and info["relpath"][0] == "/":
+            info["relpath"] = info["relpath"][1:]
+        info["isdir"] = event.dir
+        info["mtime"] = 0
+        if is_delete:
+            return info
+        try:
+            if info["isdir"]:
+                info["mtime"] = os.stat(info["fullpath"]).st_mtime
+                # Must check the update times of all entries in the directory
+                entries = os.listdir(info["fullpath"])
+                for entry in entries:
+                    info["mtime"] = max(info["mtime"], os.stat(os.path.join(info["fullpath"], entry)).st_mtime)
+
+            elif os.path.exists(info["fullpath"]):
+                info["mtime"] = os.stat(info["fullpath"]).st_mtime
+                # info["stable"] = (time.time() - info["mtime"] > self._stabilize)
+            event.mtime = info["mtime"]
+        except OSError as e:
+            print("OSERROR", e)
+            pass
+        return info
+
     def process_IN_CREATE(self, event):
-        if not event.dir:
-            self._queue.put({"type": "onAdd", "arg": {"path": event.path, "filename": event.name}})
+        # print("Monitored - file added", event)
+        info = self._make_info(event)
+
+        if not self._watcher.isStable(info):
+            self._watcher.addUnstable(event)
+            return
+
+        # File added - is it done already?
+        f = self._watcher.lookupState(event.pathname)
+        if not f:
+            # Is stable (enough)
+            self._watcher.addStable(event.pathname, info["mtime"])
+        else:
+            if info["mtime"] > f[3]:
+                # print("Modified since last stable")
+                self._watcher.updateStable(event.pathname, info["mtime"])
+                self.onModify(info)
+                return
+
+            # We have f already - is it done?
+            if f[6]:
+                # print("Already done")
+                # Was the file modified AFTER we flagged it done?
+                if info["mtime"] > f[3]:
+                    # print("Done but modified since")
+                    self.onModify(info)
+                return
+            else:
+                # Only stable files are in the DB, so if this is modified later, it's MODIFIED
+                if info["mtime"] > f[3]:
+                    self.onModified(info)
+                # print("FOUND but not done")
+
+        self.onAdd(info)
 
     def process_IN_MOVED_TO(self, event):
         self.process_IN_CREATE(event)
 
     def process_IN_MODIFY(self, event):
-        if not event.dir:
-            self._queue.put({"type": "onModify", "arg": {"path": event.path, "filename": event.name}})
+        # print("Monitored - file modified", event)
+        # Check if this has been processed - if so, a modify is useful
+        self.process_IN_CREATE(event)
+        # self.onAdd(self._make_info(event))
+        # self.onModify(self._make_info(event))
+
+    def process_IN_MOVE_SELF(self, event):
+        self.process_IN_MODIFY(event)
 
     def process_IN_DELETE(self, event):
-        if not event.dir:
-            self._queue.put({"type": "onRemove", "arg": {"path": event.path, "filename": event.name}})
+        # print("Monitored - file removed", event)
+        self._watcher.removeFile(event.pathname)
+
+        self.onRemove(self._make_info(event, is_delete=True))
 
     def process_IN_MOVED_FROM(self, event):
         self.process_IN_DELETE(event)
 
     def process_IN_DELETE_SELF(self, event):
-        self._queue.put({"type": "onError", "arg": "watchdir {} deleted or removed".format(self._rootpath)})
+        self.process_IN_DELETE(event)
 
-    def process_IN_MOVE_SELF(self, event):
-        self.process_IN_DELETE_SELF(event)
 
-    def run(self):
-        self._wm = pyinotify.WatchManager()
-        self._notifyer = pyinotify.Notifier(self._wm, self)
-        self._wdd = self._wm.add_watch(self._rootpath, MASK, rec=self._recursive, auto_add=True)
-        while not self._stop_ev.isSet():
-            if self._notifyer.check_events(timeout=1.0):
-                self._notifyer.read_events()
-                self._notifyer.process_events()
-        self._notifyer.stop()
+class FakeEvent():
+    def __init__(self, item, name):
+        self.pathname = os.path.join(item, name)
+        self.dir = os.path.isdir(self.pathname)
+        self.mtime = 0
 
 
 class DirectoryWatcher(threading.Thread):
-
-    """
-    Wathing a directory for events concerning individual filepaths
-    - [onAdd] - file is created
-    - [onModify] - file is modified
-    - [onRemove] - file is deleted
-
-    Stabilization
-    Events [onAdd] and [onModify] mare not reported until after the file have become stable.
-    Event onRemove is reported immediately
-
-    - [stabilize] specifies number of seconds with inactivity required for a file to become stable.
-    If stabilize == 0 implies immediately stable.
-    Default value 5 sec.
-    A file that is modified becomes unstable (unless stabilize == 0)
-    A file that is continuously modified may never become stable.
-
-    List operation lists watched filepaths that are both stable and public.
-    - public means that is has been presented with an onAdd event
-    - due to stabilization, watched filepaths will be non-public until the first onAdd event
-    - due to stabilization, public filepaths may become unstable after modification. If so, they still remain public
-    """
-
-    def __init__(self, runid, rootpath, jobDB=None,
-                 onAdd=None, onModify=None, onRemove=None, onError=None,
-                 stabilize=5, recursive=True, liveonly=False, recall=False):
+    def __init__(self, runid, target, onAdd=None, onModify=None, onRemove=None, onError=None, stabilize=0, recursive=False):
         threading.Thread.__init__(self)
-        if not os.path.isdir(rootpath):
-            raise Exception("Directory '%s' does not exist or is not a directory" % rootpath)
+        self.stabilize = stabilize
+        self.runid = runid
+        self.target = target
+        self.recursive = recursive
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
+        self._unstable = {}
 
-        self._runid = runid
-        self._rootpath = os.path.abspath(rootpath)  # path to watch
-        self._recursive = recursive  # watch recursively into subdirectories
-        self._stabilize = stabilize  # time to wait for files to stabilize
-        self._period = 2
-        self._liveonly = liveonly
-        self._recall = recall
-        # callback handlers
-        self.onAdd = onAdd
-        self.onModify = onModify
-        self.onRemove = onRemove
-        self.onError = onError
-        # state
-        self._db = jobDB if jobDB is not None else jobdb.JobDB("directorywatcher", None)
-        # queue so that ipynotify never blocks on app code.
-        self._queue = Queue.Queue()
-        # threads
-        # self._periodicThread = PeriodicThread(self._queue, 2, CryoCore.API.api_stop_event)
-        self._watchThread = WatchThread(self._queue, self._rootpath, self._recursive, CryoCore.API.api_stop_event)
+        wm = pyinotify.WatchManager()
+        self._db = jobdb.JobDB("directorywatcher", None)
 
-    def _get_path_info(self, arg):
-        """
-        utility method for making sure paths are relative to rootpath
-        """
-        filepath = os.path.join(arg['path'], arg['filename'])
-        fullpath = os.path.join(arg['path'], arg['filename'])
-        relpath = os.path.relpath(filepath, self._rootpath)
-        info = {
-            "fullpath": fullpath,
-            "relpath": relpath,
-        }
-        try:
-            info["mtime"] = os.stat(fullpath).st_mtime
-            info["stable"] = (time.time() - info["mtime"] > self._stabilize)
-        except OSError:
-            pass
-        return info
+        self.monitor = Dispatcher(target, self)
+        if onAdd:
+            self.monitor.onAdd = onAdd
+        if onModify:
+            self.monitor.onModify = onModify
+        if onRemove:
+            self.monitor.onRemove = onRemove
+        if onError:
+            self.monitor.onError = onError
+        self.notifier = pyinotify.Notifier(wm, self.monitor)
+        self.wdd = wm.add_watch(target, MASK, rec=self.recursive, auto_add=self.recursive)
 
-    def _dispatch_events(self, events):
-        """Dispatch events"""
+        self.daemon = True
 
-        for eType, info in events:
-            if eType == "onAdd" and self.onAdd:
-                self.onAdd(info)
-            elif eType == "onModify" and self.onModify:
-                self.onModify(info)
-            elif eType == "onRemove" and self.onRemove:
-                self.onRemove(info)
+        # Go through the directory and check existing contents
+        self._check_existing(self.target)
 
-    def _update_db(self, info, row):
-        """Update database by inserting updating or removing rows"""
-        if row and info is None:
-            self._db.remove_file(row[0])
-            return True
-        elif info and row is None:
-            public = info["stable"]
-            self._db.insert_file(self._rootpath, info["relpath"],
-                                 info["mtime"], info["stable"],
-                                 public, self._runid)
-            return True
-        elif info and row:
-            # run update in case fs has been modified
-            was_public = row[5]
-            info["public"] = was_public or info["stable"]
-            diff = (row[3] != info["mtime"] or row[4] != info["stable"] or row[5] != info["public"])
-            if diff:
-                self._db.update_file(row[0], info["mtime"], info["stable"], info["public"])
-            return diff
-        else:
+    def _check_existing(self, path):
+        l = os.listdir(path)
+        for name in l:
+            event = FakeEvent(path, name)
+            if self.recursive and event.dir:
+                self._check_existing(event.pathname)
+                continue
+
+            # We add the directory itself as well as any files
+            self.addUnstable(event)
+
+    def lookupState(self, pathname):
+        return self._db.get_file(self.target, pathname.replace(self.target, ""), self.runid)
+
+    def isStable(self, info):
+        if self.stabilize and self.stabilize > time.time() - info["mtime"]:
             return False
 
-    def _generate_event(self, info, row, diff=False, live=True):
-        """given fs info and row from db, generate 0 or 1 event of the correct type"""
-        # - ignore files that are already done
-        if row and row[6]:
-            return []
-        if info:
-            # insert or modify
-            # - ignore files that are not stable
-            if not info["stable"]:
-                return []
-            # - recall or not
-            elif not self._recall and not live:
-                # onInit - no recall
-                return [("onAdd", info)]
-            else:
-                was_public = row[5]
-                if info["stable"]:
-                    if was_public:
-                        if diff:
-                            # onModify
-                            return [("onModify", info)]
-                    else:
-                        # onAdd
-                        return [("onAdd", info)]
-        else:
-            # remove
-            # - ignore event if row was not public
-            if not row[5]:
-                print ("dropped - not stable")
-                return []
+        return True
 
-            # always events for live
-            if live or (self._recall and not live):
-                return [("onRemove", {"relpath": row[2], "rootpath": row[3]})]
-        return []
+    def addUnstable(self, event):
+        with self._lock:
+            self._unstable[event.pathname] = event
 
-    def _onInit(self, arg):
-        # file info from filesystem
-        idx_fs = {}
-        for dirpath, dirnames, files in os.walk(self._rootpath):
-            for filename in files:
-                arg = {"path": dirpath, "filename": filename}
-                info = self._get_path_info(arg)
-                idx_fs[info["relpath"]] = info
-            if not self._recursive:
-                break
+    def addStable(self, pathname, mtime):
+        self._db.insert_file(self.target, pathname.replace(self.target, ""), mtime, True, None, self.runid)
 
-        # file rows from db
-        idx_db = {}
-        for row in self._db.get_directory(self._rootpath, self._runid):
-            relpath = row[2]
-            idx_db[relpath] = row
+    def updateStable(self, pathname, mtime):
+        self._db.update_file(self.target, pathname.replace(self.target, ""), mtime, True)
 
-        # events
-        events = []
+    def setDone(self, path):
+        self._db.done_file(self.target, path.replace(self.target, ""), self.runid)
 
-        # ADDED OR MODIFIED FILES
-        for relpath, info in idx_fs.items():
-            # sync db to fs
-            row = idx_db.get(relpath, None)
-            diff = self._update_db(info, row)
-            events += self._generate_event(info, row, diff=diff, live=False)
-
-        # REMOVED FILES
-        for relpath, row in idx_db.items():
-            # sync db to fs
-            info = idx_fs.get(relpath, None)
-            if info is None:
-                diff = self._update_db(None, row)
-                events += self._generate_event(None, row, diff=diff, live=False)
-
-        # dispatch events
-        # - liveonly means that no events are dispatched from onInit
-        if not self._liveonly:
-            self._dispatch_events(events)
-
-    def _onAdd(self, arg):
-        """
-        live file create event detected
-        """
-        info = self._get_path_info(arg)
-        row = self._db.get_file(self._rootpath, info["relpath"], self._runid)
-        if row is None:
-            diff = self._update_db(info, None)
-            self._dispatch_events(self._generate_event(info, None, diff=diff))
-        else:
-            print("warning: create file event, but file is already in database")
-
-    def _onModify(self, arg):
-        """
-        live file modification event detected
-        """
-        info = self._get_path_info(arg)
-        row = self._db.get_file(self._rootpath, info["relpath"], self._runid)
-        if row is not None:
-            diff = self._update_db(info, row)
-            self._dispatch_events(self._generate_event(info, row, diff=diff))
-        else:
-            print("warning: modify file event, but file is not in database")
-
-    def _onRemove(self, arg):
-        """
-        filepath removed
-        clean up immediately
-        """
-        info = self._get_path_info(arg)
-        row = self._db.get_file(self._rootpath, info["relpath"], self._runid)
-        if row is not None:
-            diff = self._update_db(None, row)
-            self._dispatch_events(self._generate_event(None, row, diff=diff))
-        else:
-            print("warning: remove file event, but file is not in database")
-
-    def _onTimeout(self, arg):
-        """
-        periodic timeout
-        check if any of the unstable filepaths
-        have become stable
-        """
-        for row in self._db.get_directory(self._rootpath, self._runid):
-            was_stable = row[4]
-            if not was_stable:
-                arg = {'path': self._rootpath, 'filename': row[2]}
-                info = self._get_path_info(arg)
-                diff = self._update_db(info, row)
-                self._dispatch_events(self._generate_event(info, row, diff=diff))
-
-    def _onDone(self, arg):
-        self._db.done_file(self._rootpath, arg["relpath"], self._runid)
-
-    def _onReset(self, arg):
-        self._db.reset_files(self._rootpath, self._runid)
-        for row in self._db.get_directory(self._rootpath, self._runid):
-            pass
-
-    def _onError(self, message):
-        """
-        error
-        """
-        if self.onError:
-            self.onError(message)
-
-    def list(self):
-        """
-        list all filepaths that are watched
-        - include only those that both stable and public
-        """
-        rowList = self._db.get_directory(self._rootpath, self._runid)
-        return [row[2] for row in rowList if row[4] == True and row[5] == True]
-
-    def setDone(self, relpath):
-        """
-        one file completed
-        """
-        self._queue.put({"type": "onDone", "arg": {relpath: relpath}})
+    def removeFile(self, pathname):
+        f = self._db.get_file(self.target, pathname.replace(self.target, ""), self.runid)
+        if f:
+            self._db.remove_file(f[0])
 
     def reset(self):
         """
-        all files to be reset
+        Reset all files
         """
-        self._queue.put({"type": "onReset", "arg": None})
+        self._db.reset_files(self.target, self.runid)
+
+        # We now do an initial check again
+        self._check_existing(self.target)
+
+    def stop(self):
+        """
+        Stop the DirWatcher - it also stops if API.api_stop_event is set (API.shutdown() has been run)
+        """
+        self._stop_event.set()
 
     def run(self):
-        """
-        main loop
-        read messages from queue from periodic thread and inotify watch thread.
-        """
-        self._watchThread.start()
-
-        # initialise
-        self._queue.put({"type": "onInit", "arg": None})
-
-        # listen for messages on queue
-        ts = time.time()
-        while not CryoCore.API.api_stop_event.isSet():
+        next_check = 0
+        while not CryoCore.API.api_stop_event.isSet() and not self._stop_event.isSet():
+            if self.notifier.check_events(timeout=250):
+                self.notifier.read_events()
+                self.notifier.process_events()
+            # Do we have any unstable files?
+            if time.time() < next_check:
+                continue
+            next_check = time.time() + 0.25
             try:
-                msg = self._queue.get(True, 1)
-                getattr(self, "_" + msg["type"])(msg.get("arg", None))
-            except Queue.Empty:
-                if time.time() - ts > self._period:
-                    self._queue.put({"type": "onTimeout"})
-                    ts = time.time()
-                continue
-            except AttributeError:
-                traceback.print_exc()
-                continue
+                q = []
+                with self._lock:
+                    for k in self._unstable:
+                        if self.stabilize and time.time() - self._unstable[k].mtime < self.stabilize:
+                            # We won't wait longer than we need
+                            next_check = min(next_check, self._unstable[k].mtime + self.stabilize + 0.01)
+                            continue
+                        q.append((k, self._unstable[k]))
+                    for k, event in q:
+                        del self._unstable[k]
 
-        self._watchThread.join()
+                for k, event in q:
+                    self.monitor.process_IN_MODIFY(event)
+            except Queue.Empty:
+                pass
+
+        self.notifier.stop()
 
 
 if __name__ == '__main__':
 
-    ROOTPATH = "foo"
-
-    import sys
-    if len(sys.argv) > 1:
-        ROOTPATH = sys.argv[1]
-
-    def onAdd(filepath):
-        print ("--onAdd", filepath)
-
-    def onModify(filepath):
-        print ("--onModify", filepath)
-
-    def onRemove(filepath):
-        print ("--onRemove", filepath)
-
-    def onError(message):
-        print ("--onError", message)
-
-    # watch directory
-    RUNID = 1
-    dw = DirectoryWatcher(RUNID, ROOTPATH, onAdd=onAdd, onModify=onModify,
-                          onRemove=onRemove, onError=onError,
-                          recursive=True, stabilize=3, liveonly=False, recall=False)
-    dw.start()
-
     try:
-        #dw.reset()
+        ROOTPATH = "foo"
+
+        import sys
+        if len(sys.argv) > 1:
+            ROOTPATH = sys.argv[1]
+
+        def onAdd(filepath):
+            print("--onAdd", filepath)
+
+        def onModify(filepath):
+            print("--onModify", filepath)
+
+        def onRemove(filepath):
+            print("--onRemove", filepath)
+
+        def onError(message):
+            print("--onError", message)
+
+        # watch directory
+        RUNID = 1
+        dw = DirectoryWatcher(RUNID, ROOTPATH, onAdd=onAdd, onModify=onModify,
+                              onRemove=onRemove, onError=onError,
+                              recursive=True, stabilize=3)
+        dw.start()
+
+        # dw.reset()
         while True:
             time.sleep(1)
     except KeyboardInterrupt:

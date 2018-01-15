@@ -13,6 +13,8 @@ def process_task(worker, task):
 
     gpu = False
     env = {}
+    dirs = []
+    args = []
 
     if "gpu" in task["args"] and task["args"]["gpu"]:
         gpu = True
@@ -33,8 +35,18 @@ def process_task(worker, task):
     if "dirs" in task["args"]:
         dirs = task["args"]["dirs"]
 
-    dp = DockerProcess(target, worker.status, worker.log, API.api_stop_event, dirs=dirs, env=env, gpu=gpu)
-    dp.run()
+    if "arguments" in task["args"]:
+        print("Got arguments")
+        args = task["args"]["arguments"]
+
+    log_all = False
+    if "log_all" in task["args"]:
+        log_all = task["args"]["log_all"]
+
+    dp = DockerProcess(target, worker.status, worker.log, API.api_stop_event,
+                       dirs=dirs, env=env, gpu=gpu, args=args, log_all=log_all)
+    # cancel_event=cancel_event)  # Doesn't work
+    retval = dp.run()
 
     worker.log.debug("Docker completed")
-    return worker.status["progress"].get_value(), None
+    return worker.status["progress"].get_value(), retval

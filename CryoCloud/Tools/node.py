@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
 from __future__ import print_function
@@ -6,6 +6,7 @@ import sys
 import psutil
 import time
 import socket
+import os
 from argparse import ArgumentParser
 try:
     import argcomplete
@@ -29,27 +30,46 @@ try:
 except:
     import importlib as imp
 
-sys.path.append("CryoCloud/Modules/")
-
 
 modules = {}
 
+CC_DIR = os.getcwd()
+sys.path.append(os.path.join(CC_DIR, "CryoCloud/Modules/"))  # Add CC modules with full path
+sys.path.append(".")  # Add module path for the working dir of the job
+sys.path.append("./Modules/")  # Add module path for the working dir of the job
 
-def load(modulename):
 
+API.cc_default_expire_time = 24 * 86400  # Default log & status only 7 days
+
+
+def load(modulename, path=None):
+    # print("LOADING MODULE", modulename)
     # TODO: Also allow getmodulename here to allow modulename to be a .py file
     if modulename.endswith(".py"):
         import inspect
         modulename = inspect.getmodulename(modulename)
 
-    if modulename not in modules:
+    if 1 or modulename not in modules:  # Seems for python3, reload is deprecated. Check for python 2
         try:
-            info = imp.find_module(modulename)
+            if path and path.__class__ != list:
+                path = [path]
+            info = imp.find_module(modulename, path)
             modules[modulename] = imp.load_module(modulename, info[0], info[1], info[2])
-        except:
+        except ImportError as e:
+            try:
+                print("Trying importlib")
+                import importlib
+                modules[modulename] = importlib.import_module(modulename)
+                return
+            except Exception as e2:
+                print("Exception using importlib too", e2)
+                pass
+            raise e
+        except Exception as e:
+            print("imp load failed", e)
             modules[modulename] = imp.import_module(modulename)
-
-    imp.reload(modules[modulename])
+    else:
+        imp.reload(modules[modulename])
     return modules[modulename]
 
 
@@ -57,11 +77,12 @@ class Worker(multiprocessing.Process):
 
     def __init__(self, workernum, stopevent, type=jobdb.TYPE_NORMAL):
         super(Worker, self).__init__()
+        API.api_auto_init = False  # Faster startup
 
-        self._stop_event = stopevent
+        # self._stop_event = stopevent
+        self._stop_event = threading.Event()
         self._manager = None
         self.workernum = workernum
-
         self._name = None
         self._jobid = None
         self.module = None
@@ -69,38 +90,47 @@ class Worker(multiprocessing.Process):
         self.status = None
         self.inqueue = None
         self._is_ready = False
-        self.stop_event = API.api_stop_event
         self._type = type
         self._worker_type = jobdb.TASK_TYPE[type]
         self.wid = "%s-%s_%d" % (self._worker_type, socket.gethostname(), self.workernum)
-
         self._current_job = (None, None)
-
         print("%s %s created" % (self._worker_type, workernum))
 
     def _switchJob(self, job):
         if self._current_job == (job["runname"], job["module"]):
             # Same job
-            return
+            # return
+            pass
 
-        print("Switching job from", self._current_job, (job["runname"], job["module"]))
+        if "workdir" in job and job["workdir"]:
+            if not os.path.exists(job["workdir"]):
+                raise Exception("Working directory '%s' does not exist" % job["workdir"])
+            os.chdir(job["workdir"])
+        else:
+            os.chdir(CC_DIR)
+
         self._current_job = (job["runname"], job["module"])
         self._module = None
-
+        modulepath = None
+        if "modulepath" in job:
+            modulepath = job["modulepath"]
         try:
+            path = None
+            if modulepath:
+                path = [modulepath]
             self._module = job["module"]
             if self._module == "test":
                 self._module = None
             else:
-                self.log.debug("Loading module %s" % self._module)
-                self._module = load(self._module)
-                print("Loading of", self._module, "successful")
+                self.log.debug("Loading module %s (%s)" % (self._module, path))
+                self._module = load(self._module, path)
+                self.log.debug("Loading of %s successful", job["module"])
         except Exception as e:
             self._is_ready = False
             print("Import error:", e)
             self.status["state"] = "Import error"
             self.status["state"].set_expire_time(3 * 86400)
-            self.log.exception("Failed to get module")
+            self.log.exception("Failed to get module %s" % job["module"])
             raise e
         try:
             self.log.info("%s allocated to job %s of %s (%s)" % (self._worker_type, job["id"], job["runname"], job["module"]))
@@ -122,21 +152,29 @@ class Worker(multiprocessing.Process):
 
         def sighandler(signum, frame):
             print("%s GOT SIGNAL" % self._worker_type)
+            # API.shutdown()
             self._stop_event.set()
 
         signal.signal(signal.SIGINT, sighandler)
-
         self.log = API.get_log(self.wid)
         self.status = API.get_status(self.wid)
         self._jobdb = jobdb.JobDB(None, None)
-
+        self.status["state"].set_expire_time(600)
+        last_reported = 0  # We force periodic updates of state as we might be idle for a long time
         while not self._stop_event.is_set():
             try:
                 jobs = self._jobdb.allocate_job(self.workernum, node=socket.gethostname(), max_jobs=1, type=self._type)
                 if len(jobs) == 0:
                     time.sleep(1)
+                    if last_reported + 300 > time.time():
+                        self.status["state"] = "Idle"
+                    else:
+                        self.status["state"].set_value("Idle", force_update=True)
+                        last_reported = time.time()
                     continue
                 job = jobs[0]
+                self.status["current_job"] = job["id"]
+                self._job_in_progress = job
                 print("Got job", job)
                 self._switchJob(job)
                 if not self._is_ready:
@@ -147,6 +185,9 @@ class Worker(multiprocessing.Process):
             except Empty:
                 self.status["state"] = "Idle"
                 continue
+            except KeyboardInterrupt:
+                self.status["state"] = "Stopped"
+                break
             except Exception as e:
                 print("No job", e)
                 # log.error("Failed to get job")
@@ -154,9 +195,23 @@ class Worker(multiprocessing.Process):
                 # Likely a manager crash - reconnect
                 time.sleep(5)
                 continue
+            finally:
+                self._job_in_progress = None
 
+        # print(self._worker_type, self.wid, "stopping")
+        # self._stop_event.set()
         print(self._worker_type, self.wid, "stopped")
         self.status["state"] = "Stopped"
+
+        # If we were not done we should update the DB
+        self._jobdb.force_stopped(self.workernum, node=socket.gethostname())
+
+    def stop_job(self):
+        try:
+            self._module.stop_job()
+        except Exception as e:
+            print("WARNING: Failed to stop job: %s" % e)
+            pass
 
     def process_task(self, task):
         """
@@ -184,36 +239,73 @@ class Worker(multiprocessing.Process):
 
         # Report that I'm on it
         start_time = time.time()
-        self.status["state"] = "Processing"
 
         self.log.debug("Processing job %s" % str(task))
         self.status["progress"] = 0
 
+        cancel_event = threading.Event()
+        stop_monitor = threading.Event()
+
+        def monitor():
+            while not self._stop_event.isSet() and not cancel_event.isSet() and not stop_monitor.isSet():
+                status = self._jobdb.get_job_state(task["id"])
+                if stop_monitor.isSet():
+                    break
+                if status == jobdb.STATE_CANCELLED:
+                    self.log.info("Cancelling job on request")
+                    cancel_event.set()
+                elif status is None:
+                    self.log.info("Cancelling job as it was removed from the job db")
+                    cancel_event.set()
+                time.sleep(1)
+
         new_state = jobdb.STATE_FAILED
+        canStop = False
+        import inspect
+        members = inspect.getmembers(self._module)
+        for name, member in members:
+            if name == "process_task":
+                if len(inspect.getargspec(member).args) > 2:
+                    canStop = True
+                    break
+
+        if canStop:
+            t = threading.Thread(target=monitor)
+            t.daemon = True
+            t.start()
+
         try:
             if self._module is None:
                 progress, ret = self.process_task(task)
             else:
-                progress, ret = self._module.process_task(self, task)
+                if canStop:
+                    progress, ret = self._module.process_task(self, task, cancel_event)
+                else:
+                    progress, ret = self._module.process_task(self, task)
+
+            # Stop the monitor if it's running
+            stop_monitor.set()
             task["progress"] = progress
             if int(progress) != 100:
                 raise Exception("ProcessTask returned unexpected progress: %s vs 100" % progress)
             task["result"] = "Ok"
             new_state = jobdb.STATE_COMPLETED
             self.status["last_processing_time"] = time.time() - start_time
+            self.status["state"] = "Done"
         except Exception as e:
             print("Processing failed", e)
             self.log.exception("Processing failed")
             task["result"] = "Failed"
             self.status["num_errors"].inc()
             self.status["last_error"] = str(e)
-            ret = None
+            self.status["state"] = "Failed"
+            ret = str(e)
 
         task["state"] = "Stopped"
         task["processing_time"] = time.time() - start_time
 
         # Update to indicate we're done
-        self._jobdb.update_job(task["id"], new_state, ret)
+        self._jobdb.update_job(task["id"], new_state, retval=ret)
 
 
 class NodeController(threading.Thread):
@@ -243,7 +335,7 @@ class NodeController(threading.Thread):
             self._worker_pool.append(w)
 
         for i in range(0, int(options.adminworkers)):
-            print ("Starting adminworker %d" % i)
+            print("Starting adminworker %d" % i)
             aw = Worker(i, self._stop_event, type=jobdb.TYPE_ADMIN)
             aw.start()
             self._worker_pool.append(aw)
@@ -251,6 +343,7 @@ class NodeController(threading.Thread):
         self.cfg = API.get_config("NodeController")
         self.cfg.set_default("expire_time", 86400)  # Default one day expire time
         self.cfg.set_default("sample_rate", 5)
+
         # My name
         self.name = "NodeController." + socket.gethostname()
         # TODO: CHECK IF A NODE CONTROLLER IS ALREADY RUNNING ON THIS DEVICE (remotestatus?)
@@ -304,7 +397,6 @@ class NodeController(threading.Thread):
                 except:
                     self._manager = None
                     self.log.exception("Job description failed!")
-
             time_left = max(0, self.cfg["sample_rate"] + time.time() - last_run)
             time.sleep(time_left)
 
@@ -325,7 +417,7 @@ class NodeController(threading.Thread):
 
 if __name__ == "__main__":
 
-    parser = ArgumentParser(description="Pretend to be a HEAD node in processing")
+    parser = ArgumentParser(description="Worker node")
 
     parser.add_argument("-n", "--num-workers", dest="workers",
                         default=None,
@@ -343,9 +435,20 @@ if __name__ == "__main__":
 
     options = parser.parse_args()
 
+    if not options.cpu_count:
+        try:
+            psutil.num_cpus()
+        except:
+            try:
+                import multiprocessing
+                options.cpu_count = multiprocessing.cpu_count()
+            except:
+                raise SystemExit("Can't detect number of CPUs, please specify with --cpus")
+
     import signal
     try:
         node = NodeController(options)
+        node.daemon = True
         node.start()
 
         def sighandler(signum, frame):
@@ -359,6 +462,9 @@ if __name__ == "__main__":
         signal.signal(signal.SIGINT, sighandler)
 
         while not API.api_stop_event.isSet():
-            time.sleep(1)
+            try:
+                time.sleep(1)
+            except KeyboardInterrupt:
+                break
     finally:
         API.shutdown()

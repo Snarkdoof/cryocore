@@ -3,6 +3,8 @@ import time
 import threading
 
 from CryoCore import API
+from CryoCore.Core import Config
+from CryoCore.Core.Utils import logTiming
 
 stop_event = threading.Event()
 
@@ -14,6 +16,12 @@ class ConfigTest(unittest.TestCase):
     """
     def setUp(self):
         self.cfg = API.get_config("UnitTest", version="unittest")
+        if self.cfg["TestBasic"]:
+            print("Cleaning up old crud - bad cleanup?")
+            self.cfg.remove("TestBasic")
+        if self.cfg["TestName"]:
+            print("Cleaning up old crud - bad cleanup?")
+            self.cfg.remove("TestName")
         self.cfg.set_default("TestName", "TestNameValue")
         self.cfg.set_default("TestBasic.One", 1)
         self.cfg.set_default("TestBasic.Float", 3.14)
@@ -21,9 +29,11 @@ class ConfigTest(unittest.TestCase):
 
     def tearDown(self):
         API.get_config(version="unittest").remove("UnitTest")
+        # API.get_config().delete_version("unittest")
+        pass
 
     def testBasic(self):
-
+        self.assertEqual(self.cfg.__class__, Config.NamedConfiguration, "Wrong ")
         self.cfg.require(["TestName", "TestBasic.One", "TestBasic.Float", "TestBasic.True"])
         try:
             self.cfg.require(["DoesNotExist", "TestName"])
@@ -31,17 +41,58 @@ class ConfigTest(unittest.TestCase):
         except:
             pass
 
-        self.assertEquals(self.cfg["TestName"], "TestNameValue")
-        self.assertEquals(self.cfg["TestBasic.One"], 1)
-        self.assertEquals(self.cfg["TestBasic.Float"], 3.14)
-        self.assertEquals(self.cfg["TestBasic.True"], True)
+        # These should be ignored
+        self.cfg.set_default("TestName", "TestNameFoo")
+        self.cfg.set_default("TestBasic.One", 42)
+        self.cfg.set_default("TestBasic.Float", 42.21)
+        self.cfg.set_default("TestBasic.True", False)
+
+        self.assertEqual(self.cfg["TestName"], "TestNameValue")
+        self.assertEqual(self.cfg["TestBasic.One"], 1)
+        self.assertEqual(self.cfg["TestBasic.Float"], 3.14)
+        self.assertEqual(self.cfg["TestBasic.True"], True)
 
         # Ready to test some stuff
         cfg2 = API.get_config(version="unittest")
-        self.assertEquals(self.cfg["TestName"], cfg2["UnitTest.TestName"])
-        self.assertEquals(self.cfg["TestBasic.One"], cfg2["UnitTest.TestBasic.One"])
-        self.assertEquals(self.cfg["TestBasic.Float"], cfg2["UnitTest.TestBasic.Float"])
-        self.assertEquals(self.cfg["TestBasic.True"], cfg2["UnitTest.TestBasic.True"])
+        self.assertEqual(self.cfg["TestName"], cfg2["UnitTest.TestName"])
+        self.assertEqual(self.cfg["TestBasic.One"], cfg2["UnitTest.TestBasic.One"])
+        self.assertEqual(self.cfg["TestBasic.Float"], cfg2["UnitTest.TestBasic.Float"])
+        self.assertEqual(self.cfg["TestBasic.True"], cfg2["UnitTest.TestBasic.True"])
+
+        children = self.cfg.get("TestBasic").children
+        expected = ["One", "Float", "True"]
+        for child in children:
+            self.assertTrue(child.name in expected)
+            expected.remove(child.name)
+
+        # Let cache expire
+        time.sleep(2.0)
+        children = self.cfg.get("TestBasic").children
+        expected = ["One", "Float", "True"]
+        for child in children:
+            self.assertTrue(child.name in expected)
+            expected.remove(child.name)
+
+        root_children = self.cfg.get(None).children
+        expected = ["TestName", "TestBasic"]
+        for child in root_children:
+            self.assertTrue(child.name in expected)
+            expected.remove(child.name)
+
+        # leaves = self.cfg.get_leaves(recursive=False)
+        # self.assertEqual(leaves, ["TestName"])
+
+        # leaves = self.cfg.get_leaves(recursive=True)
+        # expected = ["TestName", "TestBasic.One", "TestBasic.Float", "TestBasic.True"]
+        # for l in expected:
+        #    if l not in leaves:
+        #        self.fail("get_leaves() returns bad, expected '%s' got '%s'" % (expected, leaves))
+
+        # leaves = self.cfg.get_leaves("TestBasic", recursive=False)
+        # expected = ["One", "Float", "True"]
+        # for l in expected:
+        #    if l not in leaves:
+        #        self.fail("get_leaves() returns bad, expected '%s' got '%s'" % (expected, leaves))
 
     def testVersions(self):
         cfg2 = API.get_config(version="SecondTest")
@@ -51,25 +102,28 @@ class ConfigTest(unittest.TestCase):
     def testCleanup(self):
         cfg = API.get_config(version="unittest")
         cfg2 = API.get_config(version="SecondTest")
+
+        # Config.DEBUG = True
         try:
-            cfg2.get("UnitTest")  # Must use get(), not operator [] as folders typically have the value None
-            print("Cleaning up old crud from likely failed test")
+            cfg2.get("UnitTest")
+            print("Cleaning up old crud - bad cleanup?")
             cfg2.remove("UnitTest")
         except:
-            pass
+            pass  # Wasn't supposed to be there, all good
 
         cfg2.set_default("UnitTest.TestParam", "TestValue")
-        self.assertEquals(cfg2["UnitTest.TestParam2"], None, "Have a parameter I wasn't expecting")
+        self.assertEqual(cfg2["UnitTest.TestParam2"], None, "Have a parameter I wasn't expecting")
 
         cfg2["UnitTest.TestParam2"] = "TestValue2"
-        self.assertEquals(cfg2["UnitTest.TestParam2"], "TestValue2", "Implicit create failed")
-        self.assertEquals(cfg2["UnitTest.TestParam"], "TestValue", "Set default create failed")
+        Config.DEBUG = False
+        self.assertEqual(cfg2["UnitTest.TestParam2"], "TestValue2", "Implicit create failed")
+        self.assertEqual(cfg2["UnitTest.TestParam"], "TestValue", "Set default create failed")
 
         cfg2.remove("UnitTest.TestParam")
-        self.assertEquals(cfg2["UnitTest.TestParam"], None, "Remove of subtree failed: %s" % cfg2["UnitTest.TestParam"])
+        self.assertEqual(cfg2["UnitTest.TestParam"], None, "Remove of subtree failed: %s" % cfg2["UnitTest.TestParam"])
 
         cfg2.remove("UnitTest")
-        self.assertEquals(cfg2["UnitTest.TestParam2"], None, "Remove of folder failed (subelem exists)")
+        self.assertEqual(cfg2["UnitTest.TestParam2"], None, "Remove of folder failed (subelem exists)")
         try:
             cfg2.get("UnitTest")
             self.fail("Remove of folder failed")
@@ -78,7 +132,8 @@ class ConfigTest(unittest.TestCase):
 
         try:
             cfg.get("UnitTest")
-        except:
+        except Exception as e:
+            print("EXCEPTION", e)
             self.fail("Cleaning does not respect versions")
 
     def testChange(self):
@@ -93,20 +148,25 @@ class ConfigTest(unittest.TestCase):
         self.cfg.get("TestBasic.Float").set_value(2.3)
         self.cfg.get("TestBasic.One").set_comment("A comment")
 
-        time.sleep(0.1)  # Allow a bit of time for async callbacks
+        time.sleep(1.0)  # Allow a bit of time for async callbacks
 
         # Verify
         self.assertTrue("UnitTest.TestBasic.One" in last_val, "Missing change on One")
         self.assertTrue("UnitTest.TestBasic.Float" in last_val, "Missing change on Float")
 
-        self.assertEquals(last_val["UnitTest.TestBasic.One"][0], 2)
-        self.assertEquals(last_val["UnitTest.TestBasic.Float"][0], 2.3)
-        self.assertEquals(last_val["UnitTest.TestBasic.One"][1], "A comment")
+        self.assertEqual(last_val["UnitTest.TestBasic.One"][0], 2)
+        self.assertEqual(last_val["UnitTest.TestBasic.Float"][0], 2.3)
+        self.assertEqual(last_val["UnitTest.TestBasic.One"][1], "A comment")
 
     def testSearch(self):
+
+        # Search is actually a bit strange, as it always searches from the absolute root.
         expected = ["UnitTest", "UnitTest.TestBasic", "UnitTest.TestName", "UnitTest.TestBasic.One", "UnitTest.TestBasic.True"]
         elems = self.cfg.search("e")
-        self.assertEquals(len(elems), len(expected))
+        res = [elem.get_full_path() for elem in elems]
+        res.sort()
+        expected.sort()
+        self.assertEqual(res, expected)
         for elem in elems:
             path = elem.get_full_path()
             self.assertTrue(path in expected, "'%s' was not expected" % path)
@@ -117,14 +177,44 @@ class ConfigTest(unittest.TestCase):
         except:
             pass
 
+    def testLookupSpeed(self):
+        time.sleep(1)  # Let cache expire
+        start_time = time.time()
+        self.cfg["TestBasic.One"]
+        first_lookup = time.time() - start_time
+
+        # The next ones should be much, much quicker
+        start_time = time.time()
+        for i in range(0, 100):
+            self.cfg["TestBasic.One"]
+        second_lookup = time.time() - start_time
+        # print(first_lookup, "vs", second_lookup)
+        self.assertTrue(first_lookup > (second_lookup / 10))
+
+    def testEmpty(self):
+        cfg = API.get_config("This.does.not.exist", version="unittest")
+        self.assertEqual(cfg.keys(), [])
+        cfg.set_default("it_does_now", True)
+
+        self.assertEqual(cfg["it_does_now"], True)
+        self.assertEqual(cfg.keys(), ["it_does_now"])
+
+        self.cfg.remove("This")
+        self.assertEqual(cfg.keys(), [])
+
+
 if __name__ == "__main__":
 
     print("Testing Configuration module")
 
     try:
-        unittest.main()
+        if 0:
+            import cProfile
+            cProfile.run("unittest.main()")
+        else:
+            unittest.main()
     finally:
-        from CryoCore import API
+        # from CryoCore import API
         stop_event.set()
         API.shutdown()
 

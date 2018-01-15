@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import os
 import sys
 import curses
 from CryoCore import API
@@ -172,7 +171,7 @@ class Category:
                 screen.hline(line, x + len(displayName) + 1, "-", width - (x + len(displayName)) - truncateLength, color)
                 screen.hline(line, width - truncateLength, "=", truncateLength, color)
                 screen.addstr(line, width - truncateLength - 2, "+=", color)
-        except Exception as e:
+        except Exception:
             pass
 
 
@@ -263,7 +262,6 @@ class Editor:
 
     def render(s):
         color = s.color if s.editing else curses.color_pair(0)
-        lines = []
         with open("./cui-log.txt", "a+") as file:
             file.write(toStr(s.value))
             file.write("\n")
@@ -511,6 +509,9 @@ class ConsoleUI:
         s.setPrompt(s.promptStack[-1][0], s.promptStack[-1][1])
 
 if __name__ == "__main__":
+    API.__is_direct = True
+    API.auto_init = False
+
     parser = ArgumentParser(description="Tree view of CryoCore configuration")
     parser.add_argument("--fullkeys", action="store_true", default=False, help="Use full keys")
     parser.add_argument("-v", "--version", dest="version", default=None, help="Version to operate on")
@@ -518,14 +519,17 @@ if __name__ == "__main__":
     options = parser.parse_args()
     if options.fullkeys:
         fullkeys = True
-    cfg = API.get_config()
-    if options.version:
-        try:
-            cfg.set_version(options.version)
-            cfg = API.get_config(version=options.version)
-        except Config.NoSuchVersionException:
-            raise SystemExit("version <%s> does not exist in list: <%s>. Aborting." % (options.version,",".join(map(str,cfg.list_versions()))))
-    
+    try:
+        cfg = API.get_config()
+        if options.version:
+            try:
+                cfg.set_version(options.version)
+                cfg = API.get_config(version=options.version)
+            except Config.NoSuchVersionException:
+                raise SystemExit("version <%s> does not exist in list: <%s>. Aborting." %
+                                 (options.version, ",".join(map(str, cfg.list_versions()))))
 
-    ui = ConsoleUI()
-    curses.wrapper(startUI)
+        ui = ConsoleUI()
+        curses.wrapper(startUI)
+    finally:
+        API.shutdown()

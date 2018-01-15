@@ -7,7 +7,6 @@ if sys.version_info.major == 2:
 else:
     import queue
 
-
 # Global Variables to save all the Status_holders object and to access to them through a Lock
 
 status_holders = {}
@@ -355,6 +354,8 @@ class StatusHolder(threading.Thread):
                 e = self.create_status_element(name, initial_value, expire_time=expire_time)
                 self._add_element(e)
                 return e
+            elif expire_time:
+                self.elements[name].set_expire_time(expire_time)
             return self.elements[name]
 
     def get_or_create_status2d_element(self, name, size, initial_value=None, expire_time=None):
@@ -402,7 +403,8 @@ class StatusHolder(threading.Thread):
         @raise AssertionError: from L{get_or_create_status_element<get_or_create_status_element>}.
         @raise Exception: from L{get_or_create_status_element<get_or_create_status_element>}.
         """
-        self.get_or_create_status_element(key).set_value(value)
+        from CryoCore.Core.API import cc_default_expire_time
+        self.get_or_create_status_element(key, expire_time=cc_default_expire_time).set_value(value)
 
     def __getitem__(self, key):
         """
@@ -414,7 +416,8 @@ class StatusHolder(threading.Thread):
         @raise AssertionError: from L{get_or_create_status_element<get_or_create_status_element>}.
         @raise Exception: from L{get_or_create_status_element<get_or_create_status_element>}.
         """
-        return self.get_or_create_status_element(key)
+        from CryoCore.Core.API import cc_default_expire_time
+        return self.get_or_create_status_element(key, expire_time=cc_default_expire_time)
 
     def remove_status_element(self, element):
         """
@@ -727,7 +730,7 @@ class BaseElement:
             self.callbacks = []
 
     def set_expire_time(self, expire_time):
-        self._exire_time = expire_time
+        self._expire_time = expire_time
 
     def get_expire_time(self):
         if self._expire_time is None:

@@ -54,7 +54,7 @@ def bytes_to_string(bytes):
                   ("KB", 1024)]
 
     for (type, size) in knownSizes:
-        if bytes / size > 0:
+        if bytes / size > 0.5:
             return "%0.1f%s" % (bytes / float(size), type)
 
     return "%d Bytes" % int(bytes)

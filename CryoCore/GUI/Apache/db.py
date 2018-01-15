@@ -125,7 +125,7 @@ class StatusDB(sqldb):
         sqldb.__init__(self, name, cfg, db_name=db_name)
 
         init_sqls = ["""CREATE TABLE IF NOT EXISTS items (
-item_key VARCHAR(255) PRIMARY KEY,
+item_key VARCHAR(160) PRIMARY KEY,
 value TEXT)"""]
         self._init_sqls(init_sqls)
 
@@ -221,9 +221,9 @@ value TEXT)"""]
         if channel not in channel_ids:
             self.get_channels()
 
-        cursor = self._execute("SELECT paramid, name FROM status_parameter WHERE chanid=? ORDER BY name", [channel_ids[channel]])
+        cursor = self._execute("SELECT paramid, name FROM status_parameter WHERE chanid=%s ORDER BY name", [channel_ids[channel]])
         if DEBUG:
-            self.log.debug("SELECT paramid, name FROM status_parameter WHERE chanid=? ORDER BY name" + str([channel_ids[channel]]))
+            self.log.debug("SELECT paramid, name FROM status_parameter WHERE chanid=%s ORDER BY name" + str([channel_ids[channel]]))
         params = []
         global param_ids
         for row in cursor.fetchall():
@@ -232,7 +232,7 @@ value TEXT)"""]
                 param_ids[fullname] = row[0]
             params.append(row[1])
 
-        cursor = self._execute("SELECT paramid, name FROM status_parameter2d WHERE chanid=? ORDER BY name", [channel_ids[channel]])
+        cursor = self._execute("SELECT paramid, name FROM status_parameter2d WHERE chanid=%s ORDER BY name", [channel_ids[channel]])
         for row in cursor.fetchall():
             fullname = channel + "." + row[1]
             if fullname not in param_ids:
@@ -245,9 +245,9 @@ value TEXT)"""]
         if channel not in channel_ids:
             self.get_channels()
 
-        cursor = self._execute("SELECT paramid, name FROM status_parameter WHERE chanid=? ORDER BY name", [channel_ids[channel]])
+        cursor = self._execute("SELECT paramid, name FROM status_parameter WHERE chanid=%s ORDER BY name", [channel_ids[channel]])
         if DEBUG:
-            self.log.debug("SELECT paramid, name FROM status_parameter WHERE chanid=? ORDER BY name" + str([channel_ids[channel]]))
+            self.log.debug("SELECT paramid, name FROM status_parameter WHERE chanid=%s ORDER BY name" + str([channel_ids[channel]]))
         params = []
         global param_ids
         for row in cursor.fetchall():
@@ -256,9 +256,9 @@ value TEXT)"""]
                 param_ids[fullname] = row[0]
             params.append((row[0], row[1]))
 
-        cursor = self._execute("SELECT paramid, name, sizex, sizey FROM status_parameter2d WHERE chanid=? ORDER BY name", [channel_ids[channel]])
+        cursor = self._execute("SELECT paramid, name, sizex, sizey FROM status_parameter2d WHERE chanid=%s ORDER BY name", [channel_ids[channel]])
         if DEBUG:
-            self.log.debug("SELECT paramid, name FROM status_parameter2d WHERE chanid=? ORDER BY name" + str([channel_ids[channel]]))
+            self.log.debug("SELECT paramid, name FROM status_parameter2d WHERE chanid=%s ORDER BY name" + str([channel_ids[channel]]))
         global param_ids
         for row in cursor.fetchall():
             fullname = channel + "." + row[1]

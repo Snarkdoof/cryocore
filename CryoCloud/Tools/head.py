@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
 from __future__ import print_function
@@ -6,6 +6,9 @@ import sys
 import time
 from argparse import ArgumentParser
 import threading
+
+import inspect
+import os.path
 
 try:
     import argcomplete
@@ -21,6 +24,8 @@ try:
 except:
     import importlib as imp
 modules = {}
+
+API.cc_default_expire_time = 24 * 86400  # Default log & status only 1 days
 
 
 def load(modulename):
@@ -39,7 +44,8 @@ def load(modulename):
 
 
 class HeadNode(threading.Thread):
-    def __init__(self, options):
+
+    def __init__(self, handler, options):
         threading.Thread.__init__(self)
 
         self.name = "%s.HeadNode" % (options.name)
@@ -57,7 +63,18 @@ class HeadNode(threading.Thread):
                        (self.name, self.options.steps, self.options.tasks))
 
         # Load the handler
-        self.handler = load(options.handler).Handler()
+        self.handler = handler.Handler()  # load(options.handler).Handler()
+        print("HANDLER", self.handler.__module__)
+
+        self.PRI_HIGH = jobdb.PRI_HIGH
+        self.PRI_NORMAL = jobdb.PRI_NORMAL
+        self.PRI_LOW = jobdb.PRI_LOW
+        self.PRI_BULK = jobdb.PRI_BULK
+
+        self.TYPE_NORMAL = jobdb.TYPE_NORMAL
+        self.TYPE_ADMIN = jobdb.TYPE_ADMIN
+        self.TYPE_MANUAL = jobdb.TYPE_MANUAL
+
         self.handler.head = self
         self.step = 0
 
@@ -76,10 +93,10 @@ class HeadNode(threading.Thread):
         except:
             pass
 
-    def makeDirectoryWatcher(self, dir, onAdd=None, onModify=None, onRemove=None, onError=None, stabilize=5, recursive=True):
+    def makeDirectoryWatcher(self, dir, onAdd=None, onModify=None, onRemove=None, onError=None,
+                             stabilize=5, recursive=True):
             return CryoCloud.Common.DirectoryWatcher(self._jobdb._runid,
                                                      dir,
-                                                     jobDB=self._jobdb,
                                                      onAdd=onAdd,
                                                      onModify=onModify,
                                                      onRemove=onRemove,
@@ -87,12 +104,16 @@ class HeadNode(threading.Thread):
                                                      stabilize=stabilize,
                                                      recursive=recursive)
 
-    def add_job(self, step, taskid, args, jobtype=jobdb.TYPE_NORMAL, priority=jobdb.PRI_NORMAL, node=None, expire_time=None, module=None):
+    def add_job(self, step, taskid, args, jobtype=jobdb.TYPE_NORMAL, priority=jobdb.PRI_NORMAL,
+                node=None, expire_time=None, module=None, modulepath=None, workdir=None):
         if expire_time is None:
             expire_time = self.options.max_task_time
-        self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module)
-        if step > self.status["progress"].size[0]:
-            self.status.new2d("progress", (self.options.steps, self.options.tasks), expire_time=3*81600, initial_value=0)
+        self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module, node=node, priority=priority,
+                            modulepath=modulepath, workdir=workdir, jobtype=jobtype)
+        if self.options.steps > 0 and self.options.tasks > 0:
+            if step > self.status["progress"].size[0]:
+                self.status.new2d("progress", (self.options.steps, self.options.tasks),
+                                  expire_time=3 * 81600, initial_value=0)
 
         self.status["progress"].set_value((step - 1, taskid), 1)
         self.status["tasks_created"].inc(1)
@@ -101,7 +122,8 @@ class HeadNode(threading.Thread):
         if expire_time is None:
             expire_time = expire_time = job["expire_time"]
         self._jobdb.remove_job(job["id"])
-        self.add_job(job["step"], job["taskid"], job["args"], jobtype=job["type"], priority=job["priority"], node=node, expire_time=expire_time, module=job["module"])
+        self.add_job(job["step"], job["taskid"], job["args"], jobtype=job["type"],
+                     priority=job["priority"], node=node, expire_time=expire_time, module=job["module"])
 
     def remove_job(self, job):
         if job.__class__ == int:
@@ -114,17 +136,19 @@ class HeadNode(threading.Thread):
             self._jobdb.remove(i)
 
     def start_step(self, step):
-        print("Starting step", step, "progress size is", self.status["progress"].size)
 
-        if step > self.status["progress"].size[0]:
-            print ("MUST RE-configure progress")
-            self.status["total_steps"] = step
+        if self.options.steps > 0 and self.options.tasks > 0:
+            if step > self.status["progress"].size[0]:
+                print("MUST RE-configure progress")
+                self.status["total_steps"] = step
 
         self.step = step
         self.status["step"] = self.step
 
     def run(self):
-        self.status.new2d("progress", (self.options.steps, self.options.tasks), expire_time=3*81600, initial_value=0)
+        if self.options.steps > 0 and self.options.tasks > 0:
+            self.status.new2d("progress", (self.options.steps, self.options.tasks),
+                              expire_time=3 * 81600, initial_value=0)
         self.status["avg_task_time_step"] = 0.0
         self.status["avg_task_time_total"] = 0.0
         self.status["eta_step"] = 0
@@ -139,16 +163,16 @@ class HeadNode(threading.Thread):
         self.status["state"] = "Running"
 
         try:
-            self.handler.onReady(self.options.args)  # .split(" "))
+            self.handler.onReady(self.options)
         except Exception as e:
-            print("Exception in onReady for handler", self.options.handler)
+            print("Exception in onReady for handler", self.handler)
             import traceback
             traceback.print_exc()
-            self.log.exception("In onReady handler is %s" % self.options.handler)
+            self.log.exception("In onReady handler is %s" % self.handler)
             self.status["state"] = "Done"
             return
 
-        print("Progress status parameter thingy with size", self.options.steps, "x", self.options.tasks)
+        # print("Progress status parameter thingy with size", self.options.steps, "x", self.options.tasks)
         self.start_step(1)
         failed = False
         while not API.api_stop_event.is_set():
@@ -161,28 +185,26 @@ class HeadNode(threading.Thread):
                     self._jobdb.update_timeouts()
                     updates = self._jobdb.list_jobs(since=last_run, notstate=jobdb.STATE_PENDING)
                     for job in updates:
-                        print("Checking job update", job)
                         last_run = job["tschange"]
                         if job["state"] == jobdb.STATE_ALLOCATED:
-                            self.status["progress"].set_value((job["step"]-1, job["taskid"]), 3)
+                            self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 3)
                             self.handler.onAllocated(job)
 
                         elif job["state"] == jobdb.STATE_FAILED:
-                            self.status["progress"].set_value((job["step"]-1, job["taskid"]), 2)
+                            self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 2)
                             self.handler.onError(job)
 
                         elif job["state"] == jobdb.STATE_COMPLETED:
-                            self.status["progress"].set_value((job["step"]-1, job["taskid"]), 10)
+                            self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 10)
 
                             stats = self._jobdb.get_jobstats()
                             # print("STATS", stats)
                             if self.step in stats:
                                 self.status["avg_task_time_step"] = stats[self.step]
                             # self.status["avg_task_time_total"] = sum_all / total_len
-                            print("Completed job, calling handler")
                             self.handler.onCompleted(job)
                         elif job["state"] == jobdb.STATE_TIMEOUT:
-                            self.status["progress"].set_value((job["step"]-1, job["taskid"]), 0)
+                            self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 0)
                             self.handler.onTimeout(job)
 
                     # Still incomplete jobs?
@@ -222,65 +244,140 @@ class HeadNode(threading.Thread):
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(description="HEAD node for CryoCloud processing")
 
-    parser.add_argument("--runid", dest="runid",
-                        default=0,
-                        help="RunID to use")
+    # We start out by checking that we have a handler specified
+    if len(sys.argv) < 2:
+        raise SystemExit("Need handler")
+
+    filename = sys.argv[1]
+    if filename in ["-h", "--help"]:
+        mod = None
+        supress = []
+        args = sys.argv
+    else:
+        args = sys.argv[2:]
+        moduleinfo = inspect.getmoduleinfo(filename)
+        path = os.path.dirname(os.path.abspath(filename))
+
+        # sys.path.append(path)
+        info = imp.find_module(moduleinfo.name, [path])
+        mod = imp.load_module(moduleinfo.name, info[0], info[1], info[2])
+
+        supress = []
+        try:
+            supress = mod.supress
+        except:
+            pass
+        print("Loaded module")
+
+    try:
+        description = mod.description
+    except:
+        description = "HEAD node for CryoCloud processing - add 'description' to the handler for better info"
+
+    parser = ArgumentParser(description=description)
+
+    if "-i" not in supress:
+        parser.add_argument("-i", dest="input_dir",
+                            default=None,
+                            help="Source directory")
+
+    if "-o" not in supress:
+        parser.add_argument("-o", dest="output_dir",
+                            default=None,
+                            help="Target directory")
+
+    if "-r" not in supress and "--recursive" not in supress:
+        parser.add_argument("-r", "--recursive", action="store_true", dest="recursive", default=False,
+                            help="Recursively monitor input directory for changes")
+
+    if "-f" not in supress and "--force" not in supress:
+        parser.add_argument("-f", "--force", action="store_true", dest="force", default=False,
+                            help="Force re-processing of all products even if they have been successfully processed before")
+
+    if "-t" not in supress and "--tempdir" not in supress:
+        parser.add_argument("-t", "--tempdir", dest="temp_dir",
+                            default="./",
+                            help="Temporary directory (on worker nodes) where data will be kept during processing")
 
     parser.add_argument("-v", "--version", dest="version",
                         default="default",
                         help="Config version to use on")
 
     parser.add_argument("--name", dest="name",
-                        default="ExampleProcessor",
+                        default="",
                         help="The name of this HeadNode")
 
-    parser.add_argument("--steps", dest="steps",
-                        default=1,
-                        help="Number of steps in this processing")
+    if "--steps" not in supress:
+        parser.add_argument("--steps", dest="steps",
+                            default=0,
+                            help="Number of steps in this processing")
 
-    parser.add_argument("--tasks", dest="tasks",
-                        default=10,
-                        help="Number of tasks for each step in this processing")
+    if "--tasks" not in supress:
+        parser.add_argument("--tasks", dest="tasks",
+                            default=0,
+                            help="Number of tasks for each step in this processing")
 
-    parser.add_argument("--module", dest="module",
-                        default=None,
-                        help="The default module imported by workers to process these jobs")
+    if "--module" not in supress:
+        parser.add_argument("--module", dest="module",
+                            default=None,
+                            help="The default module imported by workers to process these jobs")
 
-    parser.add_argument("--handler", dest="handler",
-                        default=None,
-                        help="The handler for this master")
+    if "--max-task-time" not in supress:
+        parser.add_argument("--max-task-time", dest="max_task_time",
+                            default=None,
+                            help="Maximum time a task will be allowed to run before it is re-queued")
 
-    parser.add_argument("--max-task-time", dest="max_task_time",
-                        default=None,
-                        help="Maximum time a task will be allowed to run before it is re-queued")
+    if "--node" not in supress:
+        parser.add_argument("--node", dest="node",
+                            default=None,
+                            help="Request a particular node do all jobs")
 
-    parser.add_argument("--args", dest="args",
-                        default=None,
-                        help="Arguments passed to the Handler")
+    if "--workdir" not in supress:
+        parser.add_argument("--workdir", dest="workdir",
+                            default=None,
+                            help="Specify a working directory for the job")
+
+    # We allow the module to add more arguments
+    try:
+        mod.addArguments(parser)
+    except:
+        pass
 
     if "argcomplete" in sys.modules:
         argcomplete.autocomplete(parser)
 
-    options = parser.parse_args()
-    options.steps = int(options.steps)
-    options.tasks = int(options.tasks)
-    if options.max_task_time:
-        options.max_task_time = float(options.max_task_time)
+    options = parser.parse_args(args=args)
+    try:
+        options.steps = int(options.steps)
+    except:
+        options.steps = 0
+    try:
+        options.tasks = int(options.tasks)
+    except:
+        options.task = 0
+
+    try:
+        if options.max_task_time:
+            options.max_task_time = float(options.max_task_time)
+    except:
+        options.max_task_time = None
+
     # if options.module is None:
     #    raise SystemExit("Need a module")
-    if options.handler is None:
-        raise SystemExit("Need handler")
+    if options.name == "":
+        import socket
+        options.name = socket.gethostname()
 
-    if options.args:
-        options.args = options.args.split()  # parser.convert_arg_line_to_args(options.args)
-    #if options.module:
-    #    options.module = options.module.replace("/", ".").replace(".py", "")
-    # if options.handler:
-    #    options.handler = options.handler.replace("/", ".").replace(".py", "")
+    try:
+        options.module
+    except:
+        options.module = ""
 
     import signal
+
+    if mod is None:
+        raise SystemExit("Missing handler")
 
     def handler(signum, frame):
         print("Head stopped by user signal")
@@ -289,7 +386,7 @@ if __name__ == "__main__":
     signal.signal(signal.SIGQUIT, handler)
 
     try:
-        headnode = HeadNode(options)
+        headnode = HeadNode(mod, options)
         headnode.start()
 
         # We create an event triggered by the head node when it's done
@@ -305,4 +402,3 @@ if __name__ == "__main__":
     finally:
         print("Shutting down")
         API.shutdown()
-    print("Done")

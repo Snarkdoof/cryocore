@@ -44,28 +44,36 @@ class SystemControl(threading.Thread):
         self.cfg = API.get_config(self.name)
         self.cfg.set_default("default_start_delay", 1.0)
         self.cfg.require(["sample_rate", "monitor_sensors"])
-        self.log = API.get_log(self.name)
+        self.cfg.set_default("cc_expire_time", 7 * 24 * 86400)
+        # We set the expire time for status to 7 days if nothing else is set
+        API.cc_default_expire_time = int(self.cfg["cc_expire_time"])
 
+        self.log = API.get_log(self.name)
         self.status = API.get_status(self.name)
         self.status["state"] = "starting"
         self._monitor_processes = {}
         self._process = {}
 
         self._configured_services = []
-        for name in self.cfg.get_leaves():
-            m = re.match("process\.(\S*)\.command", name)
-            if m:
-                self._configured_services.append(m.groups()[0])
-
-        for name in self._configured_services:
-            print("process.%s.status = stopped" % name)
-            self.status["process.%s.status" % name] = "stopped"
+        self._refresh_services()
 
     def __del__(self):
         try:
             self.status["state"] = "stopped"
         except:
             pass
+
+    def _refresh_services(self):
+        for param in self.cfg.get("process").children:
+            name = param.name
+            if name not in self._configured_services:
+                self._configured_services.append(name)
+                if self.cfg["process.%s.command" % name]:
+                    self.status["process.%s.status" % name] = "stopped"
+
+            # m = re.match("(\S*)\.command", name)
+            # if m:
+            #    self._configured_services.append(m.groups()[0])
 
     def _add_process_monitor(self, pid, name):
         if name in self._monitor_processes:
@@ -187,6 +195,8 @@ class SystemControl(threading.Thread):
 
         self.log.debug(str(command))
         cwd = self.cfg["process.%s.dir" % name]
+        if not cwd:
+            cwd = self.cfg["default_cwd"]
         self._process[name] = subprocess.Popen(command, cwd=cwd, preexec_fn=os.setsid)
         self.status["process.%s.pid" % name] = self._process[name].pid
         self._add_process_monitor(self._process[name].pid, name)
@@ -230,7 +240,7 @@ class SystemControl(threading.Thread):
                 self.log.error("Refusing to kill my own process group")
         except:
             self.log.exception("Exception terminating process!")
-        
+
         if self.status["process.%s.status" % name] == "stopped":
             return
 
@@ -257,7 +267,7 @@ class SystemControl(threading.Thread):
 
         last_run = 0
         adapter = None
-
+        last_refresh = 0
         while not self.stop_event.is_set():
 
             # First we update the uptime
@@ -313,6 +323,10 @@ class SystemControl(threading.Thread):
                         self.status["batt_ok"].set_value(batt_ok, force_update=True)
                 except:
                     self.log.exception("Reading ORDROID status")
+
+                if time.time() - last_refresh > 60:
+                    last_refresh = time.time()
+                    self._refresh_services()
 
                 # Sleep until next run
                 while time.time() - last_run < int(self.cfg["sample_rate"]):
@@ -416,6 +430,7 @@ class SystemControl(threading.Thread):
                 print("Stopping due to parent exit")
                 self.stop()
 
+
 def check_and_set_pid_running(path):
     # Check if we have a running system control already
     if (os.path.exists(path)):
@@ -426,8 +441,8 @@ def check_and_set_pid_running(path):
             os.kill(pid, 0)
             print("SystemControl process already running, NOT starting")
             raise SystemExit(1)
-        except Exception as e:
-            print(e)
+        except Exception:
+            # print(e)
             pass  # Process is NOT running
     with open(path, "w") as fd:
         fd.write(str(os.getpid()))
@@ -440,39 +455,41 @@ if __name__ == "__main__":
     to the separate process groups, killing the SystemControl process (which happens
     when calling service uav stop, for instance), no longer brings down the child processes
     started by SystemControl.
-    
+
     The work around consists of the first SystemControl process starting a new child
     process in a separate process group, and waiting for that to exit. The child periodically
     checks that the parent is still alive, and if not, exits. Currently, the parent-exists check
     is done by sending a 0-signal to the parent process. Not perfect if it should exit
     and a new process gets the old pid, but in practice this shouldn't be very likely.)
     """
-    child_mode = False
-    if "--child" in sys.argv:
-        child_mode = True
-        sys.argv.remove("--child")
-    if len(sys.argv) > 1:
-        interval = int(sys.argv[1])
-    if child_mode:
-        check_and_set_pid_running("/var/run/uav-child.pid")
-        s = SystemControl(interval=interval)
+    try:
+        child_mode = False
+        if "--child" in sys.argv:
+            child_mode = True
+            sys.argv.remove("--child")
+        if len(sys.argv) > 1:
+            interval = int(sys.argv[1])
+        if child_mode:
+            check_and_set_pid_running("/var/run/uav-child.pid")
+            s = SystemControl(interval=interval)
 
-        signal.signal(signal.SIGINT, s.sighandler)
-        try:
-            s.run()
-        except Exception as e:
-            print(e)
-            pass
+            signal.signal(signal.SIGINT, s.sighandler)
+            try:
+                s.run()
+            except Exception as e:
+                print(e)
+                pass
 
-        print("Requesting nice shutdown of processes")
-        s.stop()
-        print("Shutting down")
+            print("Requesting nice shutdown of processes")
+            s.stop()
+            print("Shutting down")
+            API.shutdown()
+        else:
+            # Launch new instance with child flag. The new instance will notice that we
+            # exit, and exit itself as well.
+            check_and_set_pid_running("/var/run/uav.pid")
+            print("Starting child: %s" % (" ".join(sys.argv)))
+            ret = subprocess.call(["python"] + sys.argv + ["--child"], preexec_fn=os.setsid)
+            print("Parent exiting; child sys control returned with status %d" % (ret))
+    finally:
         API.shutdown()
-    else:
-        # Launch new instance with child flag. The new instance will notice that we
-        # exit, and exit itself as well.
-        check_and_set_pid_running("/var/run/uav.pid")
-        print("Starting child: %s" % (" ".join(sys.argv)))
-        ret = subprocess.call(["python"]+sys.argv+["--child"], preexec_fn=os.setsid)
-        print("Parent exiting; child sys control returned with status %d" % (ret))
-

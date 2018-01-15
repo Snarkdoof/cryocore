@@ -7,7 +7,7 @@ class Handler(CryoCloud.DefaultHandler):
 
         # Create a docker task!
         self._taskid = 0
-        self.head.add_job(1, self._taskid, {"target": "cryocore", "dirs": {"/tmp/": "/mnt/data"}}, module="docker")
+        self.head.add_job(1, self._taskid, {"target": "cryocore", "dirs": [("/tmp/", "/mnt/data")]}, module="docker")
 
         self._taskid += 1
 

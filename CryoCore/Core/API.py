@@ -13,7 +13,8 @@ import logging
 import json
 
 from CryoCore.Core.Status import Status
-from CryoCore.Core.Config import Configuration
+from CryoCore.Core.Config import Configuration, NamedConfiguration
+
 # from CryoCore.Core.Utils import logTiming
 import threading
 import multiprocessing
@@ -22,6 +23,8 @@ import multiprocessing
 class MissingConfigException(Exception):
     pass
 
+global cc_default_expire_time
+cc_default_expire_time = None  # No default expiry
 
 # coding=utf-8
 
@@ -47,9 +50,19 @@ log_level = {logging.CRITICAL: "CRITICAL",
 global CONFIGS
 CONFIGS = {}
 
+global main_configs
+main_configs = {}
+
+LOGS = {}
+LOG_DESTINATION = None
+
 global glblStatusReporter
 glblStatusReporter = None
 reporter_collection = None
+
+__is_direct = False
+
+api_auto_init = True
 
 
 def get_status_reporter():
@@ -74,14 +87,16 @@ class GlobalDBConfig:
         # Check in the user's home dir
         userconfig = os.path.expanduser("~/.cryoconfig")
         if os.path.isfile(userconfig):
-            cfg = json.loads(open(userconfig, "r").read())
+            with open(userconfig, "r") as f:
+                cfg = json.loads(f.read())
             for param in self.cfg:
                 if param in cfg:
                     self.cfg[param] = cfg[param]
 
         # Local override
         if os.path.isfile(".config"):
-            cfg = json.loads(open(".config", "r").read())
+            with open(".config", "r") as f:
+                cfg = json.loads(f.read())
             for param in self.cfg:
                 if param in cfg:
                     self.cfg[param] = cfg[param]
@@ -147,7 +162,6 @@ class ReporterCollection:
     @staticmethod
     def get_singleton():
         if ReporterCollection.singleton == "None":
-            print("CREATING NEW ReporterCollection")
             ReporterCollection.singleton = ReporterCollection()
         return ReporterCollection.singleton
 
@@ -197,14 +211,14 @@ def shutdown():
     """
     Shut the API down properly
     """
-
     global api_stop_event
     api_stop_event.set()
 
-    global reporter_collection
-    del reporter_collection
-    reporter_collection = None
-
+    try:
+        global reporter_collection
+        del reporter_collection
+    except:
+        pass
 
 def reset():
     """
@@ -230,20 +244,37 @@ def get_config(name=None, version="default", db_cfg=None):
     if db_cfg is None:
         db_cfg = GlobalDBConfig.get_singleton().cfg
 
+    global main_configs
+    if version not in main_configs:
+        main_configs[version] = Configuration(stop_event=api_stop_event,
+                                              version=version,
+                                              db_cfg=db_cfg,
+                                              is_direct=__is_direct,
+                                              auto_init=api_auto_init)
+
     global CONFIGS
     if not (name, version) in CONFIGS:
-        CONFIGS[(name, version)] = Configuration(root=name,
-                                                 stop_event=api_stop_event,
-                                                 version=version,
-                                                 db_cfg=db_cfg)
+        CONFIGS[(name, version)] = NamedConfiguration(name, version, main_configs[version])
+        #CONFIGS[(name, version)] = Configuration(root=name,
+        #                                         stop_event=api_stop_event,
+        #                                         version=version,
+        #                                         db_cfg=db_cfg)
     return CONFIGS[(name, version)]
 
 
 # @logTiming
 def get_log(name):
-    from CryoCore.Core.loggingService import getLoggingService
-    assert name.__class__ == str
-    return getLoggingService(name)
+    global LOGS
+    global LOG_DESTINATION
+    if not LOG_DESTINATION:
+        from CryoCore.Core.dbHandler import DbHandler
+        LOG_DESTINATION = DbHandler()
+    if name not in LOGS:
+            LOGS[name] = logging.getLogger(name)
+            LOGS[name].propagate = False
+            LOGS[name].setLevel(logging.DEBUG)
+            LOGS[name].addHandler(LOG_DESTINATION)
+    return LOGS[name]
 
 
 # @logTiming

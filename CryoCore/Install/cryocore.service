@@ -9,4 +9,3 @@ WantedBy=multi-user.target
 
 [Service]
 ExecStart=CCINSTALLDIR/bin/cryocored
-

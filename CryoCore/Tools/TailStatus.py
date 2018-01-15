@@ -37,6 +37,8 @@ class TailStatus(mysql):
         """
         default_show: should I print new messages by default
         """
+        # import threading
+        # threading.Thread.__init__(self)
 
         self.name = name
         cfg = API.get_config("System.Status.MySQL")
@@ -229,6 +231,8 @@ def usage():
     """ % (sys.argv[0])
 
 if __name__ == "__main__":
+    API.auto_init = False
+    API.__is_direct = True
 
     try:
         tail = None
@@ -340,3 +344,4 @@ if __name__ == "__main__":
 
     finally:
         API.shutdown()
+        print("API Shut down")

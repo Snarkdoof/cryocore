@@ -1,12 +1,14 @@
 #!/bin/bash
 export PYTHONPATH=.
-export LC_ALL=en_US.utf8
+export LC_ALL="C.UTF-8" 
 
 if ! test -d "CryoCore" ; then
   echo "Must run install from the correct directory (the one with CryoCore in it)"
   exit -1
 fi
 
+sudo locale-gen "nb_NO.UTF-8"
+sudo locale-gen "en_US.UTF-8"
 
 apt-get --help > /dev/null 
 if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
@@ -15,6 +17,7 @@ if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
 	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip python-pyinotify python3-pyinotify python-psutil python3-psutil
 
 	sudo activate-global-python-argcomplete
+  sudo activate-global-python-argcomplete3
 	
 	echo "Installing mysql connector"
   sudo pip install mysql-connector==2.1.4

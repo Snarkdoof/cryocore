@@ -14,7 +14,8 @@ class DockerProcess():
     A local config file .dockercfg is read which overrides a few important bits for security reasons
     """
 
-    def __init__(self, cmd, status, log, stop_event, env={}, dirs={}, gpu=False, userid=None, doPrint=False):
+    def __init__(self, cmd, status, log, stop_event, env={}, dirs={}, gpu=False,
+                 userid=None, groupid=None, log_all=False, args=[], cancel_event=None):
 
         # if not os.path.exists(".dockercfg"):
         #    raise SystemExit("Missing .dockercfg for system wide config")
@@ -26,7 +27,7 @@ class DockerProcess():
                     raise SystemExit("Missing %s in .dockercfg" % i)
         else:
             # defaults
-            self._dockercfg = {"userid": "$UID", "scratch": "/tmp"}
+            self._dockercfg = {"scratch": "/tmp"}
         self.cmd = cmd
         self.status = status
         self.log = log
@@ -36,17 +37,26 @@ class DockerProcess():
         if userid:
             self.userid = userid
         else:
-            self.userid = "$UID"
+            self.userid = os.getuid()
 
-        if self._dockercfg["userid"]:
+        if groupid:
+            self.groupid = groupid
+        else:
+            self.groupid = os.getgid()
+
+        if "userid" in self._dockercfg and self._dockercfg["userid"]:
             self.userid = self._dockercfg["userid"]
+        if "gruopid" in self._dockercfg and self._dockercfg["groupid"]:
+            self.groupid = self._dockercfg["groupid"]
+        self.args = args
+        self.log_all = log_all
+        self.cancel_event = None  # cancel_event  - DISABLED, it doesn't work
 
-        self.doPrint = doPrint
         self._retval = None
+        self.retval = None
         self._error = ""
         self._t = None
         self.stop_event = stop_event
-
         if self.cmd.__class__ != list:
             raise Exception("Command needs to be a list")
         if len(self.cmd) == 0:
@@ -55,26 +65,36 @@ class DockerProcess():
     def run(self):
         docker = "docker"
         if self.gpu:
-            retval = subprocess.call(["nvidia-docker", "version"])
-            if retval == 0:
-                docker = "nvidia-docker"
-                self.log.info("Using NVIDIA Docker for GPU acceleration")
-            else:
-                self.log.warning("NVIDIA Docker requested but not available, not using GPU")
+            try:
+                retval = subprocess.call(["nvidia-docker", "version"])
+                if retval == 0:
+                    docker = "nvidia-docker"
+                    self.log.info("Using NVIDIA Docker for GPU acceleration")
+                else:
+                    self.log.warning("NVIDIA Docker requested but not available, not using GPU")
+            except:
+                    self.log.warning("NVIDIA Docker requested but not available, not using GPU")
 
         cmd = [docker, "run"]
 
-        for source in self.dirs:
-            if self.dirs[source].startswith("/scratch"):
+        for source, destination in self.dirs:
+            if destination.startswith("/scratch"):
                 continue  # We ignore scratch
-            cmd.extend(["-v", "%s:%s" % (source, self.dirs[source])])
+            options = ":rw"
+            if destination == "/input":
+                options = ":ro"
+            cmd.extend(["-v", "%s:%s%s" % (source, destination, options)])
 
         # We also add "/scratch"
         cmd.extend(["-v", "%s:/scratch" % self._dockercfg["scratch"]])
 
-        cmd.extend(["-e", "-USERID=%s" % self.userid])
+        # also allow ENV
+        # cmd.extend(["-e", ....])
+        cmd.extend(["-u=%s:%s" % (self.userid, self.groupid)])
 
         cmd.extend(self.cmd)
+        cmd.extend(self.args)
+
         self.log.debug("Running Docker command '%s'" % str(cmd))
         p = subprocess.Popen(cmd, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # We set the outputs as nonblocking
@@ -82,24 +102,26 @@ class DockerProcess():
         fcntl.fcntl(p.stderr, fcntl.F_SETFL, os.O_NONBLOCK)
 
         buf = {p.stdout: "", p.stderr: ""}
+        terminated = 0
 
         while not self.stop_event.isSet():
             ready = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
             for fd in ready:
                 data = fd.read()
-                if self.doPrint:
-                    print(data)
                 buf[fd] += data.decode("utf-8")
 
             # print(buf)
             # Process any stdout data
             while buf[p.stdout].find("\n") > -1:
                 line, buf[p.stdout] = buf[p.stdout].split("\n", 1)
-                m = re.match("\[(\w+)\] (.+)", line)
+                if self.log_all:
+                    self.log.info(line)
+
+                m = re.match("^\[(\w+)\] (.+)", line)
                 if m:
                     self.status[m.groups()[0]] = m.groups()[1]
 
-                m = re.match("\<(\w+)\> (.+)", line)
+                m = re.match("^\<(\w+)\> (.+)", line)
                 if m:
                     level = m.groups()[0]
                     msg = m.groups()[1]
@@ -114,6 +136,14 @@ class DockerProcess():
                     else:
                         self.log.error("Unknown log level '%s'" % level)
 
+                m = re.match("^\{retval\} (.+)", line)
+                if m:
+                    try:
+                        self.retval = json.loads(m.groups()[0])
+                    except:
+                        self.log.exception("Bad return value, expected json")
+                        self.retval = m.groups()
+
             # Check for output on stderr - set error message
             if buf[p.stderr]:
                 # Should we parse this for some known stuff?
@@ -124,12 +154,27 @@ class DockerProcess():
             self._retval = p.poll()
             if self._retval is not None:
                 # Process exited
+                if self.cancel_event and self.cancel_event.isSet():
+                    self.log.error("Docker process '%s' cancelled OK" % (self.cmd))
+                    return
                 if self._retval == 0:
+                    self.status["progress"] = 100
                     break
                 # Unexpected
                 self._error = "Docker process '%s' exited with value %d" % (self.cmd, self._retval)
                 self.log.error("Docker process '%s' exited with value %d" % (self.cmd, self._retval))
                 return
+
+            # Should we stop?  NOTE: THIS DOESN'T WORK
+            if self.cancel_event and self.cancel_event.isSet():
+                self.log.warning("Cancelling job due to remote command")
+                if terminated < 2:
+                    p.terminate()
+                else:
+                    self.log.warning("Not stopping, trying to kill")
+                    p.kill()
+                terminated += 1
+        return self.retval
 
     def start(self, stop_event=None):
         """

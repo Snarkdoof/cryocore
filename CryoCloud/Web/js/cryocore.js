@@ -1,1 +1,1 @@
-../../control/CryoCore/GUI/Web/html/js/cryocore_modpython.js
+/home/njaal/git/cryocore/running/CryoCore/GUI/Web/html/js/cryocore_modpython.js

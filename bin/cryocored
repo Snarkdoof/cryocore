@@ -1,0 +1,4 @@
+#!/bin/sh
+export PYTHONPATH=$PYTHONPATH:/home/norut/cryocore:/home/norut/cryocore/CryoCloud/Modules/
+cd /home/norut/cryocore
+python ./CryoCore/System/SystemControl.py 2>&1 > term.output 

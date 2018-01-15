@@ -20,6 +20,7 @@ STATE_ALLOCATED = 2
 STATE_COMPLETED = 3
 STATE_FAILED = 4
 STATE_TIMEOUT = 5
+STATE_CANCELLED = 6
 
 TASK_TYPE = {
     TYPE_NORMAL: "Worker",
@@ -60,11 +61,13 @@ class JobDB(mysql):
                     expiretime SMALLINT,
                     node VARCHAR(128) DEFAULT NULL,
                     worker SMALLINT DEFAULT NULL,
-                    retval VARCHAR(256) DEFAULT NULL,
+                    retval TEXT DEFAULT NULL,
                     module VARCHAR(256) DEFAULT NULL,
-                    args VARCHAR(2560) DEFAULT NULL,
+                    modulepath TEXT DEFAULT NULL,
+                    workdir TEXT DEFAULT NULL,
+                    args TEXT DEFAULT NULL,
                     nonce INT DEFAULT 0,
-                    tschange TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    tschange TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
             )""",
             """CREATE TABLE IF NOT EXISTS filewatch (
                 fileid INT PRIMARY KEY AUTO_INCREMENT,
@@ -78,6 +81,17 @@ class JobDB(mysql):
                 tschange TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )"""
         ]
+
+        # Minor upgrade-hack
+        try:
+            c = self._execute("SELECT workdir FROM jobs LIMIT 1")
+        except:
+            try:
+                print("*** Job table is bad, dropping it")
+                self._execute("DROP TABLE jobs")
+            except:
+                pass
+
         self._init_sqls(statements)
 
         c = self._execute("SELECT runid FROM runs WHERE runname=%s", [self._runname])
@@ -90,9 +104,8 @@ class JobDB(mysql):
                               [self._runname, module, steps])
             self._runid = c.lastrowid
 
-        print("RunID is", self._runid)
-
-    def add_job(self, step, taskid, args, jobtype=TYPE_NORMAL, priority=PRI_NORMAL, node=None, expire_time=3600, module=None):
+    def add_job(self, step, taskid, args, jobtype=TYPE_NORMAL, priority=PRI_NORMAL, node=None,
+                expire_time=3600, module=None, modulepath=None, workdir=None):
 
         if not module and not self._module:
             raise Exception("Missing module for job, and no default module!")
@@ -100,8 +113,25 @@ class JobDB(mysql):
         if args is not None:
             args = json.dumps(args)
 
-        self._execute("INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                      [self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module])
+        self._execute("INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module, modulepath, workdir) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                      [self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module, modulepath, workdir])
+
+    def cancel_job(self, jobid):
+        self._execute("UPDATE jobs SET state=%d WHERE jobid=%s", (STATE_CANCELLED, jobid))
+
+    def force_stopped(self, workerid, node):
+        self._execute("UPDATE jobs SET state=%s, retval='{\"error\":\"Worker killed\"}' WHERE worker=%s AND node=%s",
+                      [STATE_FAILED, workerid, node])
+
+    def get_job_state(self, jobid):
+        """
+        Check that the job hasn't been updated, i.e. cancelled or removed
+        """
+        c = self._execute("SELECT state FROM jobs WHERE jobid=%s", [jobid])
+        row = c.fetchone()
+        if row:
+            return row[0]
+        return None
 
     def allocate_job(self, workerid, type=TYPE_NORMAL, node=None, max_jobs=1):
         # TODO: Check for timeouts here too?
@@ -117,22 +147,24 @@ class JobDB(mysql):
         args.append(max_jobs)
         c = self._execute(SQL, args)
         if c.rowcount > 0:
-            c = self._execute("SELECT jobid, step, taskid, type, priority, args, runname, jobs.module, runs.module, steps FROM jobs, runs WHERE runs.runid=jobs.runid AND nonce=%s", [nonce])
+            c = self._execute("SELECT jobid, step, taskid, type, priority, args, runname, jobs.module, jobs.modulepath, runs.module, steps, workdir FROM jobs, runs WHERE runs.runid=jobs.runid AND nonce=%s", [nonce])
             jobs = []
-            for jobid, step, taskid, t, priority, args, runname, jmodule, rmodule, steps in c.fetchall():
+            for jobid, step, taskid, t, priority, args, runname, jmodule, modulepath, rmodule, steps, workdir in c.fetchall():
                 if args:
                     args = json.loads(args)
                 if jmodule:
                     module = jmodule
                 else:
                     module = rmodule
-                jobs.append({"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority, "args": args, "runname": runname, "module": module, "steps": steps})
+                jobs.append({"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
+                             "args": args, "runname": runname, "module": module, "modulepath": modulepath,
+                             "steps": steps, "workdir": workdir})
             return jobs
         return []
 
     def list_jobs(self, step=None, state=None, notstate=None, since=None):
         jobs = []
-        SQL = "SELECT jobid, step, taskid, type, priority, args, tschange, state, expiretime, module, tsallocated, node, worker FROM jobs WHERE runid=%s"
+        SQL = "SELECT jobid, step, taskid, type, priority, args, tschange, state, expiretime, module, modulepath, tsallocated, node, worker, retval, workdir FROM jobs WHERE runid=%s"
         args = [self._runid]
         if step:
             SQL += " AND step=%s"
@@ -149,11 +181,14 @@ class JobDB(mysql):
 
         SQL += " ORDER BY tschange"
         c = self._execute(SQL, args)
-        for jobid, step, taskid, t, priority, args, tschange, state, expire_time, module, tsallocated, node, worker in c.fetchall():
+        for jobid, step, taskid, t, priority, args, tschange, state, expire_time, module, modulepath, tsallocated, node, worker, retval, workdir in c.fetchall():
             if args:
                 args = json.loads(args)
-            job = {"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority, "node": node, "worker": worker,
-                   "args": args, "tschange": tschange, "state": state, "expire_time": expire_time, "module": module}
+            if retval:
+                retval = json.loads(retval)
+            job = {"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
+                   "node": node, "worker": worker, "args": args, "tschange": tschange, "state": state,
+                   "expire_time": expire_time, "module": module, "modulepath": modulepath, "retval": retval, "workdir": workdir}
             if tsallocated:
                 job["runtime"] = time.time() - tsallocated
             jobs.append(job)
@@ -221,7 +256,7 @@ class JobDB(mysql):
         c = self._execute(SQL, (self._runid,))
         for step, state, count in c.fetchall():
             if step not in steps:
-                step[step] = {}
+                steps[step] = {}
             steps[step][state] = count
 
         return steps
@@ -261,7 +296,8 @@ class JobDB(mysql):
         return c.rowcount
 
     def reset_files(self, rootpath, runid):
-        SQL = "UPDATE filewatch SET done=0, public=0 WHERE rootpath=%s AND runid=%s"
+        # SQL = "UPDATE filewatch SET done=0, public=0 WHERE rootpath=%s AND runid=%s"
+        SQL = "DELETE FROM filewatch WHERE rootpath=%s AND runid=%s"
         c = self._execute(SQL, (rootpath, runid))
         return c.rowcount
 
