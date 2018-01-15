@@ -1,5 +1,39 @@
 #!/usr/bin/env python
+"""
+Overview:
+This tool enables fairly simple switching between different git users and their SSH keys. All
+data is stored in ~/.norut-git-users/, except for SSH keys which need to live in ~/.ssh/. The
+tool relies on generating shell scripts for each user which can be sourced. The scripts set the
+following variables:
+    NORUT_GIT_USER
+    NORUT_GIT_SSH_KEY
+    GIT_SSH
+    GIT_AUTHOR_NAME
+    GIT_AUTHOR_EMAIL
+In addition, an ssh wrapper script is generated that makes use of the variables for the operations
+git does that require ssh upstream.
 
+Typical usage on a brand new host:
+0) Add the following line to .bashrc, modified to suit your local paths:
+function ngit-user() {
+    if [ -z "$1" ]; then
+        . `/home/pilot/cryocore/CryoCore/Tools/GitUser.py`
+    else
+        . `/home/pilot/cryocore/CryoCore/Tools/GitUser.py -s "$1"`
+    fi
+}
+
+1) Copy or generate SSH keys for a user (say, daniel)
+   scp ~/.ssh/daniel_gitlab_rsa* target-host:.ssh/
+
+2) Run GitUser.py -a  (or GitUser.py --add). Enter nickname, realname, email and key path when prompted.
+   You can also edit the user database directly, in ~/.norut-git-users/users.json
+3) Run GitUser.py -u
+   This creates/updates the necessary scripts and per-user scripts required for setting up the environment.
+
+Log out and back in to the target computer, and run ngit-user. If no username is given, a list of users will be shown.
+Otherwise, the selected user will have its environment sourced.
+"""
 import os
 import sys
 import curses
@@ -37,7 +71,10 @@ class GitUserDB:
             fd.write(unicode(data))
     
     def select_user(self, nick):
-        print os.path.expanduser("~/.norut-git-users/") + nick
+        if nick != None:
+            print os.path.expanduser("~/.norut-git-users/") + nick
+        else:
+            print os.path.expanduser("~/.norut-git-users/unset-user")
     
     def add_user(self, nick, name, email, key):
         self.users[nick] = { "name" : name, "email" : email, "key" : key }
@@ -120,6 +157,7 @@ if __name__ == "__main__":
     elif options.nick != None:
         db.select_user(options.nick)
     else:
+        sys.stderr.write("Enter short name of user to activate (empty to unset environemnt):\n")
         db.list_users()
-        index_or_nick = get_input(None, "Enter number or short name of user to activate")
-        db.select_user(index_or_nick)
+        nick = get_input(None, "")
+        db.select_user(nick)
