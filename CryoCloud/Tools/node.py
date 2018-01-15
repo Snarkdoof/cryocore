@@ -37,7 +37,7 @@ CC_DIR = os.getcwd()
 sys.path.append(os.path.join(CC_DIR, "CryoCloud/Modules/"))  # Add CC modules with full path
 sys.path.append(".")  # Add module path for the working dir of the job
 sys.path.append("./Modules/")  # Add module path for the working dir of the job
-
+sys.path.append("./modules/")  # Add module path for the working dir of the job
 
 API.cc_default_expire_time = 24 * 86400  # Default log & status only 7 days
 
