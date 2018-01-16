@@ -119,12 +119,9 @@ class Worker(multiprocessing.Process):
             if modulepath:
                 path = [modulepath]
             self._module = job["module"]
-            if self._module == "test":
-                self._module = None
-            else:
-                self.log.debug("Loading module %s (%s)" % (self._module, path))
-                self._module = load(self._module, path)
-                self.log.debug("Loading of %s successful", job["module"])
+            self.log.debug("Loading module %s (%s)" % (self._module, path))
+            self._module = load(self._module, path)
+            self.log.debug("Loading of %s successful", job["module"])
         except Exception as e:
             self._is_ready = False
             print("Import error:", e)
@@ -219,6 +216,7 @@ class Worker(multiprocessing.Process):
         Must return progress, returnvalue where progress is a number 0-100 (percent) and
         returnvalue is None or anything that can be converted to json
         """
+        raise Exception("No process_task defined")
         import random
         progress = 0
         while not self._stop_event.is_set() and progress < 100:
@@ -276,6 +274,7 @@ class Worker(multiprocessing.Process):
 
         try:
             if self._module is None:
+                raise Exception("No module loaded, task was %s" % task)
                 progress, ret = self.process_task(task)
             else:
                 if canStop:
