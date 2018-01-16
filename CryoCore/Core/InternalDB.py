@@ -263,7 +263,7 @@ class AsyncDB(threading.Thread):
                 self._close_connection()
                 retval["error"] = "DBError: %s" % str(e)
                 time.sleep(1.0)
-                raise Exception("DEBUG")
+                # raise Exception("DEBUG")
             except MySQLdb.ProgrammingError as e:
                 if ignore_error:
                     try:
