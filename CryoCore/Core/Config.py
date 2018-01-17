@@ -71,6 +71,8 @@ def _toUnicode(string):
         if string.__class__ == bytes:
             return str(string, "latin-1")
         return str(string)
+    if string.__class__ not in [str, unicode]:
+        return unicode(str(string), "utf-8")
     if string.__class__ == unicode:
         return string
     try:
