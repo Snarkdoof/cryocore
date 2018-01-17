@@ -158,11 +158,16 @@ class ConfigParameter:
         else:
             datatype = "string"  # raise Exception("Unknown datatype for %s"%self.name)
 
+        if sys.version_info.major == 3:
+            strings = [str]
+        else:
+            strings = [str, unicode]
+
         if check:
             try:
                 if datatype == "folder":
                     self.value = None
-                elif value.__class__ in [str, unicode]:
+                elif value.__class__ in strings:
                     if datatype == "boolean":
                         if value.__class__ == bool:
                             self.value = value
