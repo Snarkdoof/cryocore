@@ -160,7 +160,7 @@ class ConfigParameter:
             try:
                 if datatype == "folder":
                     self.value = None
-                elif value.__class__ in [str, str]:
+                elif value.__class__ in [str, unicode]:
                     if datatype == "boolean":
                         if value.__class__ == bool:
                             self.value = value
