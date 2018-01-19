@@ -71,6 +71,8 @@ def _toUnicode(string):
         if string.__class__ == bytes:
             return str(string, "latin-1")
         return str(string)
+    if string.__class__ not in [str, unicode]:
+        return unicode(str(string), "utf-8")
     if string.__class__ == unicode:
         return string
     try:
@@ -156,11 +158,16 @@ class ConfigParameter:
         else:
             datatype = "string"  # raise Exception("Unknown datatype for %s"%self.name)
 
+        if sys.version_info.major == 3:
+            strings = [str]
+        else:
+            strings = [str, unicode]
+
         if check:
             try:
                 if datatype == "folder":
                     self.value = None
-                elif value.__class__ in [str, str]:
+                elif value.__class__ in strings:
                     if datatype == "boolean":
                         if value.__class__ == bool:
                             self.value = value
