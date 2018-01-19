@@ -271,7 +271,7 @@ class Worker(multiprocessing.Process):
             t = threading.Thread(target=monitor)
             t.daemon = True
             t.start()
-
+        ret = None
         try:
             if self._module is None:
                 raise Exception("No module loaded, task was %s" % task)
@@ -298,7 +298,8 @@ class Worker(multiprocessing.Process):
             self.status["num_errors"].inc()
             self.status["last_error"] = str(e)
             self.status["state"] = "Failed"
-            ret = str(e)
+            if not ret:
+                ret = str(e)
 
         task["state"] = "Stopped"
         task["processing_time"] = time.time() - start_time
