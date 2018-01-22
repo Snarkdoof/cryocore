@@ -70,8 +70,10 @@ try:
                 break
 
     if canStop:
-        mod.process_task(worker, task, API.api_stop_event)
+        progress, retval = mod.process_task(worker, task, API.api_stop_event)
     else:
-        mod.process_task(worker, task)
+        progress, retval = mod.process_task(worker, task)
+
+    print("Completed with", progress, " percent done, retval:", retval)
 finally:
     API.shutdown()
