@@ -1,7 +1,5 @@
 import os
 import zipfile
-import json
-
 
 def process_task(self, task):
     """
@@ -37,9 +35,11 @@ def process_task(self, task):
             for name in names:
                 if name[-1] == "/" and name.count("/") == 1:
                     retval.append(name[:-1])
+                elif name.count("/") == 0:
+                    retval.append(name)
             f.extractall(dst)
             done += 1
-            errors = json.dumps(retval)
+            errors = retval
         except Exception as e:
             errors += "%s: %s\n" % (s, e)
             self.log.exception("Unzip of %s failed" % s)
