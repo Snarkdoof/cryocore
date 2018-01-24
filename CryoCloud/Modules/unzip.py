@@ -1,5 +1,7 @@
 import os
 import zipfile
+import tarfile
+
 
 def process_task(self, task):
     """
@@ -18,6 +20,8 @@ def process_task(self, task):
         # We use the directory of the source file as default target
         dst = os.path.split(src)[0]
 
+    # TODO: Implement partial extracts, e.g. give "re" list of regexps for files to extract
+
     if src.__class__ != list:
         src = [src]
 
@@ -27,16 +31,23 @@ def process_task(self, task):
         if not os.path.exists(s):
             raise Exception("Missing zip file '%s'" % s)
 
-        self.log.debug("Unzipping %s to %s" % (s, dst))
         try:
             retval = []
-            f = zipfile.ZipFile(s)
-            names = f.namelist()
+            if tarfile.is_tarfile(s):
+                self.log.debug("Untaring %s to %s" % (s, dst))
+                f = tarfile.open(s)
+                names = f.getnames()
+            else:
+                self.log.debug("Unzipping %s to %s" % (s, dst))
+                f = zipfile.ZipFile(s)
+                names = f.namelist()
             for name in names:
+                if name.startswith("./"):
+                    name = name[2:]
                 if name[-1] == "/" and name.count("/") == 1:
-                    retval.append(name[:-1])
+                    retval.append(os.path.join(dst, name[:-1]))
                 elif name.count("/") == 0:
-                    retval.append(name)
+                    retval.append(os.path.join(dst, name))
             f.extractall(dst)
             done += 1
             errors = retval
