@@ -48,6 +48,12 @@ def process_task(self, task):
                     retval.append(os.path.join(dst, name[:-1]))
                 elif name.count("/") == 0:
                     retval.append(os.path.join(dst, name))
+                elif name.count("/") == 1:
+                    # We have a file in a subdir, just check that the parent dir is in the list
+                    # already, it might actually NOT
+                    parent = os.path.join(dst, name[:name.find("/")])
+                    if parent not in retval:
+                        retval.append(parent)
             f.extractall(dst)
             done += 1
             errors = retval
