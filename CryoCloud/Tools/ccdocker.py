@@ -8,6 +8,7 @@ except:
 
 import inspect
 import sys
+import os
 import os.path
 import json
 import CryoCloud.Tools.node as node
@@ -45,10 +46,10 @@ try:
     except:
         pass
     options = parser.parse_args(args=sys.argv[2:])
-
     # run the worker
     args = vars(options)
     print("<info> Running worker module %s with arguments: '%s'" % (moduleinfo.name, args))
+    os.umask(0o2)
     progress, retval = mod.process_task(worker, {"args": args})
     print("{retval} " + json.dumps(retval))
     print("[progress] 100")
