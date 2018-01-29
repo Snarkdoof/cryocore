@@ -94,15 +94,19 @@ class JobDB(mysql):
 
         self._init_sqls(statements)
 
-        c = self._execute("SELECT runid FROM runs WHERE runname=%s", [self._runname])
-        row = c.fetchone()
-        if row:
-            self._runid = row[0]
-            self._execute("UPDATE runs SET module=%s, steps=%s WHERE runid=%s", [module, steps, self._runid])
+        if 0:
+            c = self._execute("SELECT runid FROM runs WHERE runname=%s", [self._runname])
+            row = c.fetchone()
+            if row:
+                self._runid = row[0]
+                self._execute("UPDATE runs SET module=%s, steps=%s WHERE runid=%s", [module, steps, self._runid])
+            else:
+                c = self._execute("INSERT INTO runs (runname, module, steps) VALUES (%s, %s, %s)",
+                                  [self._runname, module, steps])
+                self._runid = c.lastrowid
         else:
-            c = self._execute("INSERT INTO runs (runname, module, steps) VALUES (%s, %s, %s)",
-                              [self._runname, module, steps])
-            self._runid = c.lastrowid
+            self._runid = random.randint(0, 2147483647)
+        # Should not be a very high risk of two differnt heads coming up with the same id
 
     def add_job(self, step, taskid, args, jobtype=TYPE_NORMAL, priority=PRI_NORMAL, node=None,
                 expire_time=3600, module=None, modulepath=None, workdir=None):
@@ -230,6 +234,12 @@ class JobDB(mysql):
         c = self._execute(SQL, params)
         if c.rowcount == 0:
             raise Exception("Failed to update, does the job exist (job %s)" % (jobid))
+
+    def cleanup(self):
+        """
+        Remove done, expired or failed jobs that were completed at least one hour ago
+        """
+        self._execute("DELETE FROM jobs WHERE state>=%s AND tschange < NOW() - INTERVAL 1 hour", [STATE_COMPLETED])
 
     def update_timeouts(self):
         self._execute("UPDATE jobs SET state=%s WHERE state=%s AND tsallocated + expiretime < %s", [STATE_TIMEOUT, STATE_ALLOCATED, time.time()])
