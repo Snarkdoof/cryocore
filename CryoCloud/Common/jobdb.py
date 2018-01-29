@@ -94,19 +94,16 @@ class JobDB(mysql):
 
         self._init_sqls(statements)
 
-        if 0:
-            c = self._execute("SELECT runid FROM runs WHERE runname=%s", [self._runname])
-            row = c.fetchone()
-            if row:
-                self._runid = row[0]
-                self._execute("UPDATE runs SET module=%s, steps=%s WHERE runid=%s", [module, steps, self._runid])
-            else:
-                c = self._execute("INSERT INTO runs (runname, module, steps) VALUES (%s, %s, %s)",
-                                  [self._runname, module, steps])
-                self._runid = c.lastrowid
+        self._runname = random.randint(0, 2147483647)  # Just ignore the runname for now
+        c = self._execute("SELECT runid FROM runs WHERE runname=%s", [self._runname])
+        row = c.fetchone()
+        if row:
+            self._runid = row[0]
+            self._execute("UPDATE runs SET module=%s, steps=%s WHERE runid=%s", [module, steps, self._runid])
         else:
-            self._runid = random.randint(0, 2147483647)
-        # Should not be a very high risk of two differnt heads coming up with the same id
+            c = self._execute("INSERT INTO runs (runname, module, steps) VALUES (%s, %s, %s)",
+                              [self._runname, module, steps])
+            self._runid = c.lastrowid
 
     def add_job(self, step, taskid, args, jobtype=TYPE_NORMAL, priority=PRI_NORMAL, node=None,
                 expire_time=3600, module=None, modulepath=None, workdir=None):
