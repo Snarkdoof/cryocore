@@ -28,6 +28,10 @@ SLOW_WARNING = False
 dbThread = None
 
 
+class TooSlowException(Exception):
+    pass
+
+
 class FakeCursor():
     def __init__(self, result):
         if "return" not in result:
@@ -138,7 +142,6 @@ class AsyncDB(threading.Thread):
             except:
                 print("Unhandled exception")
                 import traceback
-                import sys
                 traceback.print_exc(file=sys.stdout)
                 time.sleep(0.25)
 
@@ -257,7 +260,6 @@ class AsyncDB(threading.Thread):
                 time.sleep(1.0)
             except MySQLdb.errors.InterfaceError as e:
                 import traceback
-                import sys
                 traceback.print_exc(file=sys.stdout)
                 print("DB Interface error", e.errno)
                 self._close_connection()
@@ -273,14 +275,12 @@ class AsyncDB(threading.Thread):
                     except:
                         retval["error"] = "UnhandledError: %s" % str(e)
                         break
-                        pass
                 retval["error"] = "ProgrammingError: %s" % str(e)
                 break
             except Exception as e:
                 retval["error"] = "UnhandledError: %s" % str(e)
                 print("Unhandled exception in _execute", e, e.__class__)
                 import traceback
-                import sys
                 traceback.print_exc(file=sys.stdout)
                 print("SQL was:", SQL, str(parameters))
                 break
@@ -320,6 +320,7 @@ class mysql:
         self._db_name = db_name
         self._my_name = name
         self._mycfg = config
+        self.cursor = None
         if self._mycfg:
             self._mycfg.set_default("min_conn_time", 10.0)
         self._min_conn_time = min_conn_time
@@ -363,9 +364,11 @@ class mysql:
         if DEBUG and self.log:
             self.log.debug("Initializing tables DONE")
 
-    def _execute(self, SQL, parameters=[],
+    def _execute(self, SQL, parameters=None,
                  temporary_connection=False,
                  ignore_error=False):
+        if parameters is None:
+            parameters = []
         if self._is_direct:
             try:
                 if not self.cursor:
@@ -374,7 +377,7 @@ class mysql:
                 return self.cursor
             except Exception as e:
                 if ignore_error:
-                    return cursor
+                    return self.cursor
                 raise e
         event = threading.Event()
         retval = {}
@@ -385,7 +388,7 @@ class mysql:
             if SLOW_WARNING:
                 print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
         if not event.isSet():
-            raise Exception("Failed to execute Config query in time (%s)" % SQL)
+            raise TooSlowException("Failed to execute Config query in time (%s)" % SQL)
 
         if not ignore_error and "error" in retval:
             raise Exception(retval["error"])
