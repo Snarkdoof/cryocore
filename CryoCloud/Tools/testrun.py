@@ -10,26 +10,45 @@ except:
 import inspect
 import sys
 import os.path
+import json
+
+from argparse import ArgumentParser
+
+try:
+    import argcomplete
+except:
+    print("Missing argcomplete, autocomplete not available")
 
 import CryoCloud.Tools.node as node
 from CryoCore import API
 
-if len(sys.argv) < 2:
-    raise SystemExit("Need module to testrun")
 
-filename = sys.argv[1]
-moduleinfo = inspect.getmoduleinfo(filename)
-path = os.path.dirname(os.path.abspath(filename))
+parser = ArgumentParser(description="CryoCloud testrun a module")
+parser.add_argument("-f", "--file", type=str, dest="config_file", default="", help="Read task as json from file")
+parser.add_argument("-m", "--module", type=str, dest="module", default="", help="The module to run (Python file)")
+parser.add_argument("-t", "--task", type=str, dest="task", default="", help="The task as json")
 
+if "argcomplete" in sys.modules:
+    argcomplete.autocomplete(parser)
+options = parser.parse_args()
+
+if not options.module:
+    raise SystemExit("Need module to run")
+
+moduleinfo = inspect.getmoduleinfo(options.module)
+path = os.path.dirname(os.path.abspath(options.module))
 sys.path.append(path)
 
-args = {}
-for arg in sys.argv[2:]:
-    name, value = arg.split("=")
-    args[name] = value
+if options.config_file:
+    f = open(options.config_file, "r")
+    task = json.loads(f.read())
+    f.close()
+elif options.task:
+    task = json.loads(options.task)
+else:
+    raise SystemExit("Need task definition")
 
-
-print("Running module %s with arguments: '%s'" % (moduleinfo.name, args))
+print("Running module %s with task: '%s'" % (moduleinfo.name, task))
 try:
     # Create the worker
     worker = node.Worker(0, API.api_stop_event)
@@ -40,7 +59,6 @@ try:
     # Load it
     info = imp.find_module(moduleinfo.name)
     mod = imp.load_module(moduleinfo.name, info[0], info[1], info[2])
-    task = {"args": args}
 
     canStop = False
     import inspect
@@ -52,8 +70,10 @@ try:
                 break
 
     if canStop:
-        mod.process_task(worker, task, API.api_stop_event)
+        progress, retval = mod.process_task(worker, task, API.api_stop_event)
     else:
-        mod.process_task(worker, task)
+        progress, retval = mod.process_task(worker, task)
+
+    print("Completed with", progress, " percent done, retval:", retval)
 finally:
     API.shutdown()

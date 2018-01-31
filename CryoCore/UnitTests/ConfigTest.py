@@ -94,6 +94,24 @@ class ConfigTest(unittest.TestCase):
         #    if l not in leaves:
         #        self.fail("get_leaves() returns bad, expected '%s' got '%s'" % (expected, leaves))
 
+    def testGetSet(self):
+        try:
+            self.cfg.set("TestSet", True)
+            self.fail("Should throw exception on set for nonexistent item")
+        except:
+            pass
+
+        self.cfg.add("TestSet", True)
+
+        self.assertEqual(self.cfg["TestSet"], True)
+        self.assertEqual(self.cfg.get("TestSet").get_value(), True)
+
+        try:
+            self.cfg.get("TestSet2")
+            self.fail("Should throw exception on get for nonexistent item")
+        except:
+            pass
+
     def testVersions(self):
         cfg2 = API.get_config(version="SecondTest")
         if cfg2["UnitTest"]:

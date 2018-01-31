@@ -94,6 +94,7 @@ class JobDB(mysql):
 
         self._init_sqls(statements)
 
+        self._runname = random.randint(0, 2147483647)  # Just ignore the runname for now
         c = self._execute("SELECT runid FROM runs WHERE runname=%s", [self._runname])
         row = c.fetchone()
         if row:
@@ -230,6 +231,12 @@ class JobDB(mysql):
         c = self._execute(SQL, params)
         if c.rowcount == 0:
             raise Exception("Failed to update, does the job exist (job %s)" % (jobid))
+
+    def cleanup(self):
+        """
+        Remove done, expired or failed jobs that were completed at least one hour ago
+        """
+        self._execute("DELETE FROM jobs WHERE state>=%s AND tschange < NOW() - INTERVAL 1 hour", [STATE_COMPLETED])
 
     def update_timeouts(self):
         self._execute("UPDATE jobs SET state=%s WHERE state=%s AND tsallocated + expiretime < %s", [STATE_TIMEOUT, STATE_ALLOCATED, time.time()])

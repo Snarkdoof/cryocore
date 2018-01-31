@@ -71,6 +71,8 @@ def _toUnicode(string):
         if string.__class__ == bytes:
             return str(string, "latin-1")
         return str(string)
+    if string.__class__ not in [str, unicode]:
+        return unicode(str(string), "utf-8")
     if string.__class__ == unicode:
         return string
     try:
@@ -156,11 +158,16 @@ class ConfigParameter:
         else:
             datatype = "string"  # raise Exception("Unknown datatype for %s"%self.name)
 
+        if sys.version_info.major == 3:
+            strings = [str]
+        else:
+            strings = [str, unicode]
+
         if check:
             try:
                 if datatype == "folder":
                     self.value = None
-                elif value.__class__ in [str, str]:
+                elif value.__class__ in strings:
                     if datatype == "boolean":
                         if value.__class__ == bool:
                             self.value = value
@@ -284,8 +291,6 @@ class NamedConfiguration:
         self.search = self._parent.search
         self.get_by_id = self._parent.get_by_id
         self.remove = self._parent.remove
-        self.add = self._parent.add
-        self.set = self._parent.set
         self.get_version_info_by_id = self._parent.get_version_info_by_id
         self.deserialize = self._parent.deserialize
         self.last_updated = self._parent.last_updated
@@ -334,6 +339,12 @@ class NamedConfiguration:
 
         return self._parent.get(_full_path, version, version_id,
                                 absolute_path, add, self.root)
+
+    def set(self, _full_path, value, version=None, datatype=None, comment=None, version_id=None,
+            absolute_path=False, check=True, create=False):
+        return self._parent.set(_full_path, value, version=version, datatype=datatype, comment=comment,
+                                version_id=version_id, absolute_path=absolute_path, check=check,
+                                create=create, root=self.root)
 
     def add(self, _full_path, value=None, datatype=None, comment=None,
             version=None,
@@ -1358,17 +1369,18 @@ class Configuration(threading.Thread):
                 SQL = SQL[:-4]
                 self._execute(SQL, params)
 
-    def set(self, _full_path, value, version=None, datatype=None, comment=None, version_id=None, absolute_path=False, check=True, create=False):
+    def set(self, _full_path, value, version=None, datatype=None, comment=None, version_id=None,
+            absolute_path=False, check=True, create=False, root=None):
 
         with self._load_lock:
             if version and not version_id:
                 version_id = self._get_version_id(version)
             try:
-                param = self.get(_full_path, version_id=version_id, absolute_path=absolute_path)
+                param = self.get(_full_path, version_id=version_id, absolute_path=absolute_path, root=root)
             except Exception as e:
                 if create:
-                    self.add(_full_path, value, version=version, datatype=datatype, comment=comment, version_id=version_id)
-                    param = self.get(_full_path, version_id=version_id, absolute_path=absolute_path)
+                    self.add(_full_path, value, version=version, datatype=datatype, comment=comment, version_id=version_id, root=root)
+                    param = self.get(_full_path, version_id=version_id, absolute_path=absolute_path, root=root)
                 else:
                     raise e
             if DEBUG:

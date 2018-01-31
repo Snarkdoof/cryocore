@@ -45,7 +45,7 @@ def load(modulename):
 
 class HeadNode(threading.Thread):
 
-    def __init__(self, handler, options):
+    def __init__(self, handler, options, neverfail=False):
         threading.Thread.__init__(self)
 
         self.name = "%s.HeadNode" % (options.name)
@@ -53,6 +53,7 @@ class HeadNode(threading.Thread):
         self.log = API.get_log(self.name)
         self.status = API.get_status(self.name)
         self.options = options
+        self.neverfail = neverfail
         self.status["state"] = "Initializing"
         self.status["tasks_created"] = 0
         self.status["tasks_allocated"] = 0
@@ -93,10 +94,10 @@ class HeadNode(threading.Thread):
         except:
             pass
 
-    def makeDirectoryWatcher(self, dir, onAdd=None, onModify=None, onRemove=None, onError=None,
+    def makeDirectoryWatcher(self, directory, onAdd=None, onModify=None, onRemove=None, onError=None,
                              stabilize=5, recursive=True):
             return CryoCloud.Common.DirectoryWatcher(self._jobdb._runid,
-                                                     dir,
+                                                     directory,
                                                      onAdd=onAdd,
                                                      onModify=onModify,
                                                      onRemove=onRemove,
@@ -182,7 +183,10 @@ class HeadNode(threading.Thread):
                 last_run = 0
                 notified = False
                 while not API.api_stop_event.is_set():
-                    self._jobdb.update_timeouts()
+                    try:
+                        self._jobdb.update_timeouts()
+                    except Exception as e:
+                        self.log.warning("Ignoring error on updating timeouts:" + e)
                     updates = self._jobdb.list_jobs(since=last_run, notstate=jobdb.STATE_PENDING)
                     for job in updates:
                         last_run = job["tschange"]
@@ -218,13 +222,21 @@ class HeadNode(threading.Thread):
                         notified = False
 
                     if len(updates) == 0:
+                        try:
+                            self._jobdb.cleanup()
+                        except Exception as e:
+                            self.log.warning("Ignoring error on db cleanup:" + e)
                         time.sleep(1)
                     continue
             except Exception as e:
                 print("Exception in HEAD (check logs)", e)
                 self.log.exception("In main loop")
-                failed = True
-                break
+                if self.neverfail is False:
+                    failed = True
+                    break
+                else:
+                    self.log.warning("Exception in HEAD but neverfail is set, will retry in a bit")
+                    time.sleep(2)
             finally:
                 failed = True
 
@@ -250,6 +262,7 @@ if __name__ == "__main__":
         raise SystemExit("Need handler")
 
     filename = sys.argv[1]
+    neverfail = False
     if filename in ["-h", "--help"]:
         mod = None
         supress = []
@@ -266,6 +279,10 @@ if __name__ == "__main__":
         supress = []
         try:
             supress = mod.supress
+        except:
+            pass
+        try:
+            neverfail = mod.neverfail
         except:
             pass
         print("Loaded module")
@@ -386,7 +403,7 @@ if __name__ == "__main__":
     signal.signal(signal.SIGQUIT, handler)
 
     try:
-        headnode = HeadNode(mod, options)
+        headnode = HeadNode(mod, options, neverfail=neverfail)
         headnode.start()
 
         # We create an event triggered by the head node when it's done

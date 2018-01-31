@@ -65,6 +65,7 @@ def process_task(worker, task):
         fcntl.fcntl(p.stderr, fcntl.F_SETFL, os.O_NONBLOCK)
 
         buf = {p.stdout: "", p.stderr: ""}
+        retval = None
 
         def report(line):
             """
@@ -86,11 +87,14 @@ def process_task(worker, task):
                     worker.log.warning(msg)
                 elif level == "error":
                     worker.log.error(msg)
+                elif level == "retval":
+                    return msg
                 else:
                     worker.log.error("Unknown log level '%s'" % level)
             else:
                 if debug:
                     worker.log.debug(line)
+            return None
 
         while not worker._stop_event.isSet():
             ready = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
@@ -101,12 +105,22 @@ def process_task(worker, task):
             # Process any stdout data
             while buf[p.stdout].find("\n") > -1:
                 line, buf[p.stdout] = buf[p.stdout].split("\n", 1)
-                report(line)
+                r = report(line)
+                if r:
+                    if retval:
+                        retval += ". " + r
+                    else:
+                        retval = r
 
             # Check for output on stderr - set error message
             while buf[p.stderr].find("\n") > -1:
                 line, buf[p.stderr] = buf[p.stderr].split("\n", 1)
-                report(line)
+                r = report(line)
+                if r:
+                    if retval:
+                        retval += ". " + r
+                    else:
+                        retval = r
 
             # See if the process is still running
             if p.poll() is not None:
@@ -116,7 +130,7 @@ def process_task(worker, task):
                 # Unexpected
                 raise Exception("IDL exited with exit value %d" % p.poll())
 
-        return worker.status["progress"].get_value(), None
+        return worker.status["progress"].get_value(), retval
     finally:
         if "dir" in task["args"]:
             os.chdir(orig_dir)

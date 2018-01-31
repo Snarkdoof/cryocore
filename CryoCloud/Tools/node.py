@@ -119,12 +119,9 @@ class Worker(multiprocessing.Process):
             if modulepath:
                 path = [modulepath]
             self._module = job["module"]
-            if self._module == "test":
-                self._module = None
-            else:
-                self.log.debug("Loading module %s (%s)" % (self._module, path))
-                self._module = load(self._module, path)
-                self.log.debug("Loading of %s successful", job["module"])
+            self.log.debug("Loading module %s (%s)" % (self._module, path))
+            self._module = load(self._module, path)
+            self.log.debug("Loading of %s successful", job["module"])
         except Exception as e:
             self._is_ready = False
             print("Import error:", e)
@@ -219,12 +216,12 @@ class Worker(multiprocessing.Process):
         Must return progress, returnvalue where progress is a number 0-100 (percent) and
         returnvalue is None or anything that can be converted to json
         """
+        raise Exception("Deprecated")
         import random
         progress = 0
         while not self._stop_event.is_set() and progress < 100:
             if random.random() > 0.99:
                 self.log.error("Error processing task %s" % str(task))
-                raise Exception("Randomly generated error")
             time.sleep(.5 + random.random() * 5)
             progress = min(100, progress + random.random() * 15)
             self.status["progress"] = progress
@@ -273,9 +270,10 @@ class Worker(multiprocessing.Process):
             t = threading.Thread(target=monitor)
             t.daemon = True
             t.start()
-
+        ret = None
         try:
             if self._module is None:
+                raise Exception("No module loaded, task was %s" % task)
                 progress, ret = self.process_task(task)
             else:
                 if canStop:
@@ -299,7 +297,8 @@ class Worker(multiprocessing.Process):
             self.status["num_errors"].inc()
             self.status["last_error"] = str(e)
             self.status["state"] = "Failed"
-            ret = str(e)
+            if not ret:
+                ret = str(e)
 
         task["state"] = "Stopped"
         task["processing_time"] = time.time() - start_time
