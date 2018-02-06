@@ -58,7 +58,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
 
 class NetWatcher(threading.Thread):
-    def __init__(self, port=None, onAdd=None, onError=None, stop_event=None, schema=None):
+    def __init__(self, port, onAdd=None, onError=None, stop_event=None, schema=None):
         """
         Schema must be a JSON schema for validating possible inputs
         """

@@ -105,12 +105,21 @@ class HeadNode(threading.Thread):
                                                      stabilize=stabilize,
                                                      recursive=recursive)
 
+    def makeNetWatcher(self, port, onAdd=None, onError=None, schema=None):
+            if schema is None:
+                print("*** WARNING: NetWatcher made without schema, REALLY should have one")
+            return CryoCloud.Common.NetWatcher(port,
+                                               onAdd=onAdd,
+                                               onError=onError,
+                                               schema=schema,
+                                               stop_event=API.api_stop_event)
+
     def add_job(self, step, taskid, args, jobtype=jobdb.TYPE_NORMAL, priority=jobdb.PRI_NORMAL,
-                node=None, expire_time=None, module=None, modulepath=None, workdir=None):
+                node=None, expire_time=None, module=None, modulepath=None, workdir=None, itemid=None):
         if expire_time is None:
             expire_time = self.options.max_task_time
         self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module, node=node, priority=priority,
-                            modulepath=modulepath, workdir=workdir, jobtype=jobtype)
+                            modulepath=modulepath, workdir=workdir, jobtype=jobtype, itemid=itemid)
         if self.options.steps > 0 and self.options.tasks > 0:
             if step > self.status["progress"].size[0]:
                 self.status.new2d("progress", (self.options.steps, self.options.tasks),
@@ -124,7 +133,7 @@ class HeadNode(threading.Thread):
             expire_time = expire_time = job["expire_time"]
         self._jobdb.remove_job(job["id"])
         self.add_job(job["step"], job["taskid"], job["args"], jobtype=job["type"],
-                     priority=job["priority"], node=node, expire_time=expire_time, module=job["module"])
+                     priority=job["priority"], node=node, expire_time=expire_time, module=job["module"], itemid=job["itemid"])
 
     def remove_job(self, job):
         if job.__class__ == int:
