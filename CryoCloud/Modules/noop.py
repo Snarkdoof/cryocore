@@ -23,7 +23,7 @@ def process_task(self, task):
         # if random.random() > 0.99:
         #    self.log.error("Error processing task %s" % str(task))
         #    raise Exception("Randomly generated error")
-        if task["args"]["randomize"]:
+        if "randomize" in task["args"]:
             time.sleep(t + random.random() * 5)
             progress = min(100, progress + random.random() * 15)
         else:

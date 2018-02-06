@@ -172,7 +172,6 @@ class Worker(multiprocessing.Process):
                 job = jobs[0]
                 self.status["current_job"] = job["id"]
                 self._job_in_progress = job
-                print("Got job", job)
                 self._switchJob(job)
                 if not self._is_ready:
                     time.sleep(1)

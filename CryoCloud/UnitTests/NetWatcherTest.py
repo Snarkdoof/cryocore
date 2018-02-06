@@ -41,8 +41,8 @@ class Poster:
             conn.request("POST", "/task", data)
         # print(dir(conn))
         response = conn.getresponse()
-        if (response.code != 200):
-            raise PostException("Bad return code, got %d expected 200" % response.code, response.code)
+        if (response.code != 202):
+            raise PostException("Bad return code, got %d expected 202" % response.code, response.code)
         conn.close()
 
 
@@ -56,6 +56,7 @@ class NetWatcherTest(unittest.TestCase):
         self.stop_event = threading.Event()
         self.listener = Listener()
         self.poster = Poster(self.port)
+
         self.nw = NetWatcher(self.port, onAdd=self.listener.onAdd,
                              onError=self.listener.onError, stop_event=self.stop_event)
         self.nw.start()
@@ -95,6 +96,7 @@ class NetWatcherTest(unittest.TestCase):
 
     def testAdvancedJSON(self):
         # Post a task
+
         expected = []
         for item in [
             [1, 2, "3"],
@@ -106,6 +108,93 @@ class NetWatcherTest(unittest.TestCase):
             # expected.sort()
             time.sleep(0.1)
             self.assertEqual(self.listener.added, expected)
+
+    def testSchema(self):
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "product": {"type": "string"},
+                "configOverride": {
+                    "type": "object",
+                    "properties": {
+                        "pixelsize": {
+                            "type": "array",
+                            "items": {
+                                "type": "number"
+                            }
+                        },
+                        "multilook_factor": {
+                            "type": "number"
+                        }
+                    }
+                }
+            }
+        }
+
+        self.nw.set_schema(schema)
+
+        conn = http.client.HTTPConnection("localhost", self.port, timeout=1.0)
+        conn.request("GET", "/schema")
+        r = conn.getresponse()
+        self.assertEqual(200, r.code)
+
+        data = r.read().decode("utf-8")
+        self.assertEqual(json.dumps(schema), data)
+
+        # Test some invalid things
+        try:
+            self.poster.post("simple string")
+            self.fail("Should get an error here")
+        except PostException as e:
+            # Expected error code 400
+            self.assertEqual(e.code, 400)
+
+        time.sleep(0.1)
+        self.assertEqual([], self.listener.added)
+
+        # Almost valid
+        try:
+            self.poster.post({"product": 1})
+            self.fail("Should get an error here")
+        except PostException as e:
+            # Expected error code 400
+            self.assertEqual(e.code, 400)
+
+        time.sleep(0.1)
+        self.assertEqual([], self.listener.added)
+
+        # Almost valid
+        try:
+            self.poster.post({"product": "valid", "configOverride": [1, 2]})
+            self.fail("Should get an error here")
+        except PostException as e:
+            # Expected error code 400
+            self.assertEqual(e.code, 400)
+
+        time.sleep(0.1)
+        self.assertEqual([], self.listener.added)
+
+        try:
+            self.poster.post({"product": "valid", "configOverride": {"pixelsize": ["1", 20]}})
+            self.fail("Should get an error here")
+        except PostException as e:
+            # Expected error code 400
+            self.assertEqual(e.code, 400)
+
+        time.sleep(0.1)
+        self.assertEqual([], self.listener.added)
+
+        # Valid
+        self.poster.post({"product": "valid"})
+        time.sleep(0.1)
+        self.assertEqual([{"product": "valid"}], self.listener.added)
+
+        # Valid
+        self.listener.added = []
+        self.poster.post({"product": "valid", "configOverride": {"pixelsize": [1, 20]}})
+        time.sleep(0.1)
+        self.assertEqual([{'configOverride': {'pixelsize': [1, 20]}, 'product': 'valid'}], self.listener.added)
 
 
 if __name__ == "__main__":
