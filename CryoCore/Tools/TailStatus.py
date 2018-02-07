@@ -1,9 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
 from __future__ import print_function
 import sys
 import time
+import re
 
 from CryoCore import API
 from CryoCore.Core.InternalDB import mysql
@@ -65,7 +66,7 @@ class TailStatus(mysql):
         self._execute("TRUNCATE status_channel")
         print("ALL CLEARED")
 
-    def print_status(self, follow):
+    def print_status(self, follow, max_lines=100):
         """
         Loop and print status. Does never return - kill it.
 
@@ -74,7 +75,7 @@ class TailStatus(mysql):
         cursor = self._execute("SELECT MAX(id) FROM status")
         row = cursor.fetchone()
         if row[0]:
-            last_id = max(row[0] - 100, 0)
+            last_id = max(row[0] - max_lines, 0)
         else:
             print("No status entries, tailing from now")
             last_id = 0
@@ -82,7 +83,7 @@ class TailStatus(mysql):
         cursor = self._execute("SELECT MAX(id) FROM status2d")
         row = cursor.fetchone()
         if row[0]:
-            last_id_2d = max(row[0] - 100, 0)
+            last_id_2d = max(row[0] - max_lines, 0)
         else:
             last_id_2d = 0
 
@@ -113,21 +114,20 @@ class TailStatus(mysql):
                         if do_print:
                             self._print_row(row, is2D)
                     return (r, max_id)
-
                 rows = 0
-                SQL = "SELECT id,timestamp,status_parameter.name,status_channel.name,value FROM status,status_parameter,status_channel WHERE status.chanid=status_channel.chanid AND status.paramid=status_parameter.paramid AND id>%s ORDER BY id"
-                cursor = self._execute(SQL,
-                                       [last_id])
-                (r, i) = process_results(cursor, last_id)
-                rows += r
-                last_id = i
-
                 SQL = "SELECT id,timestamp,status_parameter2d.name,status_channel.name,value,sizex,sizey,posx,posy FROM status2d,status_parameter2d,status_channel WHERE status2d.chanid=status_channel.chanid AND status2d.paramid=status_parameter2d.paramid AND id>%s ORDER BY id"
                 cursor = self._execute(SQL,
                                        [last_id_2d])
                 (r, i) = process_results(cursor, last_id_2d, True)
                 rows += r
                 last_id_2d = i
+
+                SQL = "SELECT id,timestamp,status_parameter.name,status_channel.name,value FROM status,status_parameter,status_channel WHERE status.chanid=status_channel.chanid AND status.paramid=status_parameter.paramid AND id>%s ORDER BY id"
+                cursor = self._execute(SQL,
+                                       [last_id])
+                (r, i) = process_results(cursor, last_id)
+                rows += r
+                last_id = i
 
                 if not follow:
                     return
@@ -268,6 +268,10 @@ if __name__ == "__main__":
                             default=False,
                             help="List all status channels")
 
+        parser.add_argument("-n", "--lines", dest="lines",
+                            help="Show the last n lines",
+                            default=200)
+
         parser.add_argument("-f", "--follow", action="store_true",
                             help="Follow the status - keep monitoring it")
 
@@ -292,6 +296,7 @@ if __name__ == "__main__":
             db_cfg["db_host"] = options.db_host
         if options.db_password:
             db_cfg["db_password"] = options.db_password
+        options.lines = int(options.lines)
 
         if len(db_cfg) > 0:
             API.set_config_db(db_cfg)
@@ -310,6 +315,7 @@ if __name__ == "__main__":
                 print(channel)
             print(" --------------")
             raise SystemExit()
+
         if 0:
             # Show historic match
             tail.print_last(sys.argv[1])
@@ -323,24 +329,21 @@ if __name__ == "__main__":
             tail.add_filter(filter_channel)
 
         if options.parameters:
+            opts = []
+            for r in options.parameters:
+                if r.startswith(":"):
+                    r = ".*" + r
+                opts.append(re.compile(r))
+            options.parameters = opts
+
             def filter_params(row):
-                if ":".join([row[CHANNEL], row[NAME]]) in options.parameters:
-                    return True
-                return False
+                l = ":".join([row[CHANNEL], row[NAME]])
+                for r in options.parameters:
+                    return r.match(l) is not None
+
             tail.add_filter(filter_params)
 
-        # Add filter to limit the amount of crud printed by the autopilot
-        def filter_autopilot(row):
-            if row[CHANNEL] == "AutoPilot" and \
-               row[NAME].find("bytes_") > -1:
-                return False
-            return True
-        # tail.add_filter(filter_autopilot)
-
-        try:
-            tail.print_status(options.follow)
-        except:
-            pass
+        tail.print_status(options.follow, options.lines)
 
     finally:
         API.shutdown()
