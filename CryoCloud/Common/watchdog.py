@@ -37,10 +37,11 @@ def englify(s):
 if not IRC_DISABLED:
     class Bot(irc.bot.SingleServerIRCBot):
         def __init__(self, nick, channel, server="fanoli01.itek.norut.no", port=6667):
+            self.password = "Misjonspresten sakt hermeneutisk badebukse"
             self._nick = nick
             self._server = server
             self._port = port
-            irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nick, nick + "_" + socket.gethostname())
+            irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nick, "watchdog")
             self.channel = channel
             self._handlers = {}
             self._last_ts = 0
@@ -61,7 +62,7 @@ if not IRC_DISABLED:
         def on_error(self, c, e):
             print("ERROR", c, e)
             time.sleep(10)
-            self.connect(self._nick, self._server, self._port)
+            self.connect(self._server, self._port, nickname=self._nick)
 
         def on_privmsg(self, c, e):
             # self.connection.notice(e.source.nick, "Hello there")
@@ -74,7 +75,6 @@ if not IRC_DISABLED:
             # if time.time() - self._last_ts > 60:
                 # self.connection.privmsg(self.channel, "Time is: %s" % self.getTime())
                 # self._last_ts = time.time()
-            print(time.time(), msg)
             self.connection.privmsg(self.channel, toUnicode(msg) + " @" + self.getTime())
 
         def _cb(self, what, dest):
@@ -210,38 +210,34 @@ class Watchdog:
         known = self.db.get_channels_and_parameters()
         with self.lock:
             for (nick, channel, parameter, expected, full_match) in self._user_watch:
-                print("Checking", nick)
                 if channel and parameter:
-                    print(channel, "in", known.keys())
                     if channel in known:
                         if parameter in known[channel]:
-                            print("p", parameter, "in", known[channel].keys())
                             self._watch.append((nick, channel, parameter, expected))
                 else:
                     # Only parameter is specified, look in all channels
                     for channel in known:
-                        print("p", parameter, "in", known[channel].keys())
                         if parameter in known[channel]:
                             self._watch.append((nick, channel, parameter, expected))
-        print("Updated watches", self._user_watch, "->", self._watch)
 
     def _make_report(self, full_report=False):
         message = ""
         with self._lock:
-            print("Reporting on watches", self._watch)
             for nick, chan, param, expected in self._watch:
                 if not (chan, param) in self.last_values:
                     self.last_values[(chan, param)] = None
                 last_time, last_val = self.db.get_last_status_value(chan, param)
-                print(last_time, last_val, self.last_values[(chan, param)])
+                if last_time is None:
+                    last_time = 0
                 fail = False
                 # if self.last_values[(chan, param)] == last_time:
-                if last_time < time.time() - self.cfg["default_timeout"]:
+                if last_time < (time.time() - self.cfg["default_timeout"]):
+                    fail = True
                     if not (chan, param) in self.errors or full_report:
-                        fail = True
                         self.errors[(chan, param)] = "No response"
+                        print(chan, param, "Not updated in", time.time() - last_time, "seconds")
                         # self.bot.send("%s has not responded in %d seconds" % (nick, time.time() - last_time))
-                        message += "E: %s has not responded in %d seconds\n" % (nick, time.time() - last_time)
+                        message += "E: %s has not responded in %d seconds (%s)\n" % (nick, time.time() - last_time, chan)
                 elif (expected is not None):
                     if expected.__class__ in [tuple, list]:
                         if float(last_val) < expected[0] or float(last_val) > expected[1]:
@@ -256,26 +252,26 @@ class Watchdog:
 
                 if not fail and (chan, param) in self.errors:
                     # self.bot.send("%s OK" % (nick))
-                    message += "I: %s OK\n" % (nick)
+                    message += "I: %s (%s) OK\n" % (nick, chan)
                     del self.errors[(chan, param)]
-                elif full_report:
+                elif not fail and full_report:
                     # Put in stuff that is fine here?
                     message += "I: %s is OK (%s)\n" % (nick, last_val)
 
                 self.last_values[(chan, param)] = last_time
 
             dirs = self._file_watch[:]  # Work on a copy, don't hog the lock
-        print("Checking files")
 
         # Check files too
+        files_failed = 0
         for nick, path, max_time, callback in dirs:
             files = os.listdir(path)
             for filename in files:
                 p = os.path.join(path, filename)
                 if os.path.isfile(p):
                     stat = os.lstat(p)
-                    print(p, time.time() - stat.st_mtime)
                     if time.time() - stat.st_mtime > max_time:
+                        files_failed += 1
                         if p not in self._reported_files or full_report:
                             try:
                                 e = callback(nick, path, p, time.time() - stat.st_mtime)
@@ -289,14 +285,15 @@ class Watchdog:
                             del self._reported_files[p]
                             message += "I: %s: File %s modified\n" % (nick, path)
 
-                        print("I: File OK", p, time.time() - stat.st_mtime, "vs", max_time)
+        if len(dirs) > 0 and files_failed == 0 and full_report:
+            message += "I: All files OK\n"
 
         # We now check if some of the files appear to have dissapeared (which makes it OK)
         now = time.time()
         for p in self._reported_files:
             if now - self._reported_files[p][0] > 1:  # Not seen this time
                 message += "%s: File %s removed - OK\n" % (self._reported_files[p][1], p)
-        print("Report is", message)
+
         return message
 
     def run(self):
