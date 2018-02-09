@@ -195,7 +195,7 @@ class HeadNode(threading.Thread):
                     try:
                         self._jobdb.update_timeouts()
                     except Exception as e:
-                        self.log.warning("Ignoring error on updating timeouts:" + str(e))
+                        self.log.exception("Ignoring error on updating timeouts")
                     updates = self._jobdb.list_jobs(since=last_run, notstate=jobdb.STATE_PENDING)
                     for job in updates:
                         last_run = job["tschange"]
