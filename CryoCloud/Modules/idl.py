@@ -149,30 +149,33 @@ def process_task(worker, task, cancel_event=None):
                 raise Exception("IDL exited with exit value %d" % p.poll())
 
             # Get stats for the running process
-            for proc in psutil.process_iter():
-                if proc.cmdline() == cmd:
-                    worker.status["status"] = proc.status()
-                    cpu = proc.cpu_times()
-                    worker.status["cpu_user"] = cpu.user
-                    worker.status["cpu_system"] = cpu.system
-                    mem = proc.memory_info()
-                    worker.status["mem_resident"] = mem.rss
-                    worker.status["mem_virtual"] = mem.vms
+            try:
+                for proc in psutil.process_iter():
+                    if proc.cmdline() == cmd:
+                        worker.status["status"] = proc.status()
+                        cpu = proc.cpu_times()
+                        worker.status["cpu_user"] = cpu.user
+                        worker.status["cpu_system"] = cpu.system
+                        mem = proc.memory_info()
+                        worker.status["mem_resident"] = mem.rss
+                        worker.status["mem_virtual"] = mem.vms
 
-                    # Check if we are still good - active within the last max_time
-                    # and memory usage less than max_memory
-                    if proc.status() == "running" or (cpu.user + cpu.system) > 10.0:
-                        last_working = time.time()
-                    if max_memory and mem.rss > max_memory:
-                        worker.status["idl"] = "killed (memory)"
-                        worker.log.error("IDL using too much memory, killing")
-                        p.terminate()
-                    break
+                        # Check if we are still good - active within the last max_time
+                        # and memory usage less than max_memory
+                        if proc.status() == "running" or (cpu.user + cpu.system) > 10.0:
+                            last_working = time.time()
+                        if max_memory and mem.rss > max_memory:
+                            worker.status["idl"] = "killed (memory)"
+                            worker.log.error("IDL using too much memory, killing")
+                            p.terminate()
+                        break
 
-            if max_time and time.time() - last_working > max_time:
-                worker.log.error("IDL used too long (%s idle), killing" % (time.time() - last_working))
-                worker.status["idl"] = "killed (time)"
-                p.terminate()
+                if max_time and time.time() - last_working > max_time:
+                    worker.log.error("IDL used too long (%s idle), killing" % (time.time() - last_working))
+                    worker.status["idl"] = "killed (time)"
+                    p.terminate()
+            except:
+                pass
 
         return worker.status["progress"].get_value(), retval
     finally:
