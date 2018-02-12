@@ -213,12 +213,14 @@ class Watchdog:
                 if channel and parameter:
                     if channel in known:
                         if parameter in known[channel]:
-                            self._watch.append((nick, channel, parameter, expected))
+                            if not (nick, channel, parameter, expected) in self._watch:
+                                self._watch.append((nick, channel, parameter, expected))
                 else:
                     # Only parameter is specified, look in all channels
                     for channel in known:
                         if parameter in known[channel]:
-                            self._watch.append((nick, channel, parameter, expected))
+                            if not (nick, channel, parameter, expected) in self._watch:
+                                self._watch.append((nick, channel, parameter, expected))
 
     def _make_report(self, full_report=False):
         message = ""
