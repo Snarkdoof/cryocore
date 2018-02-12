@@ -226,7 +226,13 @@ class Watchdog:
             for nick, chan, param, expected in self._watch:
                 if not (chan, param) in self.last_values:
                     self.last_values[(chan, param)] = None
-                last_time, last_val = self.db.get_last_status_value(chan, param)
+                try:
+                    last_time, last_val = self.db.get_last_status_value(chan, param)
+                except:
+                    # Status doesn't have a value in the DB (likely last one cleaned)
+                    message += "E: %s has no value (%s)" % (nick, chan)
+                    continue
+
                 if last_time is None:
                     last_time = 0
                 fail = False
