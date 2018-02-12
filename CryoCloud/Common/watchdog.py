@@ -299,6 +299,8 @@ class Watchdog:
         for p in self._reported_files:
             if now - self._reported_files[p][0] > 1:  # Not seen this time
                 message += "%s: File %s removed - OK\n" % (self._reported_files[p][1], p)
+                # Remove it, it's gone
+                del self._reported_files[p]
 
         return message
 
