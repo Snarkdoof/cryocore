@@ -17,6 +17,7 @@ except:
 
 from CryoCore import API
 from CryoCore.Core.Status.StatusDbReader import StatusDbReader
+from CryoCore.Core.LogReader import LogDbReader
 import threading
 
 IRC_DISABLED = False
@@ -72,10 +73,13 @@ if not IRC_DISABLED:
             self._cb(e.arguments[0], self.channel)
 
         def send(self, msg):
-            # if time.time() - self._last_ts > 60:
-                # self.connection.privmsg(self.channel, "Time is: %s" % self.getTime())
-                # self._last_ts = time.time()
-            self.connection.privmsg(self.channel, toUnicode(msg) + " @" + self.getTime())
+            if time.time() - self._last_ts > 60:
+                self.connection.privmsg(self.channel, "Time is: %s" % self.getTime())
+                self._last_ts = time.time()
+            m = toUnicode(msg)
+            if len(m) > 512:
+                m = m[:500] + "..."
+            self.connection.privmsg(self.channel, m)  # + " @" + self.getTime())
 
         def _cb(self, what, dest):
             kws = what.split(" ")
@@ -125,8 +129,9 @@ def toUnicode(string):
 
 class Watchdog:
 
-    def __init__(self, name):
+    def __init__(self, name, logfilter=None):
         self.name = name
+        self.debug = False
         self.cfg = API.get_config(self.name)
         self.cfg.set_default("irc.enabled", True)
         self.cfg.set_default("irc.server", "fanoli01.itek.norut.no")
@@ -151,6 +156,11 @@ class Watchdog:
         self.errors = {}
         self.last_values = {}
         self._user_watch = []  # List of parameters queued for watching - will be resolved periodically
+        if logfilter:
+            self.logreader = LogDbReader()
+            self._logfilter = logfilter
+        else:
+            self.logreader = None
 
         sender = self.cfg["email.sender"]
         if sender is None:
@@ -160,7 +170,7 @@ class Watchdog:
         if not IRC_DISABLED and self.cfg["irc.enabled"]:
             self.bot = Bot(self.cfg["irc.nick"], self.cfg["irc.channel"], self.cfg["irc.server"], self.cfg["irc.port"])
             self.bot.addHandler("status", self.onstatus)
-            self.bot.addHandler("errors", self.onstatus)
+            self.bot.addHandler("debug", self.ondebug)
         else:
             self.bot = None
 
@@ -177,6 +187,20 @@ class Watchdog:
         except:
             self.log.exception("Making report on request")
             raise Exception("Failed to make a report")
+
+    def ondebug(self, what, args):
+        if self.logreader is None:
+            return ["Debug is disabled, no logfilter has been provided"]
+
+        if len(args) == 1:
+            if args[0].lower() in ["on", "true", "enable", "enabled"]:
+                logs = self.logreader.get_updates(max_lines=1)
+                self._logsince = logs["maxid"]
+                self.debug = True
+            elif args[0].lower() in ["off", "false", "disable", "disabled"]:
+                self.debug = False
+
+        return ["Debug is " + str(self.debug)]
 
     def addDirWatch(self, nick, path, max_time, callback):
         """
@@ -312,15 +336,24 @@ class Watchdog:
 
         self.status["state"] = "Running"
         print("RUNNING")
+        last_run = time.time()
         while not API.api_stop_event.isSet():
             message = self._make_report()
             if len(message) > 0:
                 self.report(message)
 
-            for i in range(0, self.cfg["runeach"]):
+            while time.time() - last_run < self.cfg["runeach"]:
                 if API.api_stop_event.isSet():
                     break
+                if self.debug:
+                    logs = self.logreader.get_updates(since=self._logsince, filter=self._logfilter, max_lines=1)
+                    self._logsince = logs["maxid"]
+                    for lines in logs["logs"]:
+                        for line in (lines[5] + ": " + lines[8]).split("\n"):
+                            self.bot.send(API.log_level[lines[3]] + ": " + line)
+
                 time.sleep(1)
+            last_run = time.time()
         try:
             if self.bot:
                 print("*** Asking bot to die")
