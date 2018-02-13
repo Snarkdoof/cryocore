@@ -66,7 +66,7 @@ class TailLog(mysql):
         self.name = name
 
         cfg = API.get_config("System.LogDB")
-        mysql.__init__(self, self.name, config=cfg, can_log=False)
+        mysql.__init__(self, self.name, config=cfg, can_log=False, is_direct=True)
 
         self.filters = []
         self.default_show = default_show

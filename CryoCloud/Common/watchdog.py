@@ -291,7 +291,7 @@ class Watchdog:
                     else:
                         if p in self._reported_files:
                             del self._reported_files[p]
-                            message += "I: %s: File %s modified\n" % (nick, path)
+                            message += "I: %s: File %s modified\n" % (self._reported_files[p][1], p)
 
         if len(dirs) > 0 and files_failed == 0 and full_report:
             message += "I: All files OK\n"
