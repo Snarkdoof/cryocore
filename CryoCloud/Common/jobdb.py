@@ -155,20 +155,31 @@ class JobDB(mysql):
         SQL += " ORDER BY priority DESC, tsadded LIMIT %s"
         args.append(max_jobs)
         c = self._execute(SQL, args)
+        ex = None
         if c.rowcount > 0:
-            c = self._execute("SELECT jobid, step, taskid, type, priority, args, runname, jobs.module, jobs.modulepath, runs.module, steps, workdir, itemid FROM jobs, runs WHERE runs.runid=jobs.runid AND nonce=%s", [nonce])
-            jobs = []
-            for jobid, step, taskid, t, priority, args, runname, jmodule, modulepath, rmodule, steps, workdir, itemid in c.fetchall():
-                if args:
-                    args = json.loads(args)
-                if jmodule:
-                    module = jmodule
-                else:
-                    module = rmodule
-                jobs.append({"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
-                             "args": args, "runname": runname, "module": module, "modulepath": modulepath,
-                             "steps": steps, "workdir": workdir, "itemid": itemid})
-            return jobs
+            # We must not fail on this, so loop a few times to try to avoid it being allocated but not returned!
+            for i in range(0, 10):
+                try:
+                    c = self._execute("SELECT jobid, step, taskid, type, priority, args, runname, jobs.module, jobs.modulepath, runs.module, steps, workdir, itemid FROM jobs, runs WHERE runs.runid=jobs.runid AND nonce=%s", [nonce])
+                    jobs = []
+                    for jobid, step, taskid, t, priority, args, runname, jmodule, modulepath, rmodule, steps, workdir, itemid in c.fetchall():
+                        if args:
+                            args = json.loads(args)
+                        if jmodule:
+                            module = jmodule
+                        else:
+                            module = rmodule
+                        jobs.append({"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
+                                     "args": args, "runname": runname, "module": module, "modulepath": modulepath,
+                                     "steps": steps, "workdir": workdir, "itemid": itemid})
+
+                    return jobs
+                except Exception as e:
+                    ex = e
+                    self.log.exception("Problem getting the job that I allocated, trying to get it again in a second")
+                    time.sleep(1.0)
+        if ex:
+            raise ex
         return []
 
     def list_jobs(self, step=None, state=None, notstate=None, since=None):

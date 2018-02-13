@@ -16,9 +16,11 @@ import os.path
 import fcntl
 import re
 import select
+import psutil
+import time
 
 
-def process_task(worker, task):
+def process_task(worker, task, cancel_event=None):
     """
     worker.status and worker.log are ready here.
 
@@ -41,6 +43,12 @@ def process_task(worker, task):
 
     cmd = ["idl"]
     cmd.extend(task["args"]["cmd"])
+    max_time = None
+    max_memory = None
+    if "max_time" in task["args"]:
+        max_time = float(task["args"]["max_time"])
+    if "max_memory" in task["args"]:
+        max_memory = int(task["args"]["max_memory"])
 
     orig_dir = os.getcwd()
     try:
@@ -58,8 +66,8 @@ def process_task(worker, task):
 
         worker.log.debug("IDLCommand is: '%s'" % cmd)
         print(" ".join(cmd).join(" "))
-
         p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        worker.status["idl"] = "running"
         # We set the outputs as nonblocking
         fcntl.fcntl(p.stdout, fcntl.F_SETFL, os.O_NONBLOCK)
         fcntl.fcntl(p.stderr, fcntl.F_SETFL, os.O_NONBLOCK)
@@ -96,7 +104,17 @@ def process_task(worker, task):
                     worker.log.debug(line)
             return None
 
+        # We run a timer to see that the process isn't idling too long,
+        # that might indicate that it's frozen on some IO and should be killed
+        last_working = time.time()
         while not worker._stop_event.isSet():
+
+            if cancel_event.isSet():
+                try:
+                    p.terminate()
+                except:
+                    worker.log.exception("Tried to terminate IDL, no luck")
+
             ready = select.select([p.stdout, p.stderr], [], [], 1.0)[0]
             for fd in ready:
                 data = fd.read()
@@ -129,6 +147,35 @@ def process_task(worker, task):
                     break
                 # Unexpected
                 raise Exception("IDL exited with exit value %d" % p.poll())
+
+            # Get stats for the running process
+            try:
+                for proc in psutil.process_iter():
+                    if proc.cmdline() == cmd:
+                        worker.status["status"] = proc.status()
+                        cpu = proc.cpu_times()
+                        worker.status["cpu_user"] = cpu.user
+                        worker.status["cpu_system"] = cpu.system
+                        mem = proc.memory_info()
+                        worker.status["mem_resident"] = mem.rss
+                        worker.status["mem_virtual"] = mem.vms
+
+                        # Check if we are still good - active within the last max_time
+                        # and memory usage less than max_memory
+                        if proc.status() == "running" or (cpu.user + cpu.system) > 10.0:
+                            last_working = time.time()
+                        if max_memory and mem.rss > max_memory:
+                            worker.status["idl"] = "killed (memory)"
+                            worker.log.error("IDL using too much memory, killing")
+                            p.terminate()
+                        break
+
+                if max_time and time.time() - last_working > max_time:
+                    worker.log.error("IDL used too long (%s idle), killing" % (time.time() - last_working))
+                    worker.status["idl"] = "killed (time)"
+                    p.terminate()
+            except:
+                pass
 
         return worker.status["progress"].get_value(), retval
     finally:

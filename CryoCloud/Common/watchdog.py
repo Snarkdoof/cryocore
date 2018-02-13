@@ -22,8 +22,10 @@ import threading
 IRC_DISABLED = False
 try:
     import irc.bot
+    import irc.client
+    import logging
 except:
-    print("*** Missing IRC support, sudo pip3 install irc")
+    print("*** Missing IRC support, pip3 install irc")
     IRC_DISABLED = True
 
 
@@ -35,13 +37,17 @@ def englify(s):
 if not IRC_DISABLED:
     class Bot(irc.bot.SingleServerIRCBot):
         def __init__(self, nick, channel, server="fanoli01.itek.norut.no", port=6667):
+            self.password = "Misjonspresten sakt hermeneutisk badebukse"
             self._nick = nick
-            irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nick, nick + "_" + socket.gethostname())
+            self._server = server
+            self._port = port
+            irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nick, "watchdog")
             self.channel = channel
             self._handlers = {}
             self._last_ts = 0
             t = threading.Thread(target=self.start)  # Will otherwise block
             t.start()
+            irc.client.log.setLevel(logging.WARNING)
 
         def getTime(self):
             return time.strftime("%d.%m %H:%M:%S")
@@ -53,6 +59,11 @@ if not IRC_DISABLED:
             c.join(self.channel)
             self.send("Hello")
 
+        def on_error(self, c, e):
+            print("ERROR", c, e)
+            time.sleep(10)
+            self.connect(self._server, self._port, nickname=self._nick)
+
         def on_privmsg(self, c, e):
             # self.connection.notice(e.source.nick, "Hello there")
             self._cb(e.arguments[0], e.source.nick)
@@ -61,9 +72,9 @@ if not IRC_DISABLED:
             self._cb(e.arguments[0], self.channel)
 
         def send(self, msg):
-            if time.time() - self._last_ts > 60:
-                self.connection.privmsg(self.channel, "Time is: %s" % self.getTime())
-                self._last_ts = time.time()
+            # if time.time() - self._last_ts > 60:
+                # self.connection.privmsg(self.channel, "Time is: %s" % self.getTime())
+                # self._last_ts = time.time()
             self.connection.privmsg(self.channel, toUnicode(msg) + " @" + self.getTime())
 
         def _cb(self, what, dest):
@@ -73,8 +84,10 @@ if not IRC_DISABLED:
             if what in self._handlers:
                 for handler in self._handlers[what]:
                     try:
-                        for line in handler(what, args):
-                            self.connection.notice(dest, line)
+                        report = handler(what, args)
+                        for line in report:
+                            if line:
+                                self.connection.notice(dest, line)
                     except Exception as e:
                         print("*** ERROR *** IRC Handling '%s'" % (dest))
                         self.send("I got in trouble: " + str(e))
@@ -124,6 +137,9 @@ class Watchdog:
         self.cfg.set_default("email.recipients", "njaal.borch@norut.no")
         self.cfg.set_default("email.subject", "CryoCloud WatchDog (on %s)" % socket.gethostname())
         self.cfg.set_default("email.smtp_server", "localhost")
+        self.cfg.set_default("default_timeout", 60)
+        self.cfg.set_default("runeach", 10)
+        self.log = API.get_log(self.name)
         self.status = API.get_status(self.name)
         self.status["state"] = "Initializing"
 
@@ -140,7 +156,6 @@ class Watchdog:
         if sender is None:
             sender = socket.gethostname()
         self.sender = "%s <no-reply@norut.no>" % englify(sender)
-        self.timeout = 900  # 15 minutes
         self._lock = threading.Lock()
         if not IRC_DISABLED and self.cfg["irc.enabled"]:
             self.bot = Bot(self.cfg["irc.nick"], self.cfg["irc.channel"], self.cfg["irc.server"], self.cfg["irc.port"])
@@ -157,7 +172,7 @@ class Watchdog:
         try:
             report = self._make_report(full_report=True)
             if len(report) == 0:
-                report = "All is good as far as I can tell"
+                report = "Nothing to report"
             return report.split("\n")
         except:
             self.log.exception("Making report on request")
@@ -195,59 +210,76 @@ class Watchdog:
         known = self.db.get_channels_and_parameters()
         with self.lock:
             for (nick, channel, parameter, expected, full_match) in self._user_watch:
-                print("Checking", nick)
                 if channel and parameter:
-                    print(channel, "in", known.keys())
                     if channel in known:
                         if parameter in known[channel]:
-                            print("p", parameter, "in", known[channel].keys())
-                            self._watch.append((nick, channel, parameter, expected))
+                            if not (nick, channel, parameter, expected) in self._watch:
+                                self._watch.append((nick, channel, parameter, expected))
                 else:
                     # Only parameter is specified, look in all channels
                     for channel in known:
-                        print("p", parameter, "in", known[channel].keys())
                         if parameter in known[channel]:
-                            self._watch.append((nick, channel, parameter, expected))
-        print("Updated watches", self._user_watch, "->", self._watch)
+                            if not (nick, channel, parameter, expected) in self._watch:
+                                self._watch.append((nick, channel, parameter, expected))
 
     def _make_report(self, full_report=False):
         message = ""
         with self._lock:
-            print("Reporting on watches", self._watch)
-            for chan, param, description, expected in self._watch:
+            for nick, chan, param, expected in self._watch:
                 if not (chan, param) in self.last_values:
                     self.last_values[(chan, param)] = None
-                last_time, last_val = self.db.get_last_status_value(chan, param)
-                if (expected is not None and last_val != expected):
-                    if (chan, param) not in self.errors or full_report:
-                        self.errors[(chan, param)] = "Unexpected reply"
-                        self.bot.send("%s: ERROR, got %s, expected %s" % (description, last_val, expected))
-                        message += "%s: ERROR, got %s, expected %s\n" % (description, last_val, expected)
-                elif self.last_values[(chan, param)] == last_time:
+                try:
+                    last_time, last_val = self.db.get_last_status_value(chan, param)
+                except:
+                    # Status doesn't have a value in the DB (likely last one cleaned)
+                    message += "E: %s has no value (%s)" % (nick, chan)
+                    continue
+
+                if last_time is None:
+                    last_time = 0
+                fail = False
+                # if self.last_values[(chan, param)] == last_time:
+                if last_time < (time.time() - self.cfg["default_timeout"]):
+                    fail = True
                     if not (chan, param) in self.errors or full_report:
-                        if time.time() - last_time < self.timeout:
-                            continue
                         self.errors[(chan, param)] = "No response"
-                        self.bot.send("%s has not responded in %d seconds" % (description, time.time() - last_time))
-                        message += "%s has not responded in %d seconds\n" % (description, time.time() - last_time)
-                elif (chan, param) in self.errors:
-                    self.bot.send("%s OK" % (description))
-                    message += "%s OK\n" % (description)
+                        print(chan, param, "Not updated in", time.time() - last_time, "seconds")
+                        # self.bot.send("%s has not responded in %d seconds" % (nick, time.time() - last_time))
+                        message += "E: %s has not responded in %d seconds (%s)\n" % (nick, time.time() - last_time, chan)
+                elif (expected is not None):
+                    if expected.__class__ in [tuple, list]:
+                        if float(last_val) < expected[0] or float(last_val) > expected[1]:
+                            fail = True
+                    elif last_val != expected:
+                        fail = True
+                    if fail:
+                        if (chan, param) not in self.errors or full_report:
+                            self.errors[(chan, param)] = "Unexpected reply"
+                            # self.bot.send("%s: ERROR, got %s, expected %s" % (nick, last_val, expected))
+                            message += "E: %s: got %s, expected %s\n" % (nick, last_val, expected)
+
+                if not fail and (chan, param) in self.errors:
+                    # self.bot.send("%s OK" % (nick))
+                    message += "I: %s (%s) OK\n" % (nick, chan)
                     del self.errors[(chan, param)]
+                elif not fail and full_report:
+                    # Put in stuff that is fine here?
+                    message += "I: %s is OK (%s)\n" % (nick, last_val)
+
                 self.last_values[(chan, param)] = last_time
 
             dirs = self._file_watch[:]  # Work on a copy, don't hog the lock
-        print("Checking files")
 
         # Check files too
+        files_failed = 0
         for nick, path, max_time, callback in dirs:
             files = os.listdir(path)
             for filename in files:
                 p = os.path.join(path, filename)
                 if os.path.isfile(p):
                     stat = os.lstat(p)
-                    print(p, time.time() - stat.st_mtime)
                     if time.time() - stat.st_mtime > max_time:
+                        files_failed += 1
                         if p not in self._reported_files or full_report:
                             try:
                                 e = callback(nick, path, p, time.time() - stat.st_mtime)
@@ -259,16 +291,19 @@ class Watchdog:
                     else:
                         if p in self._reported_files:
                             del self._reported_files[p]
-                            message += "%s: File %s modified\n" % (nick, path)
+                            message += "I: %s: File %s modified\n" % (nick, path)
 
-                        print("File OK", p, time.time() - stat.st_mtime, "vs", max_time)
+        if len(dirs) > 0 and files_failed == 0 and full_report:
+            message += "I: All files OK\n"
 
         # We now check if some of the files appear to have dissapeared (which makes it OK)
         now = time.time()
         for p in self._reported_files:
             if now - self._reported_files[p][0] > 1:  # Not seen this time
-                message += "%s: File %s removed - OK\n" % (self._reported_files[p][1], self._reported_files[p][2])
-        print("Report is", message)
+                message += "%s: File %s removed - OK\n" % (self._reported_files[p][1], p)
+                # Remove it, it's gone
+                del self._reported_files[p]
+
         return message
 
     def run(self):
@@ -282,7 +317,7 @@ class Watchdog:
             if len(message) > 0:
                 self.report(message)
 
-            for i in range(0, 30):
+            for i in range(0, self.cfg["runeach"]):
                 if API.api_stop_event.isSet():
                     break
                 time.sleep(1)

@@ -388,7 +388,7 @@ class mysql:
             if SLOW_WARNING:
                 print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
         if not event.isSet():
-            raise TooSlowException("Failed to execute Config query in time (%s)" % SQL)
+            raise TooSlowException("Failed to execute query in time (%s)" % SQL)
 
         if not ignore_error and "error" in retval:
             raise Exception(retval["error"])

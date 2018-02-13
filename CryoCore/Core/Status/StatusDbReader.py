@@ -32,7 +32,10 @@ class StatusDbReader(InternalDB.mysql):
         cursor = self._execute(SQL, (channel, name))
         if cursor.rowcount == 0:
             raise Exception("Missing parameter %s.%s" % (channel, name))
-        return cursor.fetchone()[0]
+        row = cursor.fetchone()
+        if row is None:
+            raise Exception("Missing parameter '%s' in channel '%s'" % (name, channel))
+        return row[0]
 
     def get_last_status_value(self, channel, name):
         """

@@ -170,6 +170,7 @@ class Worker(multiprocessing.Process):
                         last_reported = time.time()
                     continue
                 job = jobs[0]
+                self.status["state"] = "Working"
                 self.status["current_job"] = job["id"]
                 self._job_in_progress = job
                 self._switchJob(job)
@@ -186,9 +187,8 @@ class Worker(multiprocessing.Process):
                 break
             except Exception as e:
                 print("No job", e)
-                # log.error("Failed to get job")
-                self.status["state"] = "Disconnected"
-                # Likely a manager crash - reconnect
+                self.log.exception("Failed to get job")
+                self.status["state"] = "Error (DB?)"
                 time.sleep(5)
                 continue
             finally:
