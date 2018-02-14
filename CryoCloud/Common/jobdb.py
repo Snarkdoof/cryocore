@@ -29,6 +29,13 @@ TASK_TYPE = {
     TYPE_MANUAL: "ManualWorker"
 }
 
+PRI_STRING = {
+    PRI_HIGH: "high",
+    PRI_NORMAL: "normal",
+    PRI_LOW: "low",
+    PRI_BULK: "bulk"
+}
+
 
 class JobDB(mysql):
 
@@ -136,7 +143,7 @@ class JobDB(mysql):
             pass
 
     def _cleanup_timer_run(self):
-        if not self.running:
+        if API.api_stop_event.isSet():
             return  # We're done
 
         self.cleanup()
