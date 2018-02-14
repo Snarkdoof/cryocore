@@ -250,7 +250,16 @@ class JobDB(mysql):
             SQL += "node IS NULL "
         SQL += " ORDER BY priority DESC, tsadded LIMIT %s"
         args.append(max_jobs)
-        c = self._execute(SQL, args)
+        c = None
+        for i in range(0, 3):
+            try:
+                c = self._execute(SQL, args)
+                break
+            except:
+                self.log.exception("Failed to get job, retrying")
+        if not c:
+            raise Exception("Failed to get job")
+
         ex = None
         if c.rowcount > 0:
             # We must not fail on this, so loop a few times to try to avoid it being allocated but not returned!
