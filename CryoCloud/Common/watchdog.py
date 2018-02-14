@@ -322,11 +322,15 @@ class Watchdog:
 
         # We now check if some of the files appear to have dissapeared (which makes it OK)
         now = time.time()
+        to_remove = []
         for p in self._reported_files:
             if now - self._reported_files[p][0] > 1:  # Not seen this time
                 message += "%s: File %s removed - OK\n" % (self._reported_files[p][1], p)
                 # Remove it, it's gone
-                del self._reported_files[p]
+                to_remove.append(p)
+
+        for p in to_remove:
+            del self._reported_files[p]
 
         return message
 
@@ -337,23 +341,28 @@ class Watchdog:
         self.status["state"] = "Running"
         print("RUNNING")
         last_run = time.time()
+
         while not API.api_stop_event.isSet():
-            message = self._make_report()
-            if len(message) > 0:
-                self.report(message)
+            try:
+                message = self._make_report()
+                if len(message) > 0:
+                    self.report(message)
 
-            while time.time() - last_run < self.cfg["runeach"]:
-                if API.api_stop_event.isSet():
-                    break
-                if self.debug:
-                    logs = self.logreader.get_updates(since=self._logsince, filter=self._logfilter, max_lines=1)
-                    self._logsince = logs["maxid"]
-                    for lines in logs["logs"]:
-                        for line in (lines[5] + ": " + lines[8]).split("\n"):
-                            self.bot.send(API.log_level[lines[3]] + ": " + line)
+                while time.time() - last_run < self.cfg["runeach"]:
+                    if API.api_stop_event.isSet():
+                        break
+                    if self.debug:
+                        logs = self.logreader.get_updates(since=self._logsince, filter=self._logfilter, max_lines=1)
+                        self._logsince = logs["maxid"]
+                        for lines in logs["logs"]:
+                            for line in (lines[5] + ": " + lines[8]).split("\n"):
+                                self.bot.send(API.log_level[lines[3]] + ": " + line)
 
+                    time.sleep(1)
+                last_run = time.time()
+            except Exception as e:
+                print("*** Error in main loop: ", e)
                 time.sleep(1)
-            last_run = time.time()
         try:
             if self.bot:
                 print("*** Asking bot to die")
