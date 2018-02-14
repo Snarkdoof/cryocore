@@ -141,7 +141,7 @@ class JobDB(mysql):
         self._cleanup_thread.start()
 
     def add_job(self, step, taskid, args, jobtype=TYPE_NORMAL, priority=PRI_NORMAL, node=None,
-                expire_time=3600, module=None, modulepath=None, workdir=None, itemid=None, multiple=True):
+                expire_time=3600, module=None, modulepath=None, workdir=None, itemid=None, multiple=False):
 
         if not module and not self._module:
             raise Exception("Missing module for job, and no default module!")
