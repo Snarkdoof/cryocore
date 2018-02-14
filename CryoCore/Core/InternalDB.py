@@ -196,6 +196,13 @@ class AsyncDB(threading.Thread):
         # _get_conn_pool(self._db_cfg)._close_connection()
 
     def _get_cursor(self, temporary_connection=False):
+        if self.cursor:
+            try:
+                self.cursor.close()
+            except:
+                pass
+            self.cursor = None
+
         try:
             if temporary_connection:
                 return self.get_connection().cursor()
