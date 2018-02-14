@@ -131,7 +131,7 @@ class JobDB(mysql):
     def __del__(self):
         try:
             if self._cleanup_timer:
-                self._cleanup_timer.stop()
+                self._cleanup_timer.cancel()
         except:
             pass
 
