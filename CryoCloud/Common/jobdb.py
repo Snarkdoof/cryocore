@@ -110,6 +110,17 @@ class JobDB(mysql):
             except:
                 pass
 
+        try:
+            c = self._execute("SELECT runname FROM filewatch LIMIT 1")
+            c.fetchall()
+        except:
+            try:
+                print("*** Filewatch is bad")
+                self._execute("ALTER TABLE filewatch DROP COLUMN runid")
+                self._execute("ALTER TABLE filewatch ADD runname VARCHAR(128) DEFAULT NULL")
+            except:
+                pass
+
         self._init_sqls(statements)
 
         try:
