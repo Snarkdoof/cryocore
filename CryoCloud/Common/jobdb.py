@@ -136,6 +136,9 @@ class JobDB(mysql):
             pass
 
     def _cleanup_timer_run(self):
+        if not self.running:
+            return  # We're done
+
         self.cleanup()
         self._cleanup_thread = threading.Timer(300, self._cleanup_timer_run)
         self._cleanup_thread.start()
