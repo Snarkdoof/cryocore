@@ -2,6 +2,7 @@ from __future__ import print_function
 import time
 import random
 import json
+import threading
 
 from CryoCore import API
 from CryoCore.Core.InternalDB import mysql
@@ -28,17 +29,30 @@ TASK_TYPE = {
     TYPE_MANUAL: "ManualWorker"
 }
 
+PRI_STRING = {
+    PRI_HIGH: "high",
+    PRI_NORMAL: "normal",
+    PRI_LOW: "low",
+    PRI_BULK: "bulk"
+}
+
 
 class JobDB(mysql):
 
-    def __init__(self, runname, module, steps=1):
+    def __init__(self, runname, module, steps=1, auto_cleanup=True):
 
-        self._runname = runname
+        self._runname = random.randint(0, 2147483647)  # Just ignore the runname for now
+        self._actual_runname = runname
         self._module = module
-        mysql.__init__(self, "JobDB", num_connections=2)
+        mysql.__init__(self, "JobDB", db_name="JobDB")
 
         if not runname and not module:
             return  # Is a worker, can only allocate/update jobs
+
+        # Multi-insert
+        self._addlist = []
+        self._addtimer = None
+        self._addLock = threading.Lock()
 
         # Add owner, comments, dates etc to run
         statements = [
@@ -78,14 +92,17 @@ class JobDB(mysql):
                 stable BOOL DEFAULT 0,
                 public BOOL DEFAULT 0,
                 done BOOL DEFAULT 0,
-                runid INT,
+                runname VARCHAR(128),
                 tschange TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )"""
+            )""",
+            "CREATE INDEX job_state ON jobs(state)",
+            "CREATE INDEX job_type ON jobs(type)"
         ]
 
         # Minor upgrade-hack
         try:
             c = self._execute("SELECT workdir FROM jobs LIMIT 1")
+            c.fetchall()
         except:
             try:
                 print("*** Job table is bad, dropping it")
@@ -97,12 +114,12 @@ class JobDB(mysql):
 
         try:
             c = self._execute("SELECT itemid FROM jobs WHERE jobid=0")
+            c.fetchone()
         except:
             # Old table, upgrade it
             print("*** Updating jobdb table")
             self._execute("ALTER TABLE jobs ADD (itemid BIGINT DEFAULT 0)")
 
-        self._runname = random.randint(0, 2147483647)  # Just ignore the runname for now
         c = self._execute("SELECT runid FROM runs WHERE runname=%s", [self._runname])
         row = c.fetchone()
         if row:
@@ -113,8 +130,28 @@ class JobDB(mysql):
                               [self._runname, module, steps])
             self._runid = c.lastrowid
 
+        self._cleanup_thread = None
+        if auto_cleanup:
+            self._cleanup_thread = threading.Timer(300, self._cleanup_timer_run)
+            self._cleanup_thread.start()
+
+    def __del__(self):
+        try:
+            if self._cleanup_timer:
+                self._cleanup_timer.cancel()
+        except:
+            pass
+
+    def _cleanup_timer_run(self):
+        if API.api_stop_event.isSet():
+            return  # We're done
+
+        self.cleanup()
+        self._cleanup_thread = threading.Timer(300, self._cleanup_timer_run)
+        self._cleanup_thread.start()
+
     def add_job(self, step, taskid, args, jobtype=TYPE_NORMAL, priority=PRI_NORMAL, node=None,
-                expire_time=3600, module=None, modulepath=None, workdir=None, itemid=None):
+                expire_time=3600, module=None, modulepath=None, workdir=None, itemid=None, multiple=False):
 
         if not module and not self._module:
             raise Exception("Missing module for job, and no default module!")
@@ -122,8 +159,42 @@ class JobDB(mysql):
         if args is not None:
             args = json.dumps(args)
 
+        if multiple:
+            self._addlist.append([self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module, modulepath, workdir, itemid])
+            # Set a timer for commit - if multiple ones have been added, they will be added together
+            with self._addLock:
+                if self._addtimer is None:
+                    self._DEBUGstartts = time.time()
+                    self._addtimer = threading.Timer(1.0, self.commit_jobs)
+                    self._addtimer.start()
+            return
+
         self._execute("INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module, modulepath, workdir, itemid) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                       [self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module, modulepath, workdir, itemid])
+
+    def commit_jobs(self):
+        """
+        TODO: Could do this more efficient if we held the lock for shorter, but it doesn't seem like a big deal for now
+        """
+        with self._addLock:
+            self._addtimer = None  # TODO: Should likely have a lock protecting this one
+            if len(self._addlist) == 0:
+                # print("*** WARNING: commit_jobs called but no queued jobs")
+                return
+
+            SQL = "INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module, modulepath, workdir, itemid) VALUES "
+            args = []
+            for job in self._addlist:
+                SQL += "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s),"
+                args.extend(job)
+
+                if len(args) > 1000:
+                    self._execute(SQL[:-1], args)
+                    SQL = "INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module, modulepath, workdir, itemid) VALUES "
+                    args = []
+            if len(args) > 0:
+                self._execute(SQL[:-1], args)
+            self._addlist = []
 
     def cancel_job(self, jobid):
         self._execute("UPDATE jobs SET state=%d WHERE jobid=%s", (STATE_CANCELLED, jobid))
@@ -144,6 +215,41 @@ class JobDB(mysql):
 
     def allocate_job(self, workerid, type=TYPE_NORMAL, node=None, max_jobs=1):
         # TODO: Check for timeouts here too?
+
+        if 0:
+            self._execute("LOCK TABLES jobs WRITE")
+            try:
+                args = [type, STATE_PENDING]
+                SQL = "SELECT jobid, step, taskid, type, priority, args, runid, jobs.module, jobs.modulepath, workdir, itemid FROM jobs WHERE type=%s AND state=%s AND "
+                if node:
+                    SQL += "(node IS NULL or node=%s) "
+                    args.append(node)
+                else:
+                    SQL += "node IS NULL "
+                SQL += " ORDER BY priority DESC, tsadded LIMIT %s"
+                args.append(max_jobs)
+                c = self._execute(SQL, args)
+                if c.rowcount == 0:
+                    return []
+
+                jobs = []
+                SQL = "UPDATE jobs SET state=%s, tsallocated=%s, node=%s, worker=%s WHERE "
+                params = [STATE_ALLOCATED, time.time(), node, workerid]
+                for jobid, step, taskid, t, priority, args, runid, module, modulepath, workdir, itemid in c.fetchall():
+                    if args:
+                        args = json.loads(args)
+                    jobs.append({"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
+                                 "args": args,  "runname": runid, "module": module, "modulepath": modulepath,
+                                 "workdir": workdir, "itemid": itemid})
+                    SQL += "jobid=%s OR "
+                    params.append(jobid)
+                if len(params) > 4:
+                    self._execute(SQL[:-4], params)
+            finally:
+                self._execute("UNLOCK TABLES")
+
+            return jobs
+
         nonce = random.randint(0, 2147483647)
         args = [STATE_ALLOCATED, time.time(), node, workerid, nonce, type, STATE_PENDING]
         SQL = "UPDATE jobs SET state=%s, tsallocated=%s, node=%s, worker=%s, nonce=%s WHERE type=%s AND state=%s AND "
@@ -154,7 +260,16 @@ class JobDB(mysql):
             SQL += "node IS NULL "
         SQL += " ORDER BY priority DESC, tsadded LIMIT %s"
         args.append(max_jobs)
-        c = self._execute(SQL, args)
+        c = None
+        for i in range(0, 3):
+            try:
+                c = self._execute(SQL, args)
+                break
+            except:
+                self.log.exception("Failed to get job, retrying")
+        if not c:
+            raise Exception("Failed to get job")
+
         ex = None
         if c.rowcount > 0:
             # We must not fail on this, so loop a few times to try to avoid it being allocated but not returned!
@@ -222,7 +337,6 @@ class JobDB(mysql):
         self._execute("DELETE FROM jobs WHERE runid=%s AND jobid=%s", [self._runid, jobid])
 
     def update_job(self, jobid, state, step=None, node=None, args=None, priority=None, expire_time=None, retval=None):
-
         SQL = "UPDATE jobs SET state=%s"
         params = [state]
 
@@ -250,7 +364,8 @@ class JobDB(mysql):
 
         c = self._execute(SQL, params)
         if c.rowcount == 0:
-            raise Exception("Failed to update, does the job exist (job %s)" % (jobid))
+            self.log.error("Error: %s(%s)" % (SQL, params))
+            raise Exception("Failed to update, does the job exist or did the state change? (job %s -> %s)" % (jobid, state))
 
     def cleanup(self):
         """
@@ -288,23 +403,23 @@ class JobDB(mysql):
 
         return steps
 
-    def get_directory(self, rootpath, runid):
-        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, runid))
+    def get_directory(self, rootpath, runname):
+        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, runname))
         return c.fetchall()
 
-    def get_file(self, rootpath, relpath, runid):
-        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND relpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, relpath, runid))
+    def get_file(self, rootpath, relpath, runname):
+        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND relpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, relpath, runname))
         rows = c.fetchall()
         if len(rows) > 0:
             return rows[0]
         else:
             return None
 
-    def insert_file(self, rootpath, relpath, mtime, stable, public, runid):
-        SQL = "INSERT INTO filewatch (rootpath, relpath, mtime, stable, public, runid) VALUES (%s, %s, %s, %s, %s, %s)"
-        c = self._execute(SQL, (rootpath, relpath, mtime, stable, public, runid))
+    def insert_file(self, rootpath, relpath, mtime, stable, public, runname):
+        SQL = "INSERT INTO filewatch (rootpath, relpath, mtime, stable, public, runname) VALUES (%s, %s, %s, %s, %s, %s)"
+        c = self._execute(SQL, (rootpath, relpath, mtime, stable, public, runname))
         return c.rowcount
 
     def update_file(self, fileid, mtime, stable, public):
@@ -312,20 +427,20 @@ class JobDB(mysql):
         c = self._execute(SQL, (mtime, stable, public, fileid))
         return c.rowcount
 
-    def done_file(self, rootpath, relpath, runid):
-        SQL = "UPDATE filewatch SET done=1 WHERE rootpath=%s AND relpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, relpath, runid))
+    def done_file(self, rootpath, relpath, runname):
+        SQL = "UPDATE filewatch SET done=1 WHERE rootpath=%s AND relpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, relpath, runname))
         return c.rowcount
 
-    def undone_files(self, rootpath, runid):
-        SQL = "UPDATE filewatch SET done=0 WHERE rootpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, runid))
+    def undone_files(self, rootpath, runname):
+        SQL = "UPDATE filewatch SET done=0 WHERE rootpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, runname))
         return c.rowcount
 
-    def reset_files(self, rootpath, runid):
-        # SQL = "UPDATE filewatch SET done=0, public=0 WHERE rootpath=%s AND runid=%s"
-        SQL = "DELETE FROM filewatch WHERE rootpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, runid))
+    def reset_files(self, rootpath, runname):
+        # SQL = "UPDATE filewatch SET done=0, public=0 WHERE rootpath=%s AND runname=%s"
+        SQL = "DELETE FROM filewatch WHERE rootpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, runname))
         return c.rowcount
 
     def remove_file(self, fileid):

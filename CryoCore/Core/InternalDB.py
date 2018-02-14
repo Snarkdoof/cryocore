@@ -25,7 +25,7 @@ else:
 DEBUG = False
 SLOW_WARNING = False
 
-dbThread = None
+dbThreads = {}
 
 
 class TooSlowException(Exception):
@@ -66,13 +66,13 @@ class FakeCursor():
 class AsyncDB(threading.Thread):
 
     @staticmethod
-    def getDB(config):
-        global dbThread
-        if dbThread is None:
-            dbThread = AsyncDB(config)
-            dbThread.daemon = True  # Will be stopped too quickly otherwise...
-            dbThread.start()
-        return dbThread
+    def getDB(config, name="global"):
+        global dbThreads
+        if name not in dbThreads:
+            dbThreads[name] = AsyncDB(config)
+            dbThreads[name].daemon = True  # Will be stopped too quickly otherwise...
+            dbThreads[name].start()
+        return dbThreads[name]
 
     def __init__(self, config=None):
         threading.Thread.__init__(self)
@@ -100,6 +100,10 @@ class AsyncDB(threading.Thread):
 
     def __del__(self):
         # print("AsyncDB deleted")
+        try:
+            self._close_connection()
+        except:
+            pass
         pass
 
     def execute(self, task):
@@ -175,6 +179,7 @@ class AsyncDB(threading.Thread):
                                                            use_unicode=True,
                                                            autocommit=True,
                                                            charset="utf8")
+
                 if self.db_conn:
                     return self.db_conn
             except:
@@ -192,6 +197,9 @@ class AsyncDB(threading.Thread):
 
     def _get_cursor(self, temporary_connection=False):
         try:
+            if temporary_connection:
+                return self.get_connection().cursor()
+
             if self.cursor is None:
                 self.cursor = self.get_connection().cursor()
             return self.cursor
@@ -223,6 +231,10 @@ class AsyncDB(threading.Thread):
                     print("[%s] No connection, retrying in a bit" % os.getpid(), e)
                     import traceback
                     traceback.print_exc()
+                    try:
+                        self._close_connection()
+                    except:
+                        pass
                     time.sleep(1)
                     continue
 
@@ -235,7 +247,7 @@ class AsyncDB(threading.Thread):
                 retval["rowcount"] = cursor.rowcount
                 retval["lastrowid"] = cursor.lastrowid
                 res = []
-                if cursor.rowcount != 0:
+                if cursor.rowcount != 0 and SQL.upper().startswith("SELECT"):
                     try:
                         for row in cursor.fetchall():
                             res.append(row)
@@ -258,6 +270,13 @@ class AsyncDB(threading.Thread):
                 retval["error"] = "OperationalError: %s" % str(e)
                 self._close_connection()
                 time.sleep(1.0)
+            except MySQLdb.errors.InternalError as e:
+                # Likely a deadlock - check if we have error number 1213 (or 40001?)
+                if e.errno == 1213:
+                    # Deadlock detected, retry
+                    print("*** DB Warning: Deadlock detected, retrying")
+                    time.sleep(0.1)
+                # Retry
             except MySQLdb.errors.InterfaceError as e:
                 import traceback
                 traceback.print_exc(file=sys.stdout)
@@ -338,7 +357,12 @@ class mysql:
                 self.log.addHandler(hdlr)
                 self.log.setLevel(logging.DEBUG)
 
-        self.db = AsyncDB.getDB(config)
+        if is_direct:
+            self.db = AsyncDB(config)
+        else:
+            if db_name is None:
+                db_name = "global"
+            self.db = AsyncDB.getDB(config, db_name)
 
     def _init_sqls(self, sql_statements):
         """
@@ -372,10 +396,12 @@ class mysql:
         if self._is_direct:
             try:
                 if not self.cursor:
-                    self.cursor = AsyncDB.getDB(None)._get_cursor()
+                    # self.cursor = AsyncDB.getDB(None)._get_cursor(False)
+                    self.cursor = self.db._get_cursor(temporary_connection)
                 self.cursor.execute(SQL, parameters)
                 return self.cursor
             except Exception as e:
+                self.cursor = None
                 if ignore_error:
                     return self.cursor
                 raise e

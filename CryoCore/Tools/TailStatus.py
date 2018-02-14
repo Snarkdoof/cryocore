@@ -43,7 +43,7 @@ class TailStatus(mysql):
 
         self.name = name
         cfg = API.get_config("System.Status.MySQL")
-        mysql.__init__(self, self.name, cfg)
+        mysql.__init__(self, self.name, cfg, is_direct=True)
 
         self.filters = []
         self.default_show = default_show

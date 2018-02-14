@@ -119,18 +119,18 @@ class Worker(multiprocessing.Process):
             if modulepath:
                 path = [modulepath]
             self._module = job["module"]
-            self.log.debug("Loading module %s (%s)" % (self._module, path))
+            # self.log.debug("Loading module %s (%s)" % (self._module, path))
             self._module = load(self._module, path)
-            self.log.debug("Loading of %s successful", job["module"])
+            # self.log.debug("Loading of %s successful", job["module"])
         except Exception as e:
             self._is_ready = False
-            print("Import error:", e)
+            # print("Import error:", e)
             self.status["state"] = "Import error"
             self.status["state"].set_expire_time(3 * 86400)
             self.log.exception("Failed to get module %s" % job["module"])
             raise e
         try:
-            self.log.info("%s allocated to job %s of %s (%s)" % (self._worker_type, job["id"], job["runname"], job["module"]))
+            self.log.info("%s allocated %s priority job %s (%s)" % (self._worker_type, jobdb.PRI_STRING[job["priority"]], job["id"], job["module"]))
             self.status["state"] = "Connected"
             self.status["num_errors"] = 0.0
             self.status["last_error"] = ""
@@ -177,7 +177,6 @@ class Worker(multiprocessing.Process):
                 if not self._is_ready:
                     time.sleep(1)
                     continue
-                self.log.debug("Got job for processing: %s" % job)
                 self._process_task(job)
             except Empty:
                 self.status["state"] = "Idle"
@@ -228,10 +227,8 @@ class Worker(multiprocessing.Process):
 
     def _process_task(self, task):
         self.status["state"] = "Processing"
-        self.log.debug("Process task %s" % str(task))
-        taskid = "%s.%s-%s_%d" % (task["runname"], self._worker_type, socket.gethostname(), self.workernum)
-
-        print(taskid, "Processing", task)
+        # taskid = "%s.%s-%s_%d" % (task["runname"], self._worker_type, socket.gethostname(), self.workernum)
+        # print(taskid, "Processing", task)
 
         # Report that I'm on it
         start_time = time.time()

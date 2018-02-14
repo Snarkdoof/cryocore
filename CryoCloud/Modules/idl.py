@@ -56,7 +56,6 @@ def process_task(worker, task, cancel_event=None):
             if not os.path.isdir(task["args"]["dir"]):
                 raise Exception("Specified directory '%s' does not exist (or is not a directory)" % task["args"]["dir"])
             os.chdir(task["args"]["dir"])
-            print("Change dir to", (task["args"]["dir"]))
 
         env = os.environ
         if "env" in task["args"]:
@@ -65,7 +64,6 @@ def process_task(worker, task, cancel_event=None):
                 env[key] = task["args"]["env"][key]
 
         worker.log.debug("IDLCommand is: '%s'" % cmd)
-        print(" ".join(cmd).join(" "))
         p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         worker.status["idl"] = "running"
         # We set the outputs as nonblocking
