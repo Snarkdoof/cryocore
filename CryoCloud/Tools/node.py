@@ -130,7 +130,7 @@ class Worker(multiprocessing.Process):
             self.log.exception("Failed to get module %s" % job["module"])
             raise e
         try:
-            self.log.info("%s allocated to job %s of %s (%s)" % (self._worker_type, job["id"], job["runname"], job["module"]))
+            self.log.info("%s allocated to job %s (%s)" % (self._worker_type, job["id"], job["module"]))
             self.status["state"] = "Connected"
             self.status["num_errors"] = 0.0
             self.status["last_error"] = ""
