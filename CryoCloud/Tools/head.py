@@ -407,9 +407,13 @@ if __name__ == "__main__":
 
     def handler(signum, frame):
         print("Head stopped by user signal")
+        if API.api_stop_event.isSet():
+            print("User Insists, killing myself badly")
+            os.kill(os.getpid(), 3)
+
         API.shutdown()
     signal.signal(signal.SIGINT, handler)
-    signal.signal(signal.SIGQUIT, handler)
+    # signal.signal(signal.SIGQUIT, handler)
 
     try:
         headnode = HeadNode(mod, options, neverfail=neverfail)
