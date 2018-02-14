@@ -196,13 +196,6 @@ class AsyncDB(threading.Thread):
         # _get_conn_pool(self._db_cfg)._close_connection()
 
     def _get_cursor(self, temporary_connection=False):
-        if self.cursor:
-            try:
-                self.cursor.close()
-            except:
-                pass
-            self.cursor = None
-
         try:
             if temporary_connection:
                 return self.get_connection().cursor()
@@ -238,6 +231,10 @@ class AsyncDB(threading.Thread):
                     print("[%s] No connection, retrying in a bit" % os.getpid(), e)
                     import traceback
                     traceback.print_exc()
+                    try:
+                        self._close_connection()
+                    except:
+                        pass
                     time.sleep(1)
                     continue
 
@@ -250,7 +247,7 @@ class AsyncDB(threading.Thread):
                 retval["rowcount"] = cursor.rowcount
                 retval["lastrowid"] = cursor.lastrowid
                 res = []
-                if cursor.rowcount != 0:
+                if cursor.rowcount != 0 and SQL.upper().startswith("SELECT"):
                     try:
                         for row in cursor.fetchall():
                             res.append(row)
