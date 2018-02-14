@@ -34,7 +34,8 @@ class JobDB(mysql):
 
     def __init__(self, runname, module, steps=1, auto_cleanup=True):
 
-        self._runname = runname
+        self._runname = random.randint(0, 2147483647)  # Just ignore the runname for now
+        self._actual_runname = runname
         self._module = module
         mysql.__init__(self, "JobDB", db_name="JobDB")
 
@@ -84,7 +85,7 @@ class JobDB(mysql):
                 stable BOOL DEFAULT 0,
                 public BOOL DEFAULT 0,
                 done BOOL DEFAULT 0,
-                runid INT,
+                runname VARCHAR(128),
                 tschange TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )""",
             "CREATE INDEX job_state ON jobs(state)",
@@ -112,7 +113,6 @@ class JobDB(mysql):
             print("*** Updating jobdb table")
             self._execute("ALTER TABLE jobs ADD (itemid BIGINT DEFAULT 0)")
 
-        self._runname = random.randint(0, 2147483647)  # Just ignore the runname for now
         c = self._execute("SELECT runid FROM runs WHERE runname=%s", [self._runname])
         row = c.fetchone()
         if row:
@@ -393,23 +393,23 @@ class JobDB(mysql):
 
         return steps
 
-    def get_directory(self, rootpath, runid):
-        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, runid))
+    def get_directory(self, rootpath, runname):
+        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, runname))
         return c.fetchall()
 
-    def get_file(self, rootpath, relpath, runid):
-        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND relpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, relpath, runid))
+    def get_file(self, rootpath, relpath, runname):
+        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND relpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, relpath, runname))
         rows = c.fetchall()
         if len(rows) > 0:
             return rows[0]
         else:
             return None
 
-    def insert_file(self, rootpath, relpath, mtime, stable, public, runid):
-        SQL = "INSERT INTO filewatch (rootpath, relpath, mtime, stable, public, runid) VALUES (%s, %s, %s, %s, %s, %s)"
-        c = self._execute(SQL, (rootpath, relpath, mtime, stable, public, runid))
+    def insert_file(self, rootpath, relpath, mtime, stable, public, runname):
+        SQL = "INSERT INTO filewatch (rootpath, relpath, mtime, stable, public, runname) VALUES (%s, %s, %s, %s, %s, %s)"
+        c = self._execute(SQL, (rootpath, relpath, mtime, stable, public, runname))
         return c.rowcount
 
     def update_file(self, fileid, mtime, stable, public):
@@ -417,20 +417,20 @@ class JobDB(mysql):
         c = self._execute(SQL, (mtime, stable, public, fileid))
         return c.rowcount
 
-    def done_file(self, rootpath, relpath, runid):
-        SQL = "UPDATE filewatch SET done=1 WHERE rootpath=%s AND relpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, relpath, runid))
+    def done_file(self, rootpath, relpath, runname):
+        SQL = "UPDATE filewatch SET done=1 WHERE rootpath=%s AND relpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, relpath, runname))
         return c.rowcount
 
-    def undone_files(self, rootpath, runid):
-        SQL = "UPDATE filewatch SET done=0 WHERE rootpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, runid))
+    def undone_files(self, rootpath, runname):
+        SQL = "UPDATE filewatch SET done=0 WHERE rootpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, runname))
         return c.rowcount
 
-    def reset_files(self, rootpath, runid):
-        # SQL = "UPDATE filewatch SET done=0, public=0 WHERE rootpath=%s AND runid=%s"
-        SQL = "DELETE FROM filewatch WHERE rootpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, runid))
+    def reset_files(self, rootpath, runname):
+        # SQL = "UPDATE filewatch SET done=0, public=0 WHERE rootpath=%s AND runname=%s"
+        SQL = "DELETE FROM filewatch WHERE rootpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, runname))
         return c.rowcount
 
     def remove_file(self, fileid):
