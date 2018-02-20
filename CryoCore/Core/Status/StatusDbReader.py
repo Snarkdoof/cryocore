@@ -72,7 +72,10 @@ class StatusDbReader(InternalDB.mysql):
         """
         Return the last (timestamp, value) of the given parameter
         """
-        paramid = self._cache_lookup(channel, name)
+        try:
+            paramid = self._cache_lookup(channel, name)
+        except:
+            return (None, None)
 
         # SQL = "SELECT timestamp, value FROM status WHERE id=(SELECT max(id) FROM status WHERE paramid=%s)"
         SQL = "SELECT timestamp, value FROM status WHERE paramid=%s ORDER BY id DESC LIMIT 1"
