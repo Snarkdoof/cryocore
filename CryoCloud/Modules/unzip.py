@@ -1,6 +1,7 @@
 import os
 import zipfile
 import tarfile
+import shutil
 
 
 def process_task(self, task):
@@ -60,6 +61,11 @@ def process_task(self, task):
         except Exception as e:
             errors += "%s: %s\n" % (s, e)
             self.log.exception("Unzip of %s failed" % s)
+            keep = False
+            if "keep" in task["args"]:
+                keep = task["args"]["keep"]
+            if not keep:
+                shutil.rmtree(dst)
 
         # Very crude progress - only count completed archives
         self.status["progress"] = 100 * done / float(len(src))
