@@ -276,7 +276,6 @@ class Watchdog:
                     fail = True
                     if not (chan, param) in self.errors or full_report:
                         self.errors[(chan, param)] = "No response"
-                        print(chan, param, "Not updated in", time.time() - last_time, "seconds")
                         # self.bot.send("%s has not responded in %d seconds" % (nick, time.time() - last_time))
                         message += "E: %s has not responded in %d seconds (%s)\n" % (nick, time.time() - last_time, chan)
                 elif (expected is not None):
@@ -307,9 +306,11 @@ class Watchdog:
         files_failed = 0
         for nick, path, max_time, callback in dirs:
             files = os.listdir(path)
+            total_files = 0
             for filename in files:
                 p = os.path.join(path, filename)
                 if os.path.isfile(p):
+                    total_files += 1
                     stat = os.lstat(p)
                     if time.time() - stat.st_mtime > max_time:
                         files_failed += 1
@@ -325,6 +326,9 @@ class Watchdog:
                         if p in self._reported_files:
                             del self._reported_files[p]
                             message += "I: %s: File %s modified\n" % (self._reported_files[p][1], p)
+            # Stats
+            self.status["files_total.%s" % nick] = total_files
+            self.status["files_too_old.%s" % nick] = files_failed
 
         if len(dirs) > 0 and files_failed == 0 and full_report:
             message += "I: All files OK\n"
