@@ -1,8 +1,6 @@
 import threading
 import time
 
-from CryoCore.Core.Status import StatusDbReader
-
 import sys
 if sys.version_info.major == 2:
     import Queue as queue
@@ -304,6 +302,7 @@ class StatusHolder(threading.Thread):
         """
         assert name
         if self.resumeValues or fetch:
+            from CryoCore.Core.Status import StatusDbReader
             db = StatusDbReader.StatusDbReader()
             ts, value = db.get_last_status_value(self.name, name)
             if ts and value:
