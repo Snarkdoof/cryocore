@@ -162,7 +162,7 @@ class JobDB(mysql):
         self._cleanup_thread.start()
 
     def add_job(self, step, taskid, args, jobtype=TYPE_NORMAL, priority=PRI_NORMAL, node=None,
-                expire_time=3600, module=None, modulepath=None, workdir=None, itemid=None, multiple=False):
+                expire_time=3600, module=None, modulepath=None, workdir=None, itemid=None, multiple=True):
 
         if not module and not self._module:
             raise Exception("Missing module for job, and no default module!")
@@ -171,12 +171,11 @@ class JobDB(mysql):
             args = json.dumps(args)
 
         if multiple:
-            self._addlist.append([self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module, modulepath, workdir, itemid])
-            # Set a timer for commit - if multiple ones have been added, they will be added together
             with self._addLock:
+                self._addlist.append([self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module, modulepath, workdir, itemid])
+                # Set a timer for commit - if multiple ones have been added, they will be added together
                 if self._addtimer is None:
-                    self._DEBUGstartts = time.time()
-                    self._addtimer = threading.Timer(1.0, self.commit_jobs)
+                    self._addtimer = threading.Timer(0.5, self.commit_jobs)
                     self._addtimer.start()
             return
 
@@ -211,8 +210,8 @@ class JobDB(mysql):
         self._execute("UPDATE jobs SET state=%d WHERE jobid=%s", (STATE_CANCELLED, jobid))
 
     def force_stopped(self, workerid, node):
-        self._execute("UPDATE jobs SET state=%s, retval='{\"error\":\"Worker killed\"}' WHERE worker=%s AND node=%s",
-                      [STATE_FAILED, workerid, node])
+        self._execute("UPDATE jobs SET state=%s, retval='{\"error\":\"Worker killed\"}' WHERE worker=%s AND node=%s AND state=%s",
+                      [STATE_FAILED, workerid, node, STATE_ALLOCATED])
 
     def get_job_state(self, jobid):
         """
@@ -342,7 +341,11 @@ class JobDB(mysql):
         return jobs
 
     def clear_jobs(self):
-        self._execute("DELETE FROM jobs WHERE runid=%s", [self._runid])
+        print("Clearing jobs")
+        c = self._execute("DELETE FROM jobs WHERE runid=%s", [self._runid], insist_direct=True)
+        print("Closing down")
+        c.close()
+        print("JOBS CLEARED")
 
     def remove_job(self, jobid):
         self._execute("DELETE FROM jobs WHERE runid=%s AND jobid=%s", [self._runid, jobid])
