@@ -131,7 +131,6 @@ class Worker(multiprocessing.Process):
             raise e
         try:
             self.log.info("%s allocated %s priority job %s (%s)" % (self._worker_type, jobdb.PRI_STRING[job["priority"]], job["id"], job["module"]))
-            self.status["state"] = "Connected"
             self.status["num_errors"] = 0.0
             self.status["last_error"] = ""
             self.status["host"] = socket.gethostname()
@@ -160,7 +159,12 @@ class Worker(multiprocessing.Process):
         last_reported = 0  # We force periodic updates of state as we might be idle for a long time
         while not self._stop_event.is_set():
             try:
-                jobs = self._jobdb.allocate_job(self.workernum, node=socket.gethostname(), max_jobs=1, type=self._type)
+                if self._type == jobdb.TYPE_ADMIN:
+                    max_jobs = 5
+                else:
+                    max_jobs = 1
+                jobs = self._jobdb.allocate_job(self.workernum, node=socket.gethostname(),
+                                                max_jobs=max_jobs, type=self._type)
                 if len(jobs) == 0:
                     time.sleep(1)
                     if last_reported + 300 > time.time():
@@ -169,21 +173,26 @@ class Worker(multiprocessing.Process):
                         self.status["state"].set_value("Idle", force_update=True)
                         last_reported = time.time()
                     continue
-                job = jobs[0]
-                self.status["state"] = "Working"
-                self.status["current_job"] = job["id"]
-                self._job_in_progress = job
-                self._switchJob(job)
-                if not self._is_ready:
-                    time.sleep(1)
-                    continue
-                self._process_task(job)
+                for job in jobs:
+                    self.status["current_job"] = job["id"]
+                    self._job_in_progress = job
+                    self._switchJob(job)
+                    if not self._is_ready:
+                        time.sleep(0.1)
+                        continue
+                    self._process_task(job)
             except Empty:
                 self.status["state"] = "Idle"
                 continue
             except KeyboardInterrupt:
                 self.status["state"] = "Stopped"
                 break
+            except ImportError as e:
+                ret = "Failed due to import error: %s" % e
+                try:
+                    self._jobdb.update_job(job["id"], jobdb.STATE_FAILED, retval=ret)
+                except:
+                    self.log.exception("Failed to update job after import error")
             except Exception as e:
                 print("No job", e)
                 self.log.exception("Failed to get job")
@@ -285,7 +294,6 @@ class Worker(multiprocessing.Process):
             task["result"] = "Ok"
             new_state = jobdb.STATE_COMPLETED
             self.status["last_processing_time"] = time.time() - start_time
-            self.status["state"] = "Done"
         except Exception as e:
             print("Processing failed", e)
             self.log.exception("Processing failed")
