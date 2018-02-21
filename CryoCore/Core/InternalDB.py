@@ -106,7 +106,30 @@ class AsyncDB(threading.Thread):
             pass
         pass
 
-    def execute(self, task):
+    def execute(self, task, insist_direct=False):
+        if insist_direct:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            event, retval, SQL, parameters, ignore_error = task
+            cursor.execute(SQL, tuple(parameters))
+            retval = {
+                "status": "ok",
+                "return": []
+            }
+            retval["rowcount"] = cursor.rowcount
+            retval["lastrowid"] = cursor.lastrowid
+            res = []
+            if cursor.rowcount != 0 and SQL.upper().startswith("SELECT"):
+                try:
+                    for row in cursor.fetchall():
+                        res.append(row)
+                except:
+                    pass  # fetchall likely used with no result
+            retval["return"] = res
+            cursor.close()
+            conn.close()
+            return retval
+
         with self._lock:  # We protect the shutdown phase - if we queue something as we shut down, we'll hang
             if not self.running:
                 raise Exception("Can't execute queries when not running")
@@ -167,19 +190,21 @@ class AsyncDB(threading.Thread):
             cfg["db_compress"] = 0
         return cfg
 
+    def _get_connection(self):
+            cfg = self._get_conn_cfg()
+            return MySQLdb.MySQLConnection(host=cfg["db_host"],
+                                           user=cfg["db_user"],
+                                           passwd=cfg["db_password"],
+                                           db=cfg["db_name"],
+                                           use_unicode=True,
+                                           autocommit=True,
+                                           charset="utf8")
+
     def get_connection(self):
         while self.running:  # stop_event.isSet():
-            cfg = self._get_conn_cfg()
             try:
                 if not self.db_conn:
-                    self.db_conn = MySQLdb.MySQLConnection(host=cfg["db_host"],
-                                                           user=cfg["db_user"],
-                                                           passwd=cfg["db_password"],
-                                                           db=cfg["db_name"],
-                                                           use_unicode=True,
-                                                           autocommit=True,
-                                                           charset="utf8")
-
+                    self.db_conn = self._get_connection()
                 if self.db_conn:
                     return self.db_conn
             except:
@@ -390,7 +415,11 @@ class mysql:
 
     def _execute(self, SQL, parameters=None,
                  temporary_connection=False,
-                 ignore_error=False):
+                 ignore_error=False,
+                 insist_direct=False):
+        """
+        NEVER use insist_direct if you don't know what you are doing
+        """
         if parameters is None:
             parameters = []
         if self._is_direct:
@@ -407,14 +436,15 @@ class mysql:
                 raise e
         event = threading.Event()
         retval = {}
-        self.db.execute([event, retval, SQL, parameters, ignore_error])
-        t = time.time()
-        event.wait(60.0)
-        if time.time() - t > 2.0:
-            if SLOW_WARNING:
-                print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
-        if not event.isSet():
-            raise TooSlowException("Failed to execute query in time (%s)" % SQL)
+        self.db.execute([event, retval, SQL, parameters, ignore_error], insist_direct=insist_direct)
+        if not insist_direct:
+            t = time.time()
+            event.wait(60.0)
+            if time.time() - t > 2.0:
+                if SLOW_WARNING:
+                    print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
+            if not event.isSet():
+                raise TooSlowException("Failed to execute query in time (%s)" % SQL)
 
         if not ignore_error and "error" in retval:
             raise Exception(retval["error"])
