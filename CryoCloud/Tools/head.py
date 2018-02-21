@@ -55,11 +55,8 @@ class HeadNode(threading.Thread):
         self.options = options
         self.neverfail = neverfail
         self.status["state"] = "Initializing"
-        self.status["tasks_created"] = 0
-        self.status["tasks_allocated"] = 0
-        self.status["tasks_completed"] = 0
         self.status["total_steps"] = self.options.steps
-        self.status["step"] = 0
+        # self.status["step"] = 0
         self.log.debug("Created %s to perform %d steps of %d tasks using" %
                        (self.name, self.options.steps, self.options.tasks))
 
@@ -120,13 +117,12 @@ class HeadNode(threading.Thread):
             expire_time = self.options.max_task_time
         self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module, node=node, priority=priority,
                             modulepath=modulepath, workdir=workdir, jobtype=jobtype, itemid=itemid)
-        if self.options.steps > 0 and self.options.tasks > 0:
-            if step > self.status["progress"].size[0]:
-                self.status.new2d("progress", (self.options.steps, self.options.tasks),
-                                  expire_time=3 * 81600, initial_value=0)
+        # if self.options.steps > 0 and self.options.tasks > 0:
+        #     if step > self.status["progress"].size[0]:
+        #        self.status.new2d("progress", (self.options.steps, self.options.tasks),
+        #                          expire_time=3 * 81600, initial_value=0)
 
-        self.status["progress"].set_value((step - 1, taskid), 1)
-        self.status["tasks_created"].inc(1)
+        # self.status["progress"].set_value((step - 1, taskid), 1)
 
     def requeue(self, job, node=None, expire_time=None):
         if expire_time is None:
@@ -147,13 +143,13 @@ class HeadNode(threading.Thread):
 
     def start_step(self, step):
 
-        if self.options.steps > 0 and self.options.tasks > 0:
-            if step > self.status["progress"].size[0]:
-                print("MUST RE-configure progress")
-                self.status["total_steps"] = step
+        # if self.options.steps > 0 and self.options.tasks > 0:
+        #    if step > self.status["progress"].size[0]:
+        #        print("MUST RE-configure progress")
+        #        self.status["total_steps"] = step
 
         self.step = step
-        self.status["step"] = self.step
+        # self.status["step"] = self.step
 
     def run(self):
         if self.options.steps > 0 and self.options.tasks > 0:
@@ -164,10 +160,10 @@ class HeadNode(threading.Thread):
         self.status["eta_step"] = 0
         self.status["eta_total"] = 0
 
-        self._jobdb = jobdb.JobDB(options.name, options.module)
+        self._jobdb = jobdb.JobDB(options.name, options.module, auto_cleanup=True)
 
         # TODO: Option for this (and for clear_jobs on cleanup)?
-        self._jobdb.clear_jobs()
+        # self._jobdb.clear_jobs()
 
         self.log.info("Starting")
         self.status["state"] = "Running"
@@ -192,50 +188,57 @@ class HeadNode(threading.Thread):
                 last_run = 0
                 notified = False
                 while not API.api_stop_event.is_set():
-                    try:
-                        self._jobdb.update_timeouts()
-                    except Exception as e:
-                        self.log.exception("Ignoring error on updating timeouts")
                     updates = self._jobdb.list_jobs(since=last_run, notstate=jobdb.STATE_PENDING)
                     for job in updates:
-                        last_run = job["tschange"]
+                        last_run = job["tschange"]  # Just in case, we seem to get some strange things here
                         if job["state"] == jobdb.STATE_ALLOCATED:
-                            self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 3)
+                            # self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 3)
                             self.handler.onAllocated(job)
 
                         elif job["state"] == jobdb.STATE_FAILED:
-                            self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 2)
+                            # self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 2)
                             self.handler.onError(job)
 
                         elif job["state"] == jobdb.STATE_COMPLETED:
-                            self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 10)
+                            # self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 10)
 
-                            stats = self._jobdb.get_jobstats()
+                            # We don't fetch job stats at this point - we'll do it asynchronously to not block processing
+                            # stats = self._jobdb.get_jobstats()
                             # print("STATS", stats)
-                            if self.step in stats:
-                                self.status["avg_task_time_step"] = stats[self.step]
+                            # if self.step in stats:
+                            #    self.status["avg_task_time_step"] = stats[self.step]
                             # self.status["avg_task_time_total"] = sum_all / total_len
+                            # DEBUG - we change state to REPORTED
+                            # self._jobdb.update_job(job["id"], 10)
                             self.handler.onCompleted(job)
                         elif job["state"] == jobdb.STATE_TIMEOUT:
-                            self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 0)
+                            # self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 0)
                             self.handler.onTimeout(job)
 
                     # Still incomplete jobs?
-                    pending = self._jobdb.list_jobs(self.step, notstate=jobdb.STATE_COMPLETED)
-                    if len(pending) == 0:
-                        if not notified:
-                            # print("Step", step, "Completed")
-                            self.handler.onStepCompleted(self.step)
-                            notified = True
-                    else:
-                        notified = False
+                    if 0:  # Disabled onstepcompleted - it's confusing
+                        print("Checking for incomplete jobs")
+                        pending = self._jobdb.list_jobs(self.step, notstate=jobdb.STATE_COMPLETED)
+                        if len(pending) == 0:
+                            if not notified:
+                                # print("Step", step, "Completed")
+                                self.handler.onStepCompleted(self.step)
+                                notified = True
+                        else:
+                            notified = False
 
                     if len(updates) == 0:
                         try:
-                            self._jobdb.cleanup()
+                            self._jobdb.update_timeouts()
                         except Exception as e:
-                            self.log.warning("Ignoring error on db cleanup:" + e)
-                        time.sleep(1)
+                            self.log.exception("Ignoring error on updating timeouts")
+
+                        # try:
+                        #     print("Cleaning")
+                        #    self._jobdb.cleanup()
+                        # except Exception as e:
+                        #    self.log.warning("Ignoring error on db cleanup:" + e)
+                        time.sleep(0.25)
                     continue
             except Exception as e:
                 print("Exception in HEAD (check logs)", e)
@@ -249,20 +252,25 @@ class HeadNode(threading.Thread):
             finally:
                 failed = True
 
-        if failed:
-            self.status["state"] = "Done"
-        else:
-            print("Stopped, sending shutdown")
-            # API.shutdown()  # Not really necessary
-            self.status["state"] = "Done"
+        if not failed:
             self.log.info("Completed all work")
 
         # CLEAN UP
         try:
             self._jobdb.clear_jobs()
-        except:
-            print("Failed to clear jobs")
+        except Exception as e:
+            print("Failed to clear jobs", e)
+            import traceback
+            traceback.print_exc()
 
+        try:
+            self.handler.onStopped()
+        except Exception as e:
+            print("onStopped failed", e)
+            import traceback
+            traceback.print_exc()
+
+        print("Head stopped")
 
 if __name__ == "__main__":
 
