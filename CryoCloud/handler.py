@@ -45,3 +45,6 @@ class DefaultHandler:
 
     def onStepCompleted(self, step):
         pass
+
+    def onStopped(self):
+        pass
