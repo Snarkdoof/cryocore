@@ -160,7 +160,7 @@ class HeadNode(threading.Thread):
         self.status["eta_step"] = 0
         self.status["eta_total"] = 0
 
-        self._jobdb = jobdb.JobDB(options.name, options.module, auto_cleanup=True)
+        self._jobdb = jobdb.JobDB(self.options.name, self.options.module, auto_cleanup=True)
 
         # TODO: Option for this (and for clear_jobs on cleanup)?
         # self._jobdb.clear_jobs()
