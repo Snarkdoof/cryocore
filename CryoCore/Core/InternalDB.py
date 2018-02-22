@@ -299,7 +299,7 @@ class AsyncDB(threading.Thread):
                 # Likely a deadlock - check if we have error number 1213 (or 40001?)
                 if e.errno == 1213:
                     # Deadlock detected, retry
-                    print("*** DB Warning: Deadlock detected, retrying")
+                    print("***", time.ctime(), "DB Warning: Deadlock detected, retrying")
                     time.sleep(0.1)
                 # Retry
             except MySQLdb.errors.InterfaceError as e:
