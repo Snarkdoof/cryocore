@@ -144,6 +144,7 @@ class JobDB(mysql):
         self._cleanup_thread = None
         if auto_cleanup:
             self._cleanup_thread = threading.Timer(300, self._cleanup_timer_run)
+            self._cleanup_thread.daemon = True
             self._cleanup_thread.start()
 
     def __del__(self):
@@ -159,6 +160,7 @@ class JobDB(mysql):
 
         self.cleanup()
         self._cleanup_thread = threading.Timer(300, self._cleanup_timer_run)
+        self._cleanup_thread.daemon = True
         self._cleanup_thread.start()
 
     def add_job(self, step, taskid, args, jobtype=TYPE_NORMAL, priority=PRI_NORMAL, node=None,
@@ -181,6 +183,7 @@ class JobDB(mysql):
 
         self._execute("INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module, modulepath, workdir, itemid) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                       [self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module, modulepath, workdir, itemid])
+
 
     def commit_jobs(self):
         """
@@ -249,7 +252,7 @@ class JobDB(mysql):
                     if args:
                         args = json.loads(args)
                     jobs.append({"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
-                                 "args": args,  "runname": runid, "module": module, "modulepath": modulepath,
+                                 "args": args, "runname": runid, "module": module, "modulepath": modulepath,
                                  "workdir": workdir, "itemid": itemid})
                     SQL += "jobid=%s OR "
                     params.append(jobid)
