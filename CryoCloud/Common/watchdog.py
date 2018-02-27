@@ -309,23 +309,22 @@ class Watchdog:
             total_files = 0
             for filename in files:
                 p = os.path.join(path, filename)
-                if os.path.isfile(p):
-                    total_files += 1
-                    stat = os.lstat(p)
-                    if time.time() - stat.st_mtime > max_time:
-                        files_failed += 1
-                        if p not in self._reported_files or full_report:
-                            try:
-                                e = callback(nick, path, p, time.time() - stat.st_mtime)
-                                if e:
-                                    message = message + e + "\n"
-                            except:
-                                self.log.exception("Exception in file watch callback")
-                        self._reported_files[p] = [time.time(), nick, path]
-                    else:
-                        if p in self._reported_files:
-                            del self._reported_files[p]
-                            message += "I: %s: File %s modified\n" % (self._reported_files[p][1], p)
+                total_files += 1
+                stat = os.lstat(p)
+                if time.time() - stat.st_mtime > max_time:
+                    files_failed += 1
+                    if p not in self._reported_files or full_report:
+                        try:
+                            e = callback(nick, path, p, time.time() - stat.st_mtime)
+                            if e:
+                                message = message + e + "\n"
+                        except:
+                            self.log.exception("Exception in file watch callback")
+                    self._reported_files[p] = [time.time(), nick, path]
+                else:
+                    if p in self._reported_files:
+                        del self._reported_files[p]
+                        message += "I: %s: File %s modified\n" % (self._reported_files[p][1], p)
             # Stats
             self.status["files_total.%s" % nick] = total_files
             self.status["files_too_old.%s" % nick] = files_failed
