@@ -96,8 +96,6 @@ class TailLog(mysql):
         """
         Perform a search and display the results (going back 200 messages)
         """
-        print("\033[40;97m GOING BLACK")
-        print("Grep for", args)
         if options.all:
             last_id = 0
         else:
@@ -115,39 +113,44 @@ class TailLog(mysql):
         r = r[:-1]
         reg = re.compile(r)
         # Search in text, module, logger
-        SQL = "SELECT * FROM log WHERE id> %s ORDER BY id"
-        cursor = self._execute(SQL, [last_id])
-        last_lines = []
-        should_print = 0
-        for row in cursor.fetchall():
-            line = self._print_row(options, row, True)
-            if reg.match(line):
-                for l in last_lines:
-                    print(l)
-                    last_lines = []
-                # Highlight if not BW
-                if options.bw:
-                    print("--->", line)
-                else:
-                    m = re.match("^\\033\[(.[2-3])m", line)
-                    line = line.replace(m.groups()[0], "1;91", 1)
-                    line = re.sub("\033\[", "\033[7;", line)
-                    line += "\033[27m"
-                    # print("\033[1m" + line)
+        while not API.api_stop_event.isSet():
+            SQL = "SELECT * FROM log WHERE id> %s ORDER BY id LIMIT 10000"
+            cursor = self._execute(SQL, [last_id])
+            last_lines = []
+            should_print = 0
+            for row in cursor.fetchall():
+                last_id = row[ID]
+                line = self._print_row(options, row, True)
+                if reg.match(line):
+                    for l in last_lines:
+                        print(l)
+                        last_lines = []
+                    # Highlight if not BW
+                    if options.bw:
+                        print("--->", line)
+                    else:
+                        m = re.match("^\\033\[(.[2-3])m", line)
+                        line = line.replace(m.groups()[0], "1;91", 1)
+                        line = re.sub("\033\[", "\033[7;", line)
+                        line += "\033[27m"
+                        # print("\033[1m" + line)
+                        print(line)
+
+                    should_print = 4
+                elif should_print > 0:
                     print(line)
+                    should_print -= 1
+                    if should_print == 0:
+                        print("\n")
+                else:
+                    last_lines.append(line)
+                    if len(last_lines) > 4:
+                        last_lines.pop(0)
 
-                should_print = 4
-            elif should_print > 0:
-                print(line)
-                should_print -= 1
-                if should_print == 0:
-                    print("\n")
-            else:
-                last_lines.append(line)
-                if len(last_lines) > 4:
-                    last_lines.pop(0)
+            if not options.follow:
+                break
 
-
+            time.sleep(1)
 
         # TODO: implement follow (-f)
 
@@ -213,6 +216,7 @@ class TailLog(mysql):
                     SQL = "SELECT * FROM log WHERE id>%s AND level>=%s ORDER BY id"
                     params = [last_id, API.log_level_str[options.level]]
 
+                SQL += " LIMIT 10000"
                 cursor = self._execute(SQL, params)
                 for row in cursor.fetchall():
                     rows += 1
