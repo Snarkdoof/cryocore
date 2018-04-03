@@ -3,6 +3,7 @@ import time
 import random
 import json
 import threading
+import psutil
 
 from CryoCore import API
 from CryoCore.Core.InternalDB import mysql
@@ -53,6 +54,7 @@ class JobDB(mysql):
         self._addlist = []
         self._addtimer = None
         self._addLock = threading.Lock()
+        self._taskid = 1
 
         # Add owner, comments, dates etc to run
         statements = [
@@ -82,6 +84,8 @@ class JobDB(mysql):
                     args TEXT DEFAULT NULL,
                     nonce INT DEFAULT 0,
                     itemid BIGINT DEFAULT 0,
+                    max_memory BIGINT UNSIGNED DEFAULT 0,
+                    cpu_time FLOAT DEFAULT 0,
                     tschange TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
             )""",
             """CREATE TABLE IF NOT EXISTS filewatch (
@@ -95,13 +99,34 @@ class JobDB(mysql):
                 runname VARCHAR(128),
                 tschange TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )""",
+            """CREATE TABLE IF NOT EXISTS profile (
+                itemid BIGINT UNSIGNED,
+                module VARCHAR(128),
+                product VARCHAR(128),
+                addtime DOUBLE,
+                waittime FLOAT DEFAULT 0,
+                processtime FLOAT DEFAULT 0,
+                totaltime FLOAT DEFAULT 0,
+                errors TINYINT DEFAULT 0,
+                timeouts TINYINT DEFAULT 0,
+                cancelled TINYINT DEFAULT 0,
+                state TINYINT DEFAULT 1,
+                worker SMALLINT DEFAULT NULL,
+                node VARCHAR(128) DEFAULT NULL,
+                type TINYINT DEFAULT 1,
+                priority TINYINT DEFAULT -1,
+                datasize BIGINT UNSIGNED DEFAULT 0,
+                memory_max BIGINT UNSIGNED DEFAULT 0,
+                cpu_time FLOAT DEFAULT 0,
+                PRIMARY KEY (itemid, module)
+            )""",
             "CREATE INDEX job_state ON jobs(state)",
             "CREATE INDEX job_type ON jobs(type)"
         ]
 
         # Minor upgrade-hack
         try:
-            c = self._execute("SELECT workdir FROM jobs LIMIT 1")
+            c = self._execute("SELECT min(cpu_time) FROM jobs LIMIT 1")
             c.fetchall()
         except:
             try:
@@ -172,6 +197,10 @@ class JobDB(mysql):
         if args is not None:
             args = json.dumps(args)
 
+        if taskid is None:
+            taskid = self._taskid
+            self._taskid += 1
+
         if multiple:
             with self._addLock:
                 self._addlist.append([self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module, modulepath, workdir, itemid])
@@ -179,11 +208,14 @@ class JobDB(mysql):
                 if self._addtimer is None:
                     self._addtimer = threading.Timer(0.5, self.commit_jobs)
                     self._addtimer.start()
-            return
+            return taskid
 
         self._execute("INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module, modulepath, workdir, itemid) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                       [self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module, modulepath, workdir, itemid])
+        return taskid
 
+    def flush(self):
+        self.commit_jobs()
 
     def commit_jobs(self):
         """
@@ -312,7 +344,7 @@ class JobDB(mysql):
 
     def list_jobs(self, step=None, state=None, notstate=None, since=None):
         jobs = []
-        SQL = "SELECT jobid, step, taskid, type, priority, args, tschange, state, expiretime, module, modulepath, tsallocated, node, worker, retval, workdir, itemid FROM jobs WHERE runid=%s"
+        SQL = "SELECT jobid, step, taskid, type, priority, args, tschange, state, expiretime, module, modulepath, tsallocated, node, worker, retval, workdir, itemid, cpu_time, max_memory FROM jobs WHERE runid=%s"
         args = [self._runid]
         if step:
             SQL += " AND step=%s"
@@ -329,7 +361,7 @@ class JobDB(mysql):
 
         SQL += " ORDER BY tschange"
         c = self._execute(SQL, args)
-        for jobid, step, taskid, t, priority, args, tschange, state, expire_time, module, modulepath, tsallocated, node, worker, retval, workdir, itemid in c.fetchall():
+        for jobid, step, taskid, t, priority, args, tschange, state, expire_time, module, modulepath, tsallocated, node, worker, retval, workdir, itemid, cpu_time, max_memory in c.fetchall():
             if args:
                 args = json.loads(args)
             if retval:
@@ -337,7 +369,7 @@ class JobDB(mysql):
             job = {"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
                    "node": node, "worker": worker, "args": args, "tschange": tschange, "state": state,
                    "expire_time": expire_time, "module": module, "modulepath": modulepath, "retval": retval,
-                   "workdir": workdir, "itemid": itemid}
+                   "workdir": workdir, "itemid": itemid, "cpu": cpu_time, "mem": max_memory}
             if tsallocated:
                 job["runtime"] = time.time() - tsallocated
             jobs.append(job)
@@ -353,7 +385,8 @@ class JobDB(mysql):
     def remove_job(self, jobid):
         self._execute("DELETE FROM jobs WHERE runid=%s AND jobid=%s", [self._runid, jobid])
 
-    def update_job(self, jobid, state, step=None, node=None, args=None, priority=None, expire_time=None, retval=None):
+    def update_job(self, jobid, state, step=None, node=None, args=None, priority=None,
+                   expire_time=None, retval=None, cpu=None, memory=None):
         SQL = "UPDATE jobs SET state=%s"
         params = [state]
 
@@ -375,6 +408,13 @@ class JobDB(mysql):
         if retval:
             SQL += ",retval=%s"
             params.append(json.dumps(retval))
+        if cpu:
+            SQL += ",cpu_time=%s"
+            params.append(cpu)
+        if memory:
+            SQL += ",max_memory=%s"
+            params.append(memory)
+
         SQL += " WHERE jobid=%s"  # AND runid=%s"
         params.append(jobid)
         # params.append(self._runid)
@@ -465,6 +505,52 @@ class JobDB(mysql):
         c = self._execute(SQL, (fileid,))
         return c.rowcount
 
+    # Profiles
+    def update_profile(self, itemid, module, product=None, addtime=None, type=1,
+                       state=None, worker=None, node=None, priority=None, datasize=None,
+                       cpu=None, memory=None):
+        try:
+            args = []
+
+            # If this is supposedly a new one, the product is specified
+            if product:
+                if not addtime:
+                    addtime = time.time()
+                SQL = "INSERT INTO profile (itemid, module, product, addtime, datasize, priority, type) "\
+                      "VALUES (%s, %s, %s, %s, %s, %s, %s)"
+                self._execute(SQL, [itemid, module, product, addtime, datasize, priority, type])
+            elif state:
+                SQL = "UPDATE profile SET state=%s,"
+                args.append(state)
+                if state == STATE_ALLOCATED:
+                    SQL += "waittime=%s-addtime,worker=%s,node=%s"
+                    args.append(time.time())
+                    args.append(worker)
+                    args.append(node)
+                else:
+                    SQL += "totaltime=%s-addtime,processtime=%s-addtime-waittime"
+                    args.append(time.time())
+                    args.append(time.time())
+
+                    if state == STATE_FAILED:
+                        SQL += ",errors=errors+1"
+                    elif state == STATE_TIMEOUT:
+                        SQL += ",timeouts=timeouts+1"
+                    elif state == STATE_CANCELLED:
+                        SQL += ",cancelled=cancelled+1"
+
+                if memory:
+                    SQL += ",memory_max=%s"
+                    args.append(memory)
+                if cpu:
+                    SQL += ",cpu_time=%s"
+                    args.append(cpu)
+                SQL += " WHERE itemid=%s AND module=%s"
+                args.append(itemid)
+                args.append(module)
+                self._execute(SQL, args)
+        except Exception as e:
+            print("Exception updating profile:", e)
 
 if __name__ == "__main__":
     try:

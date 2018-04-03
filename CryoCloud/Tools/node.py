@@ -245,6 +245,11 @@ class Worker(multiprocessing.Process):
         self.log.debug("Processing job %s" % str(task))
         self.status["progress"] = 0
 
+        # Measure CPU times
+        proc = psutil.Process(os.getpid())
+        cpu_time = proc.cpu_times().user + proc.cpu_times().system
+        self.max_memory = 0
+
         cancel_event = threading.Event()
         stop_monitor = threading.Event()
 
@@ -259,6 +264,7 @@ class Worker(multiprocessing.Process):
                 elif status is None:
                     self.log.info("Cancelling job as it was removed from the job db")
                     cancel_event.set()
+                self.max_memory = max(self.max_memory, proc.memory_info().rss)
                 time.sleep(1)
 
         new_state = jobdb.STATE_FAILED
@@ -304,11 +310,14 @@ class Worker(multiprocessing.Process):
             if not ret:
                 ret = str(e)
 
+        my_cpu_time = proc.cpu_times().user + proc.cpu_times().system - cpu_time
+        self.max_memory = max(self.max_memory, proc.memory_info().rss)
+
         task["state"] = "Stopped"
         task["processing_time"] = time.time() - start_time
 
         # Update to indicate we're done
-        self._jobdb.update_job(task["id"], new_state, retval=ret)
+        self._jobdb.update_job(task["id"], new_state, retval=ret, cpu=my_cpu_time, memory=self.max_memory)
 
 
 class NodeController(threading.Thread):

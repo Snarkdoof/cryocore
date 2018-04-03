@@ -73,8 +73,18 @@ class HeadNode(threading.Thread):
         self.TYPE_ADMIN = jobdb.TYPE_ADMIN
         self.TYPE_MANUAL = jobdb.TYPE_MANUAL
 
+        self.STATE_PENDING = jobdb.STATE_PENDING
+        self.STATE_ALLOCATED = jobdb.STATE_ALLOCATED
+        self.STATE_COMPLETED = jobdb.STATE_COMPLETED
+        self.STATE_FAILED = jobdb.STATE_FAILED
+        self.STATE_TIMEOUT = jobdb.STATE_TIMEOUT
+        self.STATE_CANCELLED = jobdb.STATE_CANCELLED
+
         self.handler.head = self
         self.step = 0
+
+        # Need some book keeping in case jobs complete super fast - must call onAllocated
+        self._pending = []
 
     def stop(self):
         API.api_stop_event.set()
@@ -115,8 +125,9 @@ class HeadNode(threading.Thread):
                 node=None, expire_time=None, module=None, modulepath=None, workdir=None, itemid=None):
         if expire_time is None:
             expire_time = self.options.max_task_time
-        self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module, node=node, priority=priority,
-                            modulepath=modulepath, workdir=workdir, jobtype=jobtype, itemid=itemid)
+        tid = self._jobdb.add_job(step, taskid, args, expire_time=expire_time, module=module, node=node, priority=priority,
+                                  modulepath=modulepath, workdir=workdir, jobtype=jobtype, itemid=itemid)
+        self._pending.append(tid)
         # if self.options.steps > 0 and self.options.tasks > 0:
         #     if step > self.status["progress"].size[0]:
         #        self.status.new2d("progress", (self.options.steps, self.options.tasks),
@@ -161,6 +172,7 @@ class HeadNode(threading.Thread):
         self.status["eta_total"] = 0
 
         self._jobdb = jobdb.JobDB(self.options.name, self.options.module, auto_cleanup=True)
+        self.update_profile = self._jobdb.update_profile
 
         # TODO: Option for this (and for clear_jobs on cleanup)?
         # self._jobdb.clear_jobs()
@@ -193,14 +205,22 @@ class HeadNode(threading.Thread):
                         last_run = job["tschange"]  # Just in case, we seem to get some strange things here
                         if job["state"] == jobdb.STATE_ALLOCATED:
                             # self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 3)
+                            if job["taskid"] in self._pending:
+                                self._pending.remove(job["taskid"])
                             self.handler.onAllocated(job)
 
                         elif job["state"] == jobdb.STATE_FAILED:
+                            if job["taskid"] in self._pending:
+                                self._pending.remove(job["taskid"])
+                                self.handler.onAllocated(job)
                             # self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 2)
                             self.handler.onError(job)
 
                         elif job["state"] == jobdb.STATE_COMPLETED:
                             # self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 10)
+                            if job["taskid"] in self._pending:
+                                self._pending.remove(job["taskid"])
+                                self.handler.onAllocated(job)
 
                             # We don't fetch job stats at this point - we'll do it asynchronously to not block processing
                             # stats = self._jobdb.get_jobstats()
@@ -212,6 +232,9 @@ class HeadNode(threading.Thread):
                             # self._jobdb.update_job(job["id"], 10)
                             self.handler.onCompleted(job)
                         elif job["state"] == jobdb.STATE_TIMEOUT:
+                            if job["taskid"] in self._pending:
+                                self._pending.remove(job["taskid"])
+                                self.handler.onAllocated(job)
                             # self.status["progress"].set_value((job["step"] - 1, job["taskid"]), 0)
                             self.handler.onTimeout(job)
 
