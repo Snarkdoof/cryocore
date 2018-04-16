@@ -119,7 +119,7 @@ class AsyncDB(threading.Thread):
             retval["rowcount"] = cursor.rowcount
             retval["lastrowid"] = cursor.lastrowid
             res = []
-            if cursor.rowcount != 0 and SQL.upper().startswith("SELECT"):
+            if cursor.rowcount != 0 and SQL.upper().startswith("SELECT") or SQL.upper().startswith("SHOW"):
                 try:
                     for row in cursor.fetchall():
                         res.append(row)
