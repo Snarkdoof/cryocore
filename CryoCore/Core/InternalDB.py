@@ -155,16 +155,10 @@ class AsyncDB(threading.Thread):
                             should_stop = True
                             self.running = False
 
-                if self.runQueue.empty():
-                    time.sleep(0.1)
-                    continue
-
-                task = self.runQueue.get(block=False, timeout=0.5)
+                task = self.runQueue.get(True, timeout=0.5)
                 event, retval, SQL, parameters, ignore_error = task
                 self._async_execute(event, retval, SQL, parameters, ignore_error)
             except queue.Empty:
-                time.sleep(0.1)  # Condition variables, blocking queue - it all doesn't work...
-                print(os.getpid(), "AsyncDB IDLE")
                 continue
             except:
                 print("Unhandled exception")
