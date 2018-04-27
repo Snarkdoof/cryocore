@@ -412,7 +412,7 @@ if __name__ == "__main__":
     try:
         options.tasks = int(options.tasks)
     except:
-        options.task = 0
+        options.tasks = 0
 
     try:
         if options.max_task_time:
