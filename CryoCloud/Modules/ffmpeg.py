@@ -97,4 +97,4 @@ def process_task(worker, task):
 
     worker.status["state"] = "idle"
 
-    return 100, {"size": worker.status["size"].get_value(), "time": worker.status["time"].get_value()}
+    return 100, {"size": worker.status["size"].get_value(), "time": worker.status["time"].get_value(), "dst": dst}
