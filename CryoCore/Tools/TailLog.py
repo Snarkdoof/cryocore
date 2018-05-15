@@ -5,6 +5,7 @@ from __future__ import print_function
 
 import time
 import sys
+import re
 
 from argparse import ArgumentParser
 
@@ -95,7 +96,6 @@ class TailLog(mysql):
         """
         Perform a search and display the results (going back 200 messages)
         """
-        print("Grep for", args)
         if options.all:
             last_id = 0
         else:
@@ -107,17 +107,50 @@ class TailLog(mysql):
                 print("No log entries, tailing from now")
                 last_id = 0
 
-        # Search in text, module, logger
-        SQL = "SELECT * FROM log WHERE id>" + str(last_id) + " AND "
+        r = ""
         for arg in args:
-            arg = arg.replace("'", "\'")
-            SQL += "(module LIKE '%%" + arg + "%%' OR logger LIKE '%%" + arg + "%%' OR message LIKE '%%" + arg + "%%' ) OR "
-        SQL = SQL[:-3] + "ORDER BY id"
+            r += ".*" + arg + ".*|"
+        r = r[:-1]
+        reg = re.compile(r)
+        # Search in text, module, logger
+        while not API.api_stop_event.isSet():
+            SQL = "SELECT * FROM log WHERE id> %s ORDER BY id LIMIT 10000"
+            cursor = self._execute(SQL, [last_id])
+            last_lines = []
+            should_print = 0
+            for row in cursor.fetchall():
+                last_id = row[ID]
+                line = self._print_row(options, row, True)
+                if reg.match(line):
+                    for l in last_lines:
+                        print(l)
+                        last_lines = []
+                    # Highlight if not BW
+                    if options.bw:
+                        print("--->", line)
+                    else:
+                        m = re.match("^\\033\[(.[2-3])m", line)
+                        line = line.replace(m.groups()[0], "1;91", 1)
+                        line = re.sub("\033\[", "\033[7;", line)
+                        line += "\033[27m"
+                        # print("\033[1m" + line)
+                        print(line)
 
-        # print(SQL)
-        cursor = self._execute(SQL)
-        for row in cursor.fetchall():
-            self._print_row(options, row)
+                    should_print = 4
+                elif should_print > 0:
+                    print(line)
+                    should_print -= 1
+                    if should_print == 0:
+                        print("\n")
+                else:
+                    last_lines.append(line)
+                    if len(last_lines) > 4:
+                        last_lines.pop(0)
+
+            if not options.follow:
+                break
+
+            time.sleep(1)
 
         # TODO: implement follow (-f)
 
@@ -183,6 +216,7 @@ class TailLog(mysql):
                     SQL = "SELECT * FROM log WHERE id>%s AND level>=%s ORDER BY id"
                     params = [last_id, API.log_level_str[options.level]]
 
+                SQL += " LIMIT 10000"
                 cursor = self._execute(SQL, params)
                 for row in cursor.fetchall():
                     rows += 1
@@ -218,7 +252,7 @@ class TailLog(mysql):
                 import traceback
                 traceback.print_exc()
 
-    def _print_row(self, options, row):
+    def _print_row(self, options, row, noprint=False):
         # Convert time to readable and ignore the ID
         t = time.ctime(row[TIMESTAMP])
 
@@ -237,9 +271,9 @@ class TailLog(mysql):
                           "yellow": "\033[93m",
                           "blue": "\033[94m",
                           "black": "\033[90m",
-                          "cyan": "\033[1;36m",
-                          "white": "\033[1;37m"}
-                return colors[color] + text + "\033[0m"
+                          "cyan": "\033[36m",
+                          "white": "\033[37m"}
+                return colors[color] + text  # + "\033[0m"
 
             level_color = {API.log_level_str["DEBUG"]: "yellow",
                            API.log_level_str["INFO"]: "green",
@@ -254,11 +288,19 @@ class TailLog(mysql):
                           API.log_level_str["ERROR"]: "red",
                           API.log_level_str["FATAL"]: "red",
                           API.log_level_str["CRITICAL"]: "red"}
-            line = colored(t, "yellow") + " [" + colored("%7s" % API.log_level[row[LEVEL]], level_color[row[LEVEL]]) + "][" +\
-                colored("%20s" % row[MODULE], "green") +\
-                "(%4s)][" % row[LINE] +\
-                colored("%10s" % row[LOGGER], "blue") + "]" +\
-                colored(row[TEXT], text_color[row[LEVEL]])
+            if options.bw:
+                line = "%s [%7s][%20s (%4s)][%10s] %s" %\
+                    (t, API.log_level[row[LEVEL]], row[MODULE], row[LINE], row[LOGGER], row[TEXT])
+            else:
+                line = colored(t, "yellow") + " [" + colored("%7s" % API.log_level[row[LEVEL]], level_color[row[LEVEL]]) + "][" +\
+                    colored("%20s" % row[MODULE], "green") +\
+                    "(%4s)][" % row[LINE] +\
+                    colored("%10s" % row[LOGGER], "blue") + "]" +\
+                    colored(row[TEXT], text_color[row[LEVEL]])
+
+            if noprint:
+                return line
+
             if len(options.keywords) > 0:
                 for kwd in options.keywords:
                     if line.find(kwd) > -1:
@@ -341,6 +383,9 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--verbose", action="store_true", default=False,
                         help="Verbose mode - say more about what's going on")
 
+    parser.add_argument("--bw", action="store_true", default=False,
+                        help="Black and white output")
+
     parser.add_argument("--db_name", type=str, dest="db_name", default="", help="cryocore or from .config")
     parser.add_argument("--db_user", type=str, dest="db_user", default="", help="cc or from .config")
     parser.add_argument("--db_host", type=str, dest="db_host", default="", help="localhost or from .config")
@@ -372,6 +417,9 @@ if __name__ == "__main__":
                 print("Database cleared")
                 raise SystemExit()
 
+        if not options.bw:
+            print("\033[40;97m")  # Go black
+
         if options.grep:
             tail.grep(options, options.grep)
             raise SystemExit()
@@ -397,3 +445,5 @@ if __name__ == "__main__":
             pass
     finally:
         API.shutdown()
+        if not options.bw:
+            print("\033[0m")

@@ -156,6 +156,8 @@ class Watchdog:
         self.errors = {}
         self.last_values = {}
         self._user_watch = []  # List of parameters queued for watching - will be resolved periodically
+        self._periodicals = []  # Tuples (relpeat_time, next_execute, function)
+
         if logfilter:
             self.logreader = LogDbReader()
             self._logfilter = logfilter
@@ -228,6 +230,13 @@ class Watchdog:
         self._update_watches()
         print("Status watch added", nick, channel, parameter)
 
+    def addPeriodical(self, seconds, method, irc_only=True):
+        """
+        Add a periodical report - return the report as a string - "" or None will
+        be ignored
+        """
+        self._periodicals.append((seconds, time.time() + seconds, method, irc_only))
+
     def _update_watches(self):
         # Go through all user watches and add them to the watch list
 
@@ -267,7 +276,6 @@ class Watchdog:
                     fail = True
                     if not (chan, param) in self.errors or full_report:
                         self.errors[(chan, param)] = "No response"
-                        print(chan, param, "Not updated in", time.time() - last_time, "seconds")
                         # self.bot.send("%s has not responded in %d seconds" % (nick, time.time() - last_time))
                         message += "E: %s has not responded in %d seconds (%s)\n" % (nick, time.time() - last_time, chan)
                 elif (expected is not None):
@@ -298,24 +306,28 @@ class Watchdog:
         files_failed = 0
         for nick, path, max_time, callback in dirs:
             files = os.listdir(path)
+            total_files = 0
             for filename in files:
                 p = os.path.join(path, filename)
-                if os.path.isfile(p):
-                    stat = os.lstat(p)
-                    if time.time() - stat.st_mtime > max_time:
-                        files_failed += 1
-                        if p not in self._reported_files or full_report:
-                            try:
-                                e = callback(nick, path, p, time.time() - stat.st_mtime)
-                                if e:
-                                    message = message + e + "\n"
-                            except:
-                                self.log.exception("Exception in file watch callback")
-                        self._reported_files[p] = [time.time(), nick, path]
-                    else:
-                        if p in self._reported_files:
-                            del self._reported_files[p]
-                            message += "I: %s: File %s modified\n" % (self._reported_files[p][1], p)
+                total_files += 1
+                stat = os.lstat(p)
+                if time.time() - stat.st_mtime > max_time:
+                    files_failed += 1
+                    if p not in self._reported_files or full_report:
+                        try:
+                            e = callback(nick, path, p, time.time() - stat.st_mtime)
+                            if e:
+                                message = message + e + "\n"
+                        except:
+                            self.log.exception("Exception in file watch callback")
+                    self._reported_files[p] = [time.time(), nick, path]
+                else:
+                    if p in self._reported_files:
+                        del self._reported_files[p]
+                        message += "I: %s: File %s modified\n" % (self._reported_files[p][1], p)
+            # Stats
+            self.status["files_total.%s" % nick] = total_files
+            self.status["files_too_old.%s" % nick] = files_failed
 
         if len(dirs) > 0 and files_failed == 0 and full_report:
             message += "I: All files OK\n"
@@ -349,6 +361,7 @@ class Watchdog:
                     self.report(message)
 
                 while time.time() - last_run < self.cfg["runeach"]:
+                    # Idle loop - see if we should do any periodic reports
                     if API.api_stop_event.isSet():
                         break
                     if self.debug:
@@ -358,9 +371,28 @@ class Watchdog:
                             for line in (lines[5] + ": " + lines[8]).split("\n"):
                                 self.bot.send(API.log_level[lines[3]] + ": " + line)
 
+                    # should we do any periodic reports
+                    now = time.time()
+                    i = 0
+                    while i < len(self._periodicals):
+                        secs, nextrun, method, irc_only = self._periodicals[i]
+                        if nextrun <= now:
+                            try:
+                                report = method(self.db)
+                                next_run = now + secs
+                                self._periodicals[i] = (secs, next_run, method, irc_only)
+                                if report:
+                                    self.report(report, irc_only)
+                            except:
+                                self._periodicals.pop(i)
+                                self.log.exception("Failed to run periodic report")
+                                i -= 1
+                        i += 1
+
                     time.sleep(1)
                 last_run = time.time()
             except Exception as e:
+                self.log.exception("In main loop")
                 print("*** Error in main loop: ", e)
                 time.sleep(1)
         try:

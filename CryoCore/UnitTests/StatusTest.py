@@ -351,7 +351,7 @@ class StatusTest(unittest.TestCase):
         status = Status.StatusHolder("UnitTest", stop_event)
         status["test"] = 0
 
-        self.assertEquals(str(status["test"]), "test=0")
+        self.assertEqual(str(status["test"]), "test=0")
         # self.assertTrue(status["test"] == 0)
         self.assertFalse(status["test"] != 0)
         self.assertFalse(status["test"] < 0)
@@ -360,7 +360,7 @@ class StatusTest(unittest.TestCase):
         self.assertTrue(status["test"] >= 0)
 
         status["test"] = "0"
-        self.assertEquals(str(status["test"]), "test=0")
+        self.assertEqual(str(status["test"]), "test=0")
         self.assertTrue(status["test"] == "0")
         self.assertFalse(status["test"] == 0)
         self.assertFalse(status["test"] != "0")

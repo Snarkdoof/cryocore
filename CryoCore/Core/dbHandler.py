@@ -121,16 +121,34 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         self.complete_event.set()
 
     def get_log_entry_and_insert(self, should_block, desired_timeout):
-        try:
-            (sql, args) = self.tasks.get(should_block, desired_timeout)
-            # Should insert something
-            self._execute(sql, args)  # , log_errors=False)
-        except queue.Empty:
+
+        SQL = "INSERT INTO log (logger, level, module, line, function, time, msecs, message) VALUES "
+        params = []
+        while True:
+            try:
+                args = self.tasks.get(should_block, desired_timeout)
+                SQL += "(%s, %s, %s, %s, %s, %s, %s, %s),"
+                params.extend(args)
+                if len(params) > 1000:
+                    break  # Enough already
+            except queue.Empty:
+                break
+            except Exception as e:
+                print("Error getting async log messages:", e)
+                return False
+
+        if len(params) == 0:
+            # Nothing yet
             return False
+
+        # Should insert something
+        try:
+            SQL = SQL[:-1]
+            self._execute(SQL, params)  # , log_errors=False)
         except Exception as e:
             print("Async exception on log posting", e)
-            print("SQL was", sql, "Args:", args)
             return False
+
         return True
 
     def close(self):
@@ -208,14 +226,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
                 message = (str(record.getMessage()) + program_stack_string.replace("'", "\""))
                 toRecord.append(message)
 
-            sql_sentence = "INSERT DELAYED INTO log (logger, level, module, line, function, time, msecs, message) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
-            try:
-                self.tasks.put((sql_sentence, toRecord))
-                # self._execute(sql_sentence, toRecord, log_errors=False)
-            except Exception as e:
-                print("Error inserting log message into DB (%s): %s" % (sql_sentence, e))
-                self.aux_logger.exception(time.asctime(time.localtime()) + " - the database insertion has failed.")
-                self.aux_logger.error("SQL was '%s' params: %s" % (sql_sentence, str(toRecord)))
+            self.tasks.put(toRecord)
 
     def flush(self):
         """
