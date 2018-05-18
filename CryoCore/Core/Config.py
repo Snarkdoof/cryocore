@@ -1021,7 +1021,7 @@ class Configuration(threading.Thread):
         if not full_path:
             return root[:-1]
 
-        if full_path.startswith("root"):
+        if full_path.startswith("root.") or full_path == "root":
             path = full_path[4:]
             if len(path) > 0 and path[0] == ".":
                 path = path[1:]

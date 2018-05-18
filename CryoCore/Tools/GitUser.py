@@ -46,8 +46,11 @@ from argparse import ArgumentParser
 locale.setlocale(locale.LC_ALL, '')
 code = locale.getpreferredencoding()
 ui = None
+
+
 def startUI(screen):
     ui.run(screen)
+
 
 class GitUserDB:
     def __init__(self):
@@ -60,7 +63,7 @@ class GitUserDB:
             self.read_database()
         except:
             sys.stderr.write("Warning: Database not found.\n")
-        
+
     def read_database(self):
         with io.open(os.path.expanduser("~/.norut-git-users/users.json"), "r", encoding="utf8") as fd:
             self.users = json.load(fd)
@@ -69,25 +72,25 @@ class GitUserDB:
         with io.open(os.path.expanduser("~/.norut-git-users/users.json"), "w", encoding="utf8") as fd:
             data = json.dumps(self.users, ensure_ascii=False, indent=2, sort_keys=True, encoding="utf8")
             fd.write(unicode(data))
-    
+
     def select_user(self, nick):
-        if nick != None:
-            print os.path.expanduser("~/.norut-git-users/") + nick
+        if nick is not None:
+            print(os.path.expanduser("~/.norut-git-users/") + nick)
         else:
-            print os.path.expanduser("~/.norut-git-users/unset-user")
-    
+            print(os.path.expanduser("~/.norut-git-users/unset-user"))
+
     def add_user(self, nick, name, email, key):
-        self.users[nick] = { "name" : name, "email" : email, "key" : key }
+        self.users[nick] = {"name": name, "email": email, "key": key}
         self.write_database()
-    
+
     def list_users(self, index_or_nick=None):
         for key in self.users.keys():
-             sys.stderr.write(key+"\n")
-    
+            sys.stderr.write(key + "\n")
+
     def unset_user(self):
         sys.stderr.write("Source following to unset GIT environment variables")
-        print os.path.expanduser("~/.norut-git-users/unset-user")
-    
+        print(os.path.expanduser("~/.norut-git-users/unset-user"))
+
     def write_user_script(self, nick, user, fd):
         script = u"""#!/bin/bash
 export NORUT_GIT_USER="%s"
@@ -115,20 +118,22 @@ unset GIT_AUTHOR_NAME
 unset GIT_AUTHOR_EMAIL
 """
             fd.write(script)
-        
-        os.chmod(os.path.expanduser("~/.norut-git-users/ssh-wrapper"), 0744)
-        os.chmod(os.path.expanduser("~/.norut-git-users/unset-user"), 0744)
+
+        os.chmod(os.path.expanduser("~/.norut-git-users/ssh-wrapper"), 744)
+        os.chmod(os.path.expanduser("~/.norut-git-users/unset-user"), 744)
         for key in self.users:
             user = self.users[key]
             with io.open(os.path.expanduser("~/.norut-git-users/")+key, "w", encoding="utf8") as fd:
                 self.write_user_script(key, user, fd)
-            os.chmod(os.path.expanduser("~/.norut-git-users/")+key, 0744)
+            os.chmod(os.path.expanduser("~/.norut-git-users/")+key, 744)
+
 
 def get_input(default_value, prompt):
     sys.stderr.write(prompt+"\n"+"> ")
     line = sys.stdin.readline()
     line = line.strip()
     return line if len(line) > 0 else default_value
+
 
 def add_user(db):
     nick = get_input(None, "Enter nickname")
@@ -139,22 +144,22 @@ def add_user(db):
         db.add_user(nick, name, email, key)
         db.write_database()
     else:
-        print "Error: No fields may be left blank; user not created/updated."
-    
+        print("Error: No fields may be left blank; user not created/updated.")
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="User interface to switch between git users.")
     parser.add_argument("-a", "--add", dest="add", action="store_true", default=False, help="Add a user config")
     parser.add_argument("-u", "--update", dest="update", action="store_true", default=False, help="Update user environment scripts")
     parser.add_argument("-s", "--select", dest="nick", default=None, help="Activate this user (returns path to this user's env script)")
-    
+
     db = GitUserDB()
     options = parser.parse_args()
     if options.add:
         add_user(db)
     elif options.update:
         db.update_scripts()
-    elif options.nick != None:
+    elif options.nick is not None:
         db.select_user(options.nick)
     else:
         sys.stderr.write("Enter short name of user to activate (empty to unset environemnt):\n")
