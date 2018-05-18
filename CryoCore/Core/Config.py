@@ -1611,7 +1611,8 @@ class Configuration(threading.Thread):
           cfg["somefolder.somesubparameter"] = value
         """
         try:
-            self.get(name).set_value(value)
+            datatype = self._get_datatype(value)
+            self.get(name).set_value(value, datatype=datatype, check=False)
         except NoSuchParameterException:
             # Create it
             self.add(name, value)
@@ -1630,7 +1631,7 @@ class Configuration(threading.Thread):
                 if val.__class__ == str:
                     return val.encode("utf-8")
             return val
-        except Exception as e:
+        except Exception:
             return None
 
     def set_default(self, name, value, datatype=None, root=None):
