@@ -296,6 +296,30 @@ class NamedConfiguration:
         self.last_updated = self._parent.last_updated
         self.del_callback = self._parent.del_callback
 
+    def _get_datatype(self, value):
+        if value is None:
+            return "string"
+
+        datatype = "string"
+        if value.__class__ == float:
+            datatype = "double"
+        elif value.__class__ == int:
+            datatype = "integer"
+        elif value.__class__ == int:
+            datatype = "integer"
+        elif value.__class__ == bool:
+            datatype = "boolean"
+            value = str(value)
+        elif value.isdigit():
+            datatype = "integer"
+        elif value.count(".") == 1 and value.replace(".", "").isdigit():
+            datatype = "double"
+        elif value.lower() in ["true", "false"]:
+            datatype = "boolean"
+        else:
+            datatype = "string"
+        return datatype
+
     def serialize(self, path=None, version=None):
         if not version:
             version = self.version
