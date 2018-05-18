@@ -362,7 +362,8 @@ class NamedConfiguration:
           cfg["somefolder.somesubparameter"] = value
         """
         try:
-            self.get(name).set_value(value)
+            datatype = self._get_datatype(value)
+            self.get(name).set_value(value, datatype=datatype, check=False)
         except NoSuchParameterException:
             # Create it
             self.add(name, value)
