@@ -1,1 +1,0 @@
-/home/njaal/git/cryocore/running/CryoCore/GUI/Web/html/js/cryocoregui.js
