@@ -37,9 +37,13 @@ else
 fi
 
 echo "Enter password for mysql admin:"
-mysql -u root -p < CryoCore/Install/create_db.sql
+
+# Check if it's mariadb
+sudo mysql < CryoCore/Install/create_db.sql
+# or mysql
+# mysql -u root -p < CryoCore/Install/create_db.sql
 
 echo "Importing default config"
-python CryoCore/Tools/ConfigTool.py import CryoCore/Install/defaultConfiguration.xml
+./bin/ccconfig import CryoCore/Install/defaultConfiguration.xml
 
 echo "OK"
