@@ -310,9 +310,11 @@ if __name__ == "__main__":
         if len(db_cfg) > 0:
             API.set_config_db(db_cfg)
 
+        colors = False
         tail = TailStatus("TailStatus", options)
 
         if not options.bw:
+            colors = True
             print("\033[40;97m")  # Go black
 
         if options.clear_all:
@@ -360,5 +362,5 @@ if __name__ == "__main__":
     finally:
         API.shutdown()
         print("API Shut down")
-        if not options.bw:
+        if colors:
             print("\033[0m")  # Go back

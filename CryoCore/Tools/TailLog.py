@@ -391,6 +391,7 @@ if __name__ == "__main__":
     parser.add_argument("--db_host", type=str, dest="db_host", default="", help="localhost or from .config")
     parser.add_argument("--db_password", type=str, dest="db_password", default="", help="defaultpw or from .config")
 
+    colors = False
     try:
         if "argcomplete" in sys.modules:
             argcomplete.autocomplete(parser)
@@ -418,6 +419,7 @@ if __name__ == "__main__":
                 raise SystemExit()
 
         if not options.bw:
+            colors = True
             print("\033[40;97m")  # Go black
 
         if options.grep:
@@ -445,5 +447,5 @@ if __name__ == "__main__":
             pass
     finally:
         API.shutdown()
-        if not options.bw:
+        if colors:
             print("\033[0m")
