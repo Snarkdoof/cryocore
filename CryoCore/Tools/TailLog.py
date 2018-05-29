@@ -316,6 +316,7 @@ if __name__ == "__main__":
     # We're single threaded and don't want to make any tables
     API.__is_direct = True
     API.auto_init = False
+    colors = False
 
     def module_completer(prefix, parsed_args, **kwargs):
         items = tail.get_list("modules")
@@ -390,8 +391,6 @@ if __name__ == "__main__":
     parser.add_argument("--db_user", type=str, dest="db_user", default="", help="cc or from .config")
     parser.add_argument("--db_host", type=str, dest="db_host", default="", help="localhost or from .config")
     parser.add_argument("--db_password", type=str, dest="db_password", default="", help="defaultpw or from .config")
-
-    colors = False
     try:
         if "argcomplete" in sys.modules:
             argcomplete.autocomplete(parser)

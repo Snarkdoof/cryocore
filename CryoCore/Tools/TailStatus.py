@@ -243,6 +243,7 @@ if __name__ == "__main__":
 
     try:
         tail = None
+        colors = False
 
         def channel_completer(prefix, parsed_args, **kwargs):
             channels = tail.get_channels()
@@ -310,7 +311,6 @@ if __name__ == "__main__":
         if len(db_cfg) > 0:
             API.set_config_db(db_cfg)
 
-        colors = False
         tail = TailStatus("TailStatus", options)
 
         if not options.bw:
@@ -361,6 +361,5 @@ if __name__ == "__main__":
 
     finally:
         API.shutdown()
-        print("API Shut down")
         if colors:
             print("\033[0m")  # Go back
