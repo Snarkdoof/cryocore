@@ -487,3 +487,11 @@ value TEXT)"""]
         Return a list of textual log levels that are available
         """
         return API.log_level_str
+
+    def get_last_value(self, paramid, num_values=1):
+        """
+        Just return the LAST value directly of this parameter
+        """
+        SQL = "SELECT timestamp, value FROM status WHERE paramid=%s ORDER BY id DESC LIMIT %s"
+        c = self._execute(SQL, [paramid, num_values])
+        return {paramid: c.fetchall()}

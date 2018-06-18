@@ -120,3 +120,7 @@ def log_getlines(req, last_id=None, start=None, end=None, modules="", loggers=""
 def log_getlevels(req):
     levels = db.get_db().get_log_levels()
     return json.dumps({"levels": levels})
+
+
+def get_last_value(req, paramid, num_values=1):
+    return json.dumps(db.get_db().get_last_value(paramid, num_values))
