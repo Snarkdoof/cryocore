@@ -1,4 +1,5 @@
 CREATE DATABASE cryocore;
-GRANT ALL ON cryocore.* TO cc@'localhost' identified by 'Kjøkkentrappene bestyrer sørlandske databehandlingsrutiner';
+CREATE USER 'cc'@'localhost' IDENTIFIED BY 'Kjøkkentrappene bestyrer sørlandske databehandlingsrutiner';
+GRANT ALL ON cryocore.* TO 'cc'@'localhost';
 FLUSH PRIVILEGES;
 
