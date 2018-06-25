@@ -794,7 +794,7 @@ class Configuration(threading.Thread):
             SQL = """CREATE TABLE IF NOT EXISTS config (
     id INT PRIMARY KEY AUTO_INCREMENT,
     version INT NOT NULL,
-    last_modified TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modified TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     parent INT NOT NULL,
     name VARCHAR(128),
     value VARCHAR(256),
@@ -818,7 +818,7 @@ class Configuration(threading.Thread):
             SQL = """CREATE TABLE IF NOT EXISTS config_callback  (
     id INT NOT NULL,
     param_id INT NOT NULL,
-    last_modified TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modified TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     PRIMARY KEY (id, param_id),
     FOREIGN KEY (param_id) REFERENCES config(id) ON DELETE CASCADE)"""
             # Same workaround for missing timestamp precision as above
