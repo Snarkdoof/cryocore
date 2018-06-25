@@ -1215,7 +1215,7 @@ class Configuration(threading.Thread):
             res.append(ConfigParameter(self, id, name, parent_ids, path,
                                        datatype, value, version, timestamp,
                                        config=self, comment=comment))
-            my_timestamp = max(timestamp, my_timestamp)
+            my_timestamp = max(timestamp, my_timestamp) if timestamp is not None else my_timestamp
 
         return my_timestamp, res
 
