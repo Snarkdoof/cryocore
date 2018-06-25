@@ -102,7 +102,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
                            "time DOUBLE, "
                            "msecs FLOAT, "
                            "line INTEGER UNSIGNED NOT NULL, "
-                           "function VARCHAR(255), "
+                           "`function` VARCHAR(255), "
                            "module VARCHAR(255) NOT NULL, "
                            "logger VARCHAR(255) NOT NULL) ENGINE MyISAM",
 
@@ -122,7 +122,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
     def get_log_entry_and_insert(self, should_block, desired_timeout):
 
-        SQL = "INSERT INTO log (logger, level, module, line, function, time, msecs, message) VALUES "
+        SQL = "INSERT INTO log (logger, level, module, line, `function`, time, msecs, message) VALUES "
         params = []
         while True:
             try:
