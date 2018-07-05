@@ -320,9 +320,13 @@ class NamedConfiguration:
             datatype = "string"
         return datatype
 
-    def serialize(self, path=None, version=None):
+    def serialize(self, path=None, root=None, version=None):
         if not version:
             version = self.version
+        if not root:
+            root = self.root
+        elif self.root:
+            root = self.root + "." + root
         return self._parent.serialize(path, root=self.root, version=version)
 
     def clear_all(self):
