@@ -316,13 +316,13 @@ if __name__ == "__main__":
             if len(args) > 1:
                 root = args[1]
             else:
-                root = ""
+                root = None
 
             if len(args) > 2:
                 data = open(args[2], "r").read()
             else:
                 data = sys.stdin.read()
-            cfg.deserialize(data, path=root, version=options.version,
+            cfg.deserialize(data, root=root, version=options.version,
                             overwrite=options.overwrite)
         elif command.find("=") > -1:
             # Assignment
