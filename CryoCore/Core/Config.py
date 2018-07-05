@@ -1540,7 +1540,7 @@ class Configuration(threading.Thread):
             if root and root != "root":
                 if overwrite:
                     try:
-                        self._set(
+                        self.set(
                             root,
                             serialized["value"],
                             serialized["datatype"],
