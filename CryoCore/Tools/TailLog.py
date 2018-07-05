@@ -245,7 +245,7 @@ class TailLog(mysql):
                     if not options.follow:
                         break
                     # No new activity, wait a bit before we try again
-                    time.sleep(1)
+                    time.sleep(0.1)
 
             except Exception as e:
                 print("Oops:", e)

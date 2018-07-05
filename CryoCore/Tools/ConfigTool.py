@@ -310,7 +310,7 @@ if __name__ == "__main__":
             else:
                 root = ""
 
-            print(cfg.serialize(root=root, version=options.version))
+            print(cfg.serialize(path=root, version=options.version))
 
         elif command == "deserialize":
             if len(args) > 1:
@@ -322,7 +322,7 @@ if __name__ == "__main__":
                 data = open(args[2], "r").read()
             else:
                 data = sys.stdin.read()
-            cfg.deserialize(data, root=root, version=options.version,
+            cfg.deserialize(data, path=root, version=options.version,
                             overwrite=options.overwrite)
         elif command.find("=") > -1:
             # Assignment
