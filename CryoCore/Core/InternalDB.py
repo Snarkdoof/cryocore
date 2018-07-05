@@ -118,14 +118,11 @@ class AsyncDB(threading.Thread):
             }
             retval["rowcount"] = cursor.rowcount
             retval["lastrowid"] = cursor.lastrowid
-            res = []
-            if cursor.rowcount != 0 and SQL.upper().startswith("SELECT") or SQL.upper().startswith("SHOW"):
-                try:
-                    for row in cursor.fetchall():
-                        res.append(row)
-                except:
-                    pass  # fetchall likely used with no result
-            retval["return"] = res
+            # if cursor.rowcount != 0 and SQL.upper().startswith("SELECT") or SQL.upper().startswith("SHOW"):
+            try:
+                retval["return"] = cursor.fetchall()
+            except:
+                retval["return"] = []
             cursor.close()
             conn.close()
             return retval
@@ -185,14 +182,14 @@ class AsyncDB(threading.Thread):
         return cfg
 
     def _get_connection(self):
-            cfg = self._get_conn_cfg()
-            return MySQLdb.MySQLConnection(host=cfg["db_host"],
-                                           user=cfg["db_user"],
-                                           passwd=cfg["db_password"],
-                                           db=cfg["db_name"],
-                                           use_unicode=True,
-                                           autocommit=True,
-                                           charset="utf8")
+        cfg = self._get_conn_cfg()
+        return MySQLdb.MySQLConnection(host=cfg["db_host"],
+                                       user=cfg["db_user"],
+                                       passwd=cfg["db_password"],
+                                       db=cfg["db_name"],
+                                       use_unicode=True,
+                                       autocommit=True,
+                                       charset="utf8")
 
     def get_connection(self):
         while self.running:  # stop_event.isSet():
@@ -214,7 +211,7 @@ class AsyncDB(threading.Thread):
         self.db_conn = None
         # _get_conn_pool(self._db_cfg)._close_connection()
 
-    def _get_cursor(self, temporary_connection=False):
+    def _get_cursor(self, temporary_connection=True):
         try:
             if temporary_connection:
                 return self.get_connection().cursor()
@@ -408,7 +405,7 @@ class mysql:
             self.log.debug("Initializing tables DONE")
 
     def _execute(self, SQL, parameters=None,
-                 temporary_connection=False,
+                 temporary_connection=True,
                  ignore_error=False,
                  insist_direct=False):
         """
@@ -417,17 +414,22 @@ class mysql:
         if parameters is None:
             parameters = []
         if self._is_direct:
-            try:
-                if not self.cursor:
-                    # self.cursor = AsyncDB.getDB(None)._get_cursor(False)
-                    self.cursor = self.db._get_cursor(temporary_connection)
-                self.cursor.execute(SQL, parameters)
-                return self.cursor
-            except Exception as e:
-                self.cursor = None
-                if ignore_error:
+            while not API.api_stop_event.isSet():
+                try:
+                    if not self.cursor:
+                        # self.cursor = AsyncDB.getDB(None)._get_cursor(False)
+                        self.cursor = self.db._get_cursor(temporary_connection)
+                    self.cursor.execute(SQL, parameters)
                     return self.cursor
-                raise e
+                except MySQLdb.OperationalError as e:
+                    print("Error", e.errno, e)
+                    self.db._close_connection()
+                    time.sleep(1.0)
+                except Exception as e:
+                    self.cursor = None
+                    if ignore_error:
+                        return self.cursor
+                    raise e
         event = threading.Event()
         retval = {}
         self.db.execute([event, retval, SQL, parameters, ignore_error], insist_direct=insist_direct)
@@ -438,7 +440,7 @@ class mysql:
                 if SLOW_WARNING:
                     print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
             if not event.isSet():
-                raise TooSlowException("Failed to execute query in time (%s)" % SQL)
+                raise TooSlowException("%e Failed to execute query in time (%s)" % (time.ctime(), SQL))
 
         if not ignore_error and "error" in retval:
             raise Exception(retval["error"])
