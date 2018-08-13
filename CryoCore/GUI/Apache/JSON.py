@@ -1,10 +1,9 @@
-
+import os
+os.chdir(os.path.dirname(__file__))
 import db
 import json
 from CryoCore import API
 
-import os
-os.chdir(os.path.dirname(__file__))
 
 cfg = API.get_config()
 db = db.DBWrapper()
