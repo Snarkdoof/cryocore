@@ -118,7 +118,8 @@ var CryoCore = function(_CRYOCORE_) {
     var set = function(param, value, opt) {
       XHR.get(SERVER + "/JSON.py/cfg_set", {
           "param": param,
-          "value": value
+          "value": value,
+          "ts": new Date()/1000
         },
         function(res) {
           refresh(options.onchanged);
