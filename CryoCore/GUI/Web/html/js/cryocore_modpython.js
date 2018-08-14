@@ -53,13 +53,13 @@ var CryoCore = function(_CRYOCORE_) {
       if (is_refreshing) return;
       is_refreshing = true;
       XHR.get(SERVER + "/JSON.py/cfg_isupdated", {
-          "since": last_config_update
+          "since": last_config_update,
+          "ts": new Date()/1000
         },
         function(data) {
           is_refreshing = false;
           last_config_update = data.last_updated;
           if (data.updated) {
-            console.log("Config updated, refreshing");
             reload(func);
           }
         },
