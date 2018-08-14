@@ -4,6 +4,7 @@ import db
 import json
 from CryoCore import API
 
+API.__is_direct = True
 
 cfg = API.get_config()
 db = db.DBWrapper()
