@@ -641,7 +641,7 @@ class Configuration(threading.Thread):
         # _get_conn_pool(self._db_cfg)._close_connection()
 
     def _get_cursor(self, temporary_connection=False):
-        return self.get_connection().cursor()
+        # return self.get_connection().cursor()
 
         try:
             if self.cursor is None:
