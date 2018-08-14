@@ -14,10 +14,9 @@ apt-get --help > /dev/null
 if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
 	echo "Checking dependencies"
   sudo apt-get update
-	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip
+	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip bash-completion
 
 	sudo activate-global-python-argcomplete
-  sudo activate-global-python-argcomplete3
 	
 	echo "Installing mysql connector"
   sudo pip install mysql-connector==2.1.4
