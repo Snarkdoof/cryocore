@@ -812,6 +812,10 @@ var CryoCore = function(_CRYOCORE_) {
 
     self.sequencer = new TIMINGSRC.Sequencer(startto, endto);
 
+    self.sequencer.on("remove", function(e) {
+        self.sequencer.removeCue(e.key);
+    });
+
     self.logLevels = {};
     var update_levels = function() {
       XHR.get(SERVER + "/JSON.py/log_getlevels", {}, function(data) {
