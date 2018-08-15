@@ -200,9 +200,9 @@ var CryoCore = function(_CRYOCORE_) {
     var outstanding = 0; // Ensure that we don't hammer server
     var _snr = 1;  // used for sequencer things
     options = options || {};
-    options.window_size = options.window_size || 1800; // 30 minutes
-    options.history_size = options.history_size || 2 * 3600; // 2 hours
-    options.refresh = options.refresh || 5000; // 1 second
+    options.window_size = options.window_size || 300; // 5 minutes
+    options.history_size = options.history_size || 1800; // 15 minutes
+    options.refresh = options.refresh || 5000; // 5 seconds
 
     if (options.timingObject === undefined) {
       options.timingObject = new TIMINGSRC.TimingObject();
