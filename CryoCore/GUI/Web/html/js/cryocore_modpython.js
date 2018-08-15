@@ -391,10 +391,12 @@ var CryoCore = function(_CRYOCORE_) {
       monitored_keys = k;
     };
 
-    var sequenceMonitor = function(params, sequencer) {
+    var sequenceMonitor = function(params, sequencer, options) {
       if (! sequencer || !sequencer._toA) {
         throw new Error("Need a sequencer with two timing objects");
       }
+
+      options = options || {};
 
       // Automatically clean up too old stuff
       sequencer.on("remove", function(e) {
@@ -403,7 +405,7 @@ var CryoCore = function(_CRYOCORE_) {
 
       sequencer._toA.on("change", function() {
         // Fill with historic data
-        directLoad(params, sequencer._toA.pos, sequencer._toB.pos, null, function(data) {
+        directLoad(params, sequencer._toA.pos, sequencer._toB.pos, options.aggregate, function(data) {
           for (var key in data) {
             if (!data.hasOwnProperty(key)) continue;
             for (var i=0; i<data[key].length; i++) {
