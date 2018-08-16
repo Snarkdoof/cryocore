@@ -4,6 +4,7 @@ import db
 import json
 from CryoCore import API
 
+# API.__is_direct = True
 
 cfg = API.get_config()
 db = db.DBWrapper()
@@ -46,7 +47,19 @@ def cfg_set(req, param, value):
     except Exception as e:
         val = value
         error = e
-    cfg[param] = val
+
+    err = None
+    for i in range(3):
+        try:
+            cfg[param] = val
+            err = None
+            break
+        except Exception as e:
+            err = str(e)
+            time.sleep(0.250)
+
+    if err:
+        raise Exception(err)
 
     if error:
         return json.dumps({param: cfg[param], "error": error})

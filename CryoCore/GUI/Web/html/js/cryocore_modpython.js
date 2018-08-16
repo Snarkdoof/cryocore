@@ -53,13 +53,13 @@ var CryoCore = function(_CRYOCORE_) {
       if (is_refreshing) return;
       is_refreshing = true;
       XHR.get(SERVER + "/JSON.py/cfg_isupdated", {
-          "since": last_config_update
+          "since": last_config_update,
+          "ts": new Date()/1000
         },
         function(data) {
           is_refreshing = false;
           last_config_update = data.last_updated;
           if (data.updated) {
-            console.log("Config updated, refreshing");
             reload(func);
           }
         },
@@ -90,7 +90,8 @@ var CryoCore = function(_CRYOCORE_) {
 
     var reload = function(cb) {
       XHR.get(SERVER + "/JSON.py/cfg_serialize", {
-          "root": root
+          "root": root,
+          "ts": new Date()/1000
         },
         function(data) {
           if (root) {
@@ -117,7 +118,8 @@ var CryoCore = function(_CRYOCORE_) {
     var set = function(param, value, opt) {
       XHR.get(SERVER + "/JSON.py/cfg_set", {
           "param": param,
-          "value": value
+          "value": value,
+          "ts": new Date()/1000
         },
         function(res) {
           refresh(options.onchanged);
@@ -198,9 +200,9 @@ var CryoCore = function(_CRYOCORE_) {
     var outstanding = 0; // Ensure that we don't hammer server
     var _snr = 1;  // used for sequencer things
     options = options || {};
-    options.window_size = options.window_size || 1800; // 30 minutes
-    options.history_size = options.history_size || 2 * 3600; // 2 hours
-    options.refresh = options.refresh || 5000; // 1 second
+    options.window_size = options.window_size || 300; // 5 minutes
+    options.history_size = options.history_size || 1800; // 15 minutes
+    options.refresh = options.refresh || 5000; // 5 seconds
 
     if (options.timingObject === undefined) {
       options.timingObject = new TIMINGSRC.TimingObject();
@@ -389,10 +391,12 @@ var CryoCore = function(_CRYOCORE_) {
       monitored_keys = k;
     };
 
-    var sequenceMonitor = function(params, sequencer) {
+    var sequenceMonitor = function(params, sequencer, options) {
       if (! sequencer || !sequencer._toA) {
         throw new Error("Need a sequencer with two timing objects");
       }
+
+      options = options || {};
 
       // Automatically clean up too old stuff
       sequencer.on("remove", function(e) {
@@ -401,7 +405,7 @@ var CryoCore = function(_CRYOCORE_) {
 
       sequencer._toA.on("change", function() {
         // Fill with historic data
-        directLoad(params, sequencer._toA.pos, sequencer._toB.pos, null, function(data) {
+        directLoad(params, sequencer._toA.pos, sequencer._toB.pos, options.aggregate, function(data) {
           for (var key in data) {
             if (!data.hasOwnProperty(key)) continue;
             for (var i=0; i<data[key].length; i++) {
@@ -809,6 +813,10 @@ var CryoCore = function(_CRYOCORE_) {
     self.minLevel = "DEBUG";
 
     self.sequencer = new TIMINGSRC.Sequencer(startto, endto);
+
+    self.sequencer.on("remove", function(e) {
+        self.sequencer.removeCue(e.key);
+    });
 
     self.logLevels = {};
     var update_levels = function() {

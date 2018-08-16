@@ -11,7 +11,7 @@ channel_ids = {}
 param_ids = {}
 DEBUG = False
 
-API.__is_direct = True  # Apache runs these as separate instances - WE WANT SPEED!
+# API.__is_direct = True
 
 
 def toUnicode(string):
