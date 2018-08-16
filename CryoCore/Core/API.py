@@ -83,7 +83,8 @@ class GlobalDBConfig:
                     "db_user": "cc",
                     "db_password": u"Kjøkkentrappene bestyrer sørlandske databehandlingsrutiner",
                     "db_compress": False,
-                    "max_connections": 5}
+                    "max_connections": 5,
+                    "cfg_config": {}}
 
         # Check in the user's home dir
         userconfig = os.path.expanduser("~/.cryoconfig")
@@ -132,9 +133,15 @@ def set_config_db(cfg):
         raise Exception("Bad config supplied", e)
 
 
-def get_config_db():
+def get_config_db(what=None):
     import copy
-    return copy.copy(GlobalDBConfig.get_singleton().get_cfg())
+    cfg = copy.copy(GlobalDBConfig.get_singleton().get_cfg())
+
+    if what == "config" and "cfg_config" in cfg:
+        for key in cfg["cfg_config"]:
+            if cfg[key]:
+                cfg[key] = cfg["cfg_config"][key]
+    return cfg
 
 
 class ReporterCollection:

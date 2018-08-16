@@ -456,7 +456,7 @@ class Configuration(threading.Thread):
         self._update_callbacks = {}
 
         from .API import get_config_db
-        self._cfg = get_config_db()
+        self._cfg = get_config_db("config")
 
         self.log = logging.getLogger("uav_config")
 
