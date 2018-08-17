@@ -168,11 +168,16 @@ class AsyncDB(threading.Thread):
 
     def _get_conn_cfg(self):
 
-        cfg = API.get_config_db()
-        # Override defaults
-        for elem in ["db_name", "db_host", "db_user", "db_password", "db_compress"]:
-            if self._mycfg and self._mycfg[elem]:
-                cfg[elem] = self._mycfg[elem]
+        if not isinstance(self._mycfg, dict) {
+            cfg = API.get_config_db(self._mycfg)
+        } else {
+            cfg = API.get_config_db()
+
+            # Override defaults
+            for elem in ["db_name", "db_host", "db_user", "db_password", "db_compress"]:
+                if self._mycfg and self._mycfg[elem]:
+                    cfg[elem] = self._mycfg[elem]
+        }
 
         if self._db_name:
             cfg["db_name"] = str(self._db_name)

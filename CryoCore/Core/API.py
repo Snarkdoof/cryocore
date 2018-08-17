@@ -83,8 +83,7 @@ class GlobalDBConfig:
                     "db_user": "cc",
                     "db_password": u"Kjøkkentrappene bestyrer sørlandske databehandlingsrutiner",
                     "db_compress": False,
-                    "max_connections": 5,
-                    "cfg_config": {}}
+                    "max_connections": 5}
 
         # Check in the user's home dir
         userconfig = os.path.expanduser("~/.cryoconfig")
@@ -94,6 +93,9 @@ class GlobalDBConfig:
             for param in self.cfg:
                 if param in cfg:
                     self.cfg[param] = cfg[param]
+            for param in cfg:
+                if param.startswith("override_"):
+                    self.cfg[param] = cfg[param]
 
         # Local override
         if os.path.isfile(".config"):
@@ -101,6 +103,9 @@ class GlobalDBConfig:
                 cfg = json.loads(f.read())
             for param in self.cfg:
                 if param in cfg:
+                    self.cfg[param] = cfg[param]
+            for param in cfg:
+                if param.startswith("override_"):
                     self.cfg[param] = cfg[param]
 
     @staticmethod
@@ -137,10 +142,15 @@ def get_config_db(what=None):
     import copy
     cfg = copy.copy(GlobalDBConfig.get_singleton().get_cfg())
 
-    if what == "config" and "cfg_config" in cfg:
-        for key in cfg["cfg_config"]:
-            if cfg[key]:
-                cfg[key] = cfg["cfg_config"][key]
+    # Do we have a particular override?
+    print("get_config_db with param", what, cfg)
+    if what:
+        n = "override_%s" % what
+        print("Checking for", n)
+        if n in cfg:
+            for key in cfg[n]:
+                if cfg[key]:
+                    cfg[key] = cfg[n][key]
     return cfg
 
 
