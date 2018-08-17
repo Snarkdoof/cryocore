@@ -168,16 +168,15 @@ class AsyncDB(threading.Thread):
 
     def _get_conn_cfg(self):
 
-        if not isinstance(self._mycfg, dict) {
+        if isinstance(self._mycfg, str):
             cfg = API.get_config_db(self._mycfg)
-        } else {
+        else:
             cfg = API.get_config_db()
 
             # Override defaults
             for elem in ["db_name", "db_host", "db_user", "db_password", "db_compress"]:
                 if self._mycfg and self._mycfg[elem]:
                     cfg[elem] = self._mycfg[elem]
-        }
 
         if self._db_name:
             cfg["db_name"] = str(self._db_name)
@@ -361,7 +360,7 @@ class mysql:
         self._my_name = name
         self._mycfg = config
         self.cursor = None
-        if self._mycfg:
+        if self._mycfg and not isinstance(config, str):
             self._mycfg.set_default("min_conn_time", 10.0)
         self._min_conn_time = min_conn_time
         if can_log:
@@ -382,7 +381,10 @@ class mysql:
             self.db = AsyncDB(config)
         else:
             if db_name is None:
-                db_name = "global"
+                if isinstance(config, str):
+                    db_name = config
+                else:
+                    db_name = "global"
             self.db = AsyncDB.getDB(config, db_name)
 
     def _init_sqls(self, sql_statements):

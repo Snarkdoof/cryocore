@@ -143,10 +143,8 @@ def get_config_db(what=None):
     cfg = copy.copy(GlobalDBConfig.get_singleton().get_cfg())
 
     # Do we have a particular override?
-    print("get_config_db with param", what, cfg)
     if what:
         n = "override_%s" % what
-        print("Checking for", n)
         if n in cfg:
             for key in cfg[n]:
                 if cfg[key]:
