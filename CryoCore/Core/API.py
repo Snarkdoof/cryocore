@@ -147,7 +147,7 @@ def get_config_db(what=None):
         n = "override_%s" % what
         if n in cfg:
             for key in cfg[n]:
-                if cfg[key]:
+                if key in cfg:
                     cfg[key] = cfg[n][key]
     return cfg
 
