@@ -201,7 +201,7 @@ var CryoCore = function(_CRYOCORE_) {
     var _snr = 1;  // used for sequencer things
     options = options || {};
     options.window_size = options.window_size || 300; // 5 minutes
-    options.history_size = options.history_size || 1800; // 15 minutes
+    options.history_size = options.history_size || 1600; // 15 minutes
     options.refresh = options.refresh || 5000; // 5 seconds
 
     if (options.timingObject === undefined) {
@@ -213,7 +213,7 @@ var CryoCore = function(_CRYOCORE_) {
       options.timingObject.on("change", function() {
         last_id = 0;
         last_id2d = 0;
-        //_cleanHistorical(true);
+        _cleanHistorical(true);
       });
     }
 
@@ -546,7 +546,7 @@ var CryoCore = function(_CRYOCORE_) {
         // Search each key and delete older data
         var j;
         for (j = 0; j < historical_data[key].length; j++) {
-          if (historical_data[key][j] > cutoff_time) {
+          if (historical_data[key][j][0] > cutoff_time) {
             /* We cut the array here, then break */
             if (j > 0) {
               historical_data[key] = historical_data[key].splice(j, historical_data[key].length - j);
@@ -557,8 +557,7 @@ var CryoCore = function(_CRYOCORE_) {
         // Delete too new data if specified
         if (cleanFuture) {
           for (i = historical_data[key].length; i > 0; i--) {
-            if (historical_data[key][i] < now) {
-              console.log("Cleaning future data for", key);
+            if (historical_data[key][i][0] < now) {
               /* We cut the array here, then break */
               historical_data[key] = historical_data[key].splice(0, i);
               break;
