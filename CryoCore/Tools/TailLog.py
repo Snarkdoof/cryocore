@@ -245,7 +245,7 @@ class TailLog(mysql):
                     if not options.follow:
                         break
                     # No new activity, wait a bit before we try again
-                    time.sleep(1)
+                    time.sleep(0.1)
 
             except Exception as e:
                 print("Oops:", e)
@@ -316,6 +316,7 @@ if __name__ == "__main__":
     # We're single threaded and don't want to make any tables
     API.__is_direct = True
     API.auto_init = False
+    colors = False
 
     def module_completer(prefix, parsed_args, **kwargs):
         items = tail.get_list("modules")
@@ -390,7 +391,6 @@ if __name__ == "__main__":
     parser.add_argument("--db_user", type=str, dest="db_user", default="", help="cc or from .config")
     parser.add_argument("--db_host", type=str, dest="db_host", default="", help="localhost or from .config")
     parser.add_argument("--db_password", type=str, dest="db_password", default="", help="defaultpw or from .config")
-
     try:
         if "argcomplete" in sys.modules:
             argcomplete.autocomplete(parser)
@@ -418,6 +418,7 @@ if __name__ == "__main__":
                 raise SystemExit()
 
         if not options.bw:
+            colors = True
             print("\033[40;97m")  # Go black
 
         if options.grep:
@@ -445,5 +446,5 @@ if __name__ == "__main__":
             pass
     finally:
         API.shutdown()
-        if not options.bw:
+        if colors:
             print("\033[0m")

@@ -38,6 +38,12 @@ class InternalDBTest(unittest.TestCase):
         for i in range(0, 100):
             self.db._execute("INSERT INTO __TestDB__ values(%s)", [i])
 
+        c = self.db._execute("SELECT * FROM __TestDB__ ORDER BY i")
+        results = c.fetchall()
+        self.assertEqual(len(results), 100)
+        for i in range(0, 100):
+            self.assertEqual(results[i][0], i)
+
     def testThreading(self):
         """
         We create three threads, which are more than we have connections.
@@ -69,6 +75,11 @@ class InternalDBTest(unittest.TestCase):
         t4.join()
         if self.inserted < 25:
             self.fail("Fewer inserts than expected")
+
+        c = self.db._execute("SELECT * FROM __TestDB__ ORDER BY i")
+        results = c.fetchall()
+        self.assertEqual(len(results), self.inserted)
+
 
 if __name__ == "__main__":
 

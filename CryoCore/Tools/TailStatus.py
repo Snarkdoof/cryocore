@@ -243,6 +243,7 @@ if __name__ == "__main__":
 
     try:
         tail = None
+        colors = False
 
         def channel_completer(prefix, parsed_args, **kwargs):
             channels = tail.get_channels()
@@ -313,6 +314,7 @@ if __name__ == "__main__":
         tail = TailStatus("TailStatus", options)
 
         if not options.bw:
+            colors = True
             print("\033[40;97m")  # Go black
 
         if options.clear_all:
@@ -359,6 +361,5 @@ if __name__ == "__main__":
 
     finally:
         API.shutdown()
-        print("API Shut down")
-        if not options.bw:
+        if colors:
             print("\033[0m")  # Go back

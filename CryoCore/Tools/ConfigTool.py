@@ -310,13 +310,13 @@ if __name__ == "__main__":
             else:
                 root = ""
 
-            print(cfg.serialize(root=root, version=options.version))
+            print(cfg.serialize(path=root, version=options.version))
 
         elif command == "deserialize":
             if len(args) > 1:
                 root = args[1]
             else:
-                root = ""
+                root = None
 
             if len(args) > 2:
                 data = open(args[2], "r").read()

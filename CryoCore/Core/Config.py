@@ -296,9 +296,37 @@ class NamedConfiguration:
         self.last_updated = self._parent.last_updated
         self.del_callback = self._parent.del_callback
 
-    def serialize(self, path=None, version=None):
+    def _get_datatype(self, value):
+        if value is None:
+            return "string"
+
+        datatype = "string"
+        if value.__class__ == float:
+            datatype = "double"
+        elif value.__class__ == int:
+            datatype = "integer"
+        elif value.__class__ == int:
+            datatype = "integer"
+        elif value.__class__ == bool:
+            datatype = "boolean"
+            value = str(value)
+        elif value.isdigit():
+            datatype = "integer"
+        elif value.count(".") == 1 and value.replace(".", "").isdigit():
+            datatype = "double"
+        elif value.lower() in ["true", "false"]:
+            datatype = "boolean"
+        else:
+            datatype = "string"
+        return datatype
+
+    def serialize(self, path=None, root=None, version=None):
         if not version:
             version = self.version
+        if not root:
+            root = self.root
+        elif self.root:
+            root = self.root + "." + root
         return self._parent.serialize(path, root=self.root, version=version)
 
     def clear_all(self):
@@ -362,7 +390,8 @@ class NamedConfiguration:
           cfg["somefolder.somesubparameter"] = value
         """
         try:
-            self.get(name).set_value(value)
+            datatype = self._get_datatype(value)
+            self.get(name).set_value(value, datatype=datatype, check=False)
         except NoSuchParameterException:
             # Create it
             self.add(name, value)
@@ -427,7 +456,7 @@ class Configuration(threading.Thread):
         self._update_callbacks = {}
 
         from .API import get_config_db
-        self._cfg = get_config_db()
+        self._cfg = get_config_db("config")
 
         self.log = logging.getLogger("uav_config")
 
@@ -612,6 +641,8 @@ class Configuration(threading.Thread):
         # _get_conn_pool(self._db_cfg)._close_connection()
 
     def _get_cursor(self, temporary_connection=False):
+        # return self.get_connection().cursor()
+
         try:
             if self.cursor is None:
                 self.cursor = self.get_connection().cursor()
@@ -1511,7 +1542,7 @@ class Configuration(threading.Thread):
             if root and root != "root":
                 if overwrite:
                     try:
-                        self._set(
+                        self.set(
                             root,
                             serialized["value"],
                             serialized["datatype"],
@@ -1611,7 +1642,8 @@ class Configuration(threading.Thread):
           cfg["somefolder.somesubparameter"] = value
         """
         try:
-            self.get(name).set_value(value)
+            datatype = self._get_datatype(value)
+            self.get(name).set_value(value, datatype=datatype, check=False)
         except NoSuchParameterException:
             # Create it
             self.add(name, value)
@@ -1630,7 +1662,7 @@ class Configuration(threading.Thread):
                 if val.__class__ == str:
                     return val.encode("utf-8")
             return val
-        except Exception as e:
+        except Exception:
             return None
 
     def set_default(self, name, value, datatype=None, root=None):

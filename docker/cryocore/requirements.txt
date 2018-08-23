@@ -1,3 +1,0 @@
-mysql-connector==2.1.4
-psutil
-pyinotify
