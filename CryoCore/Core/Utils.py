@@ -85,6 +85,7 @@ def detect_tty_device(id_model):
 
     if id_model.find(":") > -1:
         id_model, idx = id_model.split(":")
+        idx = int(idx)
     else:
         idx = None
 
