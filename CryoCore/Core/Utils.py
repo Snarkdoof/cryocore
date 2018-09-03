@@ -76,10 +76,17 @@ def list_tty_devices():
 def detect_tty_device(id_model):
     """
     Use udev to discover the wanted device.
+    If the id_mode is in the form name:number the number'th entry of the list is returned.
+    Empty list if too few devices are found.
     Returns a list of possible devices, an empty list if no devices
     are discovered
     """
     import pyudev
+
+    if id_model.find(":") > -1:
+        id_model, idx = id_model.split(":")
+    else:
+        idx = None
 
     context = pyudev.Context()
     devices = context.list_devices()
@@ -87,6 +94,12 @@ def detect_tty_device(id_model):
     for device in devices.match_subsystem('tty'):
         if "ID_MODEL" in list(device.keys()) and device["ID_MODEL"].lower() == id_model.lower():
             retval.append(str(device["DEVLINKS"].split(" ")[1]))
+
+    if idx is not None:
+        if idx > len(retval) - 1:
+            return []
+        return [retval[idx]]
+
     return retval
 
 
