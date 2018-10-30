@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import time
 import sys
 
@@ -48,7 +50,7 @@ class StatusObject:
                       "black": "\33[98m"}
             return colors[color] + text + "\033[0m"
 
-        print "%s [%s] % 10s: " % (colored(time.ctime(), "yellow"), colored(self.root, "red"), colored(self.name, "blue")), self.value
+        print("%s [%s] % 10s: " % (colored(time.ctime(), "yellow"), colored(self.root, "red"), colored(self.name, "blue")), self.value)
         sys.stdout.flush()
 
 

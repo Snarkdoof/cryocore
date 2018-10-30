@@ -4,15 +4,14 @@ CryoCore.Core API for all UAV based code
 
 
 """
-import socket
-import os
-import time
+import sys
 import logging
 
 import threading
 
-import Status
-import Config
+from CryoCore.Core import Status
+from CryoCore.Core import Config
+
 
 class MissingConfigException(Exception):
     pass
