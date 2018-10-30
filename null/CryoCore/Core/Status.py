@@ -1,4 +1,6 @@
 import time
+import sys
+
 
 class StatusObject:
     def __init__(self, root, name, value):
@@ -17,7 +19,7 @@ class StatusObject:
         self.value -= amount
 
     def __str__(self):
-        return name + "=" + value
+        return self.name + "=" + self.value
 
     def downsample(self, num_changes=None, cooldown=None):
         self._limit_num_changes = num_changes
@@ -47,6 +49,8 @@ class StatusObject:
             return colors[color] + text + "\033[0m"
 
         print "%s [%s] % 10s: " % (colored(time.ctime(), "yellow"), colored(self.root, "red"), colored(self.name, "blue")), self.value
+        sys.stdout.flush()
+
 
 class Status:
     def __init__(self, root):
@@ -54,7 +58,7 @@ class Status:
         self._values = {}
 
     def __setitem__(self, key, value):
-        if not key in self._values:
+        if key not in self._values:
             self._values[key] = StatusObject(self.root, key, value)
         else:
             self._values[key].value = value
