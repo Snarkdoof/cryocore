@@ -25,7 +25,7 @@ else:
 DEBUG = False
 SLOW_WARNING = False
 
-dbThread = None
+dbThreads = {}
 
 
 class TooSlowException(Exception):
@@ -66,13 +66,13 @@ class FakeCursor():
 class AsyncDB(threading.Thread):
 
     @staticmethod
-    def getDB(config):
-        global dbThread
-        if dbThread is None:
-            dbThread = AsyncDB(config)
-            dbThread.daemon = True  # Will be stopped too quickly otherwise...
-            dbThread.start()
-        return dbThread
+    def getDB(config, name="global"):
+        global dbThreads
+        if name not in dbThreads:
+            dbThreads[name] = AsyncDB(config)
+            dbThreads[name].daemon = True  # Will be stopped too quickly otherwise...
+            dbThreads[name].start()
+        return dbThreads[name]
 
     def __init__(self, config=None):
         threading.Thread.__init__(self)
@@ -100,9 +100,36 @@ class AsyncDB(threading.Thread):
 
     def __del__(self):
         # print("AsyncDB deleted")
+        try:
+            self._close_connection()
+        except:
+            pass
         pass
 
-    def execute(self, task):
+    def execute(self, task, insist_direct=False):
+        if insist_direct:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            event, retval, SQL, parameters, ignore_error = task
+            cursor.execute(SQL, tuple(parameters))
+            retval = {
+                "status": "ok",
+                "return": []
+            }
+            retval["rowcount"] = cursor.rowcount
+            retval["lastrowid"] = cursor.lastrowid
+            res = []
+            if cursor.rowcount != 0 and SQL.upper().startswith("SELECT") or SQL.upper().startswith("SHOW"):
+                try:
+                    for row in cursor.fetchall():
+                        res.append(row)
+                except:
+                    pass  # fetchall likely used with no result
+            retval["return"] = res
+            cursor.close()
+            conn.close()
+            return retval
+
         with self._lock:  # We protect the shutdown phase - if we queue something as we shut down, we'll hang
             if not self.running:
                 raise Exception("Can't execute queries when not running")
@@ -128,16 +155,10 @@ class AsyncDB(threading.Thread):
                             should_stop = True
                             self.running = False
 
-                if self.runQueue.empty():
-                    time.sleep(0.1)
-                    continue
-
-                task = self.runQueue.get(block=False, timeout=0.5)
+                task = self.runQueue.get(True, timeout=0.5)
                 event, retval, SQL, parameters, ignore_error = task
                 self._async_execute(event, retval, SQL, parameters, ignore_error)
             except queue.Empty:
-                time.sleep(0.1)  # Condition variables, blocking queue - it all doesn't work...
-                print(os.getpid(), "AsyncDB IDLE")
                 continue
             except:
                 print("Unhandled exception")
@@ -163,18 +184,21 @@ class AsyncDB(threading.Thread):
             cfg["db_compress"] = 0
         return cfg
 
+    def _get_connection(self):
+            cfg = self._get_conn_cfg()
+            return MySQLdb.MySQLConnection(host=cfg["db_host"],
+                                           user=cfg["db_user"],
+                                           passwd=cfg["db_password"],
+                                           db=cfg["db_name"],
+                                           use_unicode=True,
+                                           autocommit=True,
+                                           charset="utf8")
+
     def get_connection(self):
         while self.running:  # stop_event.isSet():
-            cfg = self._get_conn_cfg()
             try:
                 if not self.db_conn:
-                    self.db_conn = MySQLdb.MySQLConnection(host=cfg["db_host"],
-                                                           user=cfg["db_user"],
-                                                           passwd=cfg["db_password"],
-                                                           db=cfg["db_name"],
-                                                           use_unicode=True,
-                                                           autocommit=True,
-                                                           charset="utf8")
+                    self.db_conn = self._get_connection()
                 if self.db_conn:
                     return self.db_conn
             except:
@@ -192,6 +216,9 @@ class AsyncDB(threading.Thread):
 
     def _get_cursor(self, temporary_connection=False):
         try:
+            if temporary_connection:
+                return self.get_connection().cursor()
+
             if self.cursor is None:
                 self.cursor = self.get_connection().cursor()
             return self.cursor
@@ -223,6 +250,10 @@ class AsyncDB(threading.Thread):
                     print("[%s] No connection, retrying in a bit" % os.getpid(), e)
                     import traceback
                     traceback.print_exc()
+                    try:
+                        self._close_connection()
+                    except:
+                        pass
                     time.sleep(1)
                     continue
 
@@ -235,7 +266,7 @@ class AsyncDB(threading.Thread):
                 retval["rowcount"] = cursor.rowcount
                 retval["lastrowid"] = cursor.lastrowid
                 res = []
-                if cursor.rowcount != 0:
+                if cursor.rowcount != 0 and SQL.upper().startswith("SELECT") or SQL.upper().startswith("SHOW"):
                     try:
                         for row in cursor.fetchall():
                             res.append(row)
@@ -258,6 +289,13 @@ class AsyncDB(threading.Thread):
                 retval["error"] = "OperationalError: %s" % str(e)
                 self._close_connection()
                 time.sleep(1.0)
+            except MySQLdb.errors.InternalError as e:
+                # Likely a deadlock - check if we have error number 1213 (or 40001?)
+                if e.errno == 1213:
+                    # Deadlock detected, retry
+                    print("***", time.ctime(), "DB Warning: Deadlock detected, retrying")
+                    time.sleep(0.1)
+                # Retry
             except MySQLdb.errors.InterfaceError as e:
                 import traceback
                 traceback.print_exc(file=sys.stdout)
@@ -338,7 +376,12 @@ class mysql:
                 self.log.addHandler(hdlr)
                 self.log.setLevel(logging.DEBUG)
 
-        self.db = AsyncDB.getDB(config)
+        if is_direct:
+            self.db = AsyncDB(config)
+        else:
+            if db_name is None:
+                db_name = "global"
+            self.db = AsyncDB.getDB(config, db_name)
 
     def _init_sqls(self, sql_statements):
         """
@@ -366,29 +409,36 @@ class mysql:
 
     def _execute(self, SQL, parameters=None,
                  temporary_connection=False,
-                 ignore_error=False):
+                 ignore_error=False,
+                 insist_direct=False):
+        """
+        NEVER use insist_direct if you don't know what you are doing
+        """
         if parameters is None:
             parameters = []
         if self._is_direct:
             try:
                 if not self.cursor:
-                    self.cursor = AsyncDB.getDB(None)._get_cursor()
+                    # self.cursor = AsyncDB.getDB(None)._get_cursor(False)
+                    self.cursor = self.db._get_cursor(temporary_connection)
                 self.cursor.execute(SQL, parameters)
                 return self.cursor
             except Exception as e:
+                self.cursor = None
                 if ignore_error:
                     return self.cursor
                 raise e
         event = threading.Event()
         retval = {}
-        self.db.execute([event, retval, SQL, parameters, ignore_error])
-        t = time.time()
-        event.wait(60.0)
-        if time.time() - t > 2.0:
-            if SLOW_WARNING:
-                print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
-        if not event.isSet():
-            raise TooSlowException("Failed to execute query in time (%s)" % SQL)
+        self.db.execute([event, retval, SQL, parameters, ignore_error], insist_direct=insist_direct)
+        if not insist_direct:
+            t = time.time()
+            event.wait(60.0)
+            if time.time() - t > 2.0:
+                if SLOW_WARNING:
+                    print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
+            if not event.isSet():
+                raise TooSlowException("Failed to execute query in time (%s)" % SQL)
 
         if not ignore_error and "error" in retval:
             raise Exception(retval["error"])

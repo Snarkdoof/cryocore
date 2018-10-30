@@ -34,7 +34,7 @@ class TailStatus(mysql):
     Allow some basic filtering too
     """
 
-    def __init__(self, name, default_show=True):
+    def __init__(self, name, options, default_show=True):
         """
         default_show: should I print new messages by default
         """
@@ -42,8 +42,9 @@ class TailStatus(mysql):
         # threading.Thread.__init__(self)
 
         self.name = name
+        self.options = options
         cfg = API.get_config("System.Status.MySQL")
-        mysql.__init__(self, self.name, cfg)
+        mysql.__init__(self, self.name, cfg, is_direct=True)
 
         self.filters = []
         self.default_show = default_show
@@ -151,13 +152,19 @@ class TailStatus(mysql):
                       "blue": "\033[94m",
                       "gray": "\033[90m",
                       "black": "\33[98m"}
-            return colors[color] + text + "\033[0m"
+            return colors[color] + text
 
         # Convert time to readable and ignore the ID
-        t = colored(time.ctime(row[TIMESTAMP]), "yellow")
-        channel = colored(row[CHANNEL], "red")
-        name = colored(row[NAME], "blue")
-        value = row[VALUE]
+        if self.options.bw:
+            t = time.ctime(row[TIMESTAMP])
+            channel = row[CHANNEL]
+            name = row[NAME]
+            value = row[VALUE]
+        else:
+            t = colored(time.ctime(row[TIMESTAMP]), "yellow")
+            channel = colored(row[CHANNEL], "red")
+            name = colored(row[NAME], "blue")
+            value = row[VALUE]
         if (is2D):
             size = row[SIZEX], row[SIZEY]
             pos = row[POSX], row[POSY]
@@ -282,6 +289,8 @@ if __name__ == "__main__":
         parser.add_argument("--db_user", type=str, dest="db_user", default="", help="cc or from .config")
         parser.add_argument("--db_host", type=str, dest="db_host", default="", help="localhost or from .config")
         parser.add_argument("--db_password", type=str, dest="db_password", default="", help="defaultpw or from .config")
+        parser.add_argument("--bw", action="store_true", default=False,
+                            help="Black and white output")
 
         if "argcomplete" in sys.modules:
             argcomplete.autocomplete(parser)
@@ -301,7 +310,10 @@ if __name__ == "__main__":
         if len(db_cfg) > 0:
             API.set_config_db(db_cfg)
 
-        tail = TailStatus("TailStatus")
+        tail = TailStatus("TailStatus", options)
+
+        if not options.bw:
+            print("\033[40;97m")  # Go black
 
         if options.clear_all:
             if yn("*** CLEAR ALL status info?  This cannot be undone"):
@@ -348,3 +360,5 @@ if __name__ == "__main__":
     finally:
         API.shutdown()
         print("API Shut down")
+        if not options.bw:
+            print("\033[0m")  # Go back

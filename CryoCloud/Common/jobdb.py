@@ -2,6 +2,8 @@ from __future__ import print_function
 import time
 import random
 import json
+import threading
+import psutil
 
 from CryoCore import API
 from CryoCore.Core.InternalDB import mysql
@@ -28,17 +30,31 @@ TASK_TYPE = {
     TYPE_MANUAL: "ManualWorker"
 }
 
+PRI_STRING = {
+    PRI_HIGH: "high",
+    PRI_NORMAL: "normal",
+    PRI_LOW: "low",
+    PRI_BULK: "bulk"
+}
+
 
 class JobDB(mysql):
 
-    def __init__(self, runname, module, steps=1):
+    def __init__(self, runname, module, steps=1, auto_cleanup=True):
 
-        self._runname = runname
+        self._runname = random.randint(0, 2147483647)  # Just ignore the runname for now
+        self._actual_runname = runname
         self._module = module
-        mysql.__init__(self, "JobDB", num_connections=2)
+        mysql.__init__(self, "JobDB", db_name="JobDB")
 
         if not runname and not module:
             return  # Is a worker, can only allocate/update jobs
+
+        # Multi-insert
+        self._addlist = []
+        self._addtimer = None
+        self._addLock = threading.Lock()
+        self._taskid = 1
 
         # Add owner, comments, dates etc to run
         statements = [
@@ -68,6 +84,8 @@ class JobDB(mysql):
                     args TEXT DEFAULT NULL,
                     nonce INT DEFAULT 0,
                     itemid BIGINT DEFAULT 0,
+                    max_memory BIGINT UNSIGNED DEFAULT 0,
+                    cpu_time FLOAT DEFAULT 0,
                     tschange TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
             )""",
             """CREATE TABLE IF NOT EXISTS filewatch (
@@ -78,14 +96,38 @@ class JobDB(mysql):
                 stable BOOL DEFAULT 0,
                 public BOOL DEFAULT 0,
                 done BOOL DEFAULT 0,
-                runid INT,
+                runname VARCHAR(128),
                 tschange TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )"""
+            )""",
+            """CREATE TABLE IF NOT EXISTS profile (
+                itemid BIGINT UNSIGNED,
+                module VARCHAR(128),
+                product VARCHAR(128),
+                addtime DOUBLE,
+                waittime FLOAT DEFAULT 0,
+                processtime FLOAT DEFAULT 0,
+                totaltime FLOAT DEFAULT 0,
+                errors TINYINT DEFAULT 0,
+                timeouts TINYINT DEFAULT 0,
+                cancelled TINYINT DEFAULT 0,
+                state TINYINT DEFAULT 1,
+                worker SMALLINT DEFAULT NULL,
+                node VARCHAR(128) DEFAULT NULL,
+                type TINYINT DEFAULT 1,
+                priority TINYINT DEFAULT -1,
+                datasize BIGINT UNSIGNED DEFAULT 0,
+                memory_max BIGINT UNSIGNED DEFAULT 0,
+                cpu_time FLOAT DEFAULT 0,
+                PRIMARY KEY (itemid, module)
+            )""",
+            "CREATE INDEX job_state ON jobs(state)",
+            "CREATE INDEX job_type ON jobs(type)"
         ]
 
         # Minor upgrade-hack
         try:
-            c = self._execute("SELECT workdir FROM jobs LIMIT 1")
+            c = self._execute("SELECT min(cpu_time) FROM jobs LIMIT 1")
+            c.fetchall()
         except:
             try:
                 print("*** Job table is bad, dropping it")
@@ -93,16 +135,27 @@ class JobDB(mysql):
             except:
                 pass
 
+        try:
+            c = self._execute("SELECT runname FROM filewatch LIMIT 1")
+            c.fetchall()
+        except:
+            try:
+                print("*** Filewatch is bad")
+                self._execute("ALTER TABLE filewatch DROP COLUMN runid")
+                self._execute("ALTER TABLE filewatch ADD runname VARCHAR(128) DEFAULT NULL")
+            except:
+                pass
+
         self._init_sqls(statements)
 
         try:
             c = self._execute("SELECT itemid FROM jobs WHERE jobid=0")
+            c.fetchone()
         except:
             # Old table, upgrade it
             print("*** Updating jobdb table")
             self._execute("ALTER TABLE jobs ADD (itemid BIGINT DEFAULT 0)")
 
-        self._runname = random.randint(0, 2147483647)  # Just ignore the runname for now
         c = self._execute("SELECT runid FROM runs WHERE runname=%s", [self._runname])
         row = c.fetchone()
         if row:
@@ -113,8 +166,30 @@ class JobDB(mysql):
                               [self._runname, module, steps])
             self._runid = c.lastrowid
 
+        self._cleanup_thread = None
+        if auto_cleanup:
+            self._cleanup_thread = threading.Timer(300, self._cleanup_timer_run)
+            self._cleanup_thread.daemon = True
+            self._cleanup_thread.start()
+
+    def __del__(self):
+        try:
+            if self._cleanup_timer:
+                self._cleanup_timer.cancel()
+        except:
+            pass
+
+    def _cleanup_timer_run(self):
+        if API.api_stop_event.isSet():
+            return  # We're done
+
+        self.cleanup()
+        self._cleanup_thread = threading.Timer(300, self._cleanup_timer_run)
+        self._cleanup_thread.daemon = True
+        self._cleanup_thread.start()
+
     def add_job(self, step, taskid, args, jobtype=TYPE_NORMAL, priority=PRI_NORMAL, node=None,
-                expire_time=3600, module=None, modulepath=None, workdir=None, itemid=None):
+                expire_time=3600, module=None, modulepath=None, workdir=None, itemid=None, multiple=True):
 
         if not module and not self._module:
             raise Exception("Missing module for job, and no default module!")
@@ -122,15 +197,56 @@ class JobDB(mysql):
         if args is not None:
             args = json.dumps(args)
 
+        if taskid is None:
+            taskid = self._taskid
+            self._taskid += 1
+
+        if multiple:
+            with self._addLock:
+                self._addlist.append([self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module, modulepath, workdir, itemid])
+                # Set a timer for commit - if multiple ones have been added, they will be added together
+                if self._addtimer is None:
+                    self._addtimer = threading.Timer(0.5, self.commit_jobs)
+                    self._addtimer.start()
+            return taskid
+
         self._execute("INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module, modulepath, workdir, itemid) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                       [self._runid, step, taskid, jobtype, priority, STATE_PENDING, time.time(), expire_time, node, args, module, modulepath, workdir, itemid])
+        return taskid
+
+    def flush(self):
+        self.commit_jobs()
+
+    def commit_jobs(self):
+        """
+        TODO: Could do this more efficient if we held the lock for shorter, but it doesn't seem like a big deal for now
+        """
+        with self._addLock:
+            self._addtimer = None  # TODO: Should likely have a lock protecting this one
+            if len(self._addlist) == 0:
+                # print("*** WARNING: commit_jobs called but no queued jobs")
+                return
+
+            SQL = "INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module, modulepath, workdir, itemid) VALUES "
+            args = []
+            for job in self._addlist:
+                SQL += "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s),"
+                args.extend(job)
+
+                if len(args) > 1000:
+                    self._execute(SQL[:-1], args)
+                    SQL = "INSERT INTO jobs (runid, step, taskid, type, priority, state, tsadded, expiretime, node, args, module, modulepath, workdir, itemid) VALUES "
+                    args = []
+            if len(args) > 0:
+                self._execute(SQL[:-1], args)
+            self._addlist = []
 
     def cancel_job(self, jobid):
         self._execute("UPDATE jobs SET state=%d WHERE jobid=%s", (STATE_CANCELLED, jobid))
 
     def force_stopped(self, workerid, node):
-        self._execute("UPDATE jobs SET state=%s, retval='{\"error\":\"Worker killed\"}' WHERE worker=%s AND node=%s",
-                      [STATE_FAILED, workerid, node])
+        self._execute("UPDATE jobs SET state=%s, retval='{\"error\":\"Worker killed\"}' WHERE worker=%s AND node=%s AND state=%s",
+                      [STATE_FAILED, workerid, node, STATE_ALLOCATED])
 
     def get_job_state(self, jobid):
         """
@@ -144,6 +260,41 @@ class JobDB(mysql):
 
     def allocate_job(self, workerid, type=TYPE_NORMAL, node=None, max_jobs=1):
         # TODO: Check for timeouts here too?
+
+        if 0:
+            self._execute("LOCK TABLES jobs WRITE")
+            try:
+                args = [type, STATE_PENDING]
+                SQL = "SELECT jobid, step, taskid, type, priority, args, runid, jobs.module, jobs.modulepath, workdir, itemid FROM jobs WHERE type=%s AND state=%s AND "
+                if node:
+                    SQL += "(node IS NULL or node=%s) "
+                    args.append(node)
+                else:
+                    SQL += "node IS NULL "
+                SQL += " ORDER BY priority DESC, tsadded LIMIT %s"
+                args.append(max_jobs)
+                c = self._execute(SQL, args)
+                if c.rowcount == 0:
+                    return []
+
+                jobs = []
+                SQL = "UPDATE jobs SET state=%s, tsallocated=%s, node=%s, worker=%s WHERE "
+                params = [STATE_ALLOCATED, time.time(), node, workerid]
+                for jobid, step, taskid, t, priority, args, runid, module, modulepath, workdir, itemid in c.fetchall():
+                    if args:
+                        args = json.loads(args)
+                    jobs.append({"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
+                                 "args": args, "runname": runid, "module": module, "modulepath": modulepath,
+                                 "workdir": workdir, "itemid": itemid})
+                    SQL += "jobid=%s OR "
+                    params.append(jobid)
+                if len(params) > 4:
+                    self._execute(SQL[:-4], params)
+            finally:
+                self._execute("UNLOCK TABLES")
+
+            return jobs
+
         nonce = random.randint(0, 2147483647)
         args = [STATE_ALLOCATED, time.time(), node, workerid, nonce, type, STATE_PENDING]
         SQL = "UPDATE jobs SET state=%s, tsallocated=%s, node=%s, worker=%s, nonce=%s WHERE type=%s AND state=%s AND "
@@ -154,7 +305,16 @@ class JobDB(mysql):
             SQL += "node IS NULL "
         SQL += " ORDER BY priority DESC, tsadded LIMIT %s"
         args.append(max_jobs)
-        c = self._execute(SQL, args)
+        c = None
+        for i in range(0, 3):
+            try:
+                c = self._execute(SQL, args)
+                break
+            except:
+                self.log.exception("Failed to get job, retrying")
+        if not c:
+            raise Exception("Failed to get job")
+
         ex = None
         if c.rowcount > 0:
             # We must not fail on this, so loop a few times to try to avoid it being allocated but not returned!
@@ -184,7 +344,7 @@ class JobDB(mysql):
 
     def list_jobs(self, step=None, state=None, notstate=None, since=None):
         jobs = []
-        SQL = "SELECT jobid, step, taskid, type, priority, args, tschange, state, expiretime, module, modulepath, tsallocated, node, worker, retval, workdir, itemid FROM jobs WHERE runid=%s"
+        SQL = "SELECT jobid, step, taskid, type, priority, args, tschange, state, expiretime, module, modulepath, tsallocated, node, worker, retval, workdir, itemid, cpu_time, max_memory FROM jobs WHERE runid=%s"
         args = [self._runid]
         if step:
             SQL += " AND step=%s"
@@ -201,7 +361,7 @@ class JobDB(mysql):
 
         SQL += " ORDER BY tschange"
         c = self._execute(SQL, args)
-        for jobid, step, taskid, t, priority, args, tschange, state, expire_time, module, modulepath, tsallocated, node, worker, retval, workdir, itemid in c.fetchall():
+        for jobid, step, taskid, t, priority, args, tschange, state, expire_time, module, modulepath, tsallocated, node, worker, retval, workdir, itemid, cpu_time, max_memory in c.fetchall():
             if args:
                 args = json.loads(args)
             if retval:
@@ -209,20 +369,24 @@ class JobDB(mysql):
             job = {"id": jobid, "step": step, "taskid": taskid, "type": t, "priority": priority,
                    "node": node, "worker": worker, "args": args, "tschange": tschange, "state": state,
                    "expire_time": expire_time, "module": module, "modulepath": modulepath, "retval": retval,
-                   "workdir": workdir, "itemid": itemid}
+                   "workdir": workdir, "itemid": itemid, "cpu": cpu_time, "mem": max_memory}
             if tsallocated:
                 job["runtime"] = time.time() - tsallocated
             jobs.append(job)
         return jobs
 
     def clear_jobs(self):
-        self._execute("DELETE FROM jobs WHERE runid=%s", [self._runid])
+        print("Clearing jobs")
+        c = self._execute("DELETE FROM jobs WHERE runid=%s", [self._runid], insist_direct=True)
+        print("Closing down")
+        c.close()
+        print("JOBS CLEARED")
 
     def remove_job(self, jobid):
         self._execute("DELETE FROM jobs WHERE runid=%s AND jobid=%s", [self._runid, jobid])
 
-    def update_job(self, jobid, state, step=None, node=None, args=None, priority=None, expire_time=None, retval=None):
-
+    def update_job(self, jobid, state, step=None, node=None, args=None, priority=None,
+                   expire_time=None, retval=None, cpu=None, memory=None):
         SQL = "UPDATE jobs SET state=%s"
         params = [state]
 
@@ -244,13 +408,21 @@ class JobDB(mysql):
         if retval:
             SQL += ",retval=%s"
             params.append(json.dumps(retval))
+        if cpu:
+            SQL += ",cpu_time=%s"
+            params.append(cpu)
+        if memory:
+            SQL += ",max_memory=%s"
+            params.append(memory)
+
         SQL += " WHERE jobid=%s"  # AND runid=%s"
         params.append(jobid)
         # params.append(self._runid)
 
         c = self._execute(SQL, params)
         if c.rowcount == 0:
-            raise Exception("Failed to update, does the job exist (job %s)" % (jobid))
+            self.log.error("Error: %s(%s)" % (SQL, params))
+            raise Exception("Failed to update, does the job exist or did the state change? (job %s -> %s)" % (jobid, state))
 
     def cleanup(self):
         """
@@ -288,23 +460,23 @@ class JobDB(mysql):
 
         return steps
 
-    def get_directory(self, rootpath, runid):
-        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, runid))
+    def get_directory(self, rootpath, runname):
+        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, runname))
         return c.fetchall()
 
-    def get_file(self, rootpath, relpath, runid):
-        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND relpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, relpath, runid))
+    def get_file(self, rootpath, relpath, runname):
+        SQL = "SELECT * FROM filewatch WHERE rootpath=%s AND relpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, relpath, runname))
         rows = c.fetchall()
         if len(rows) > 0:
             return rows[0]
         else:
             return None
 
-    def insert_file(self, rootpath, relpath, mtime, stable, public, runid):
-        SQL = "INSERT INTO filewatch (rootpath, relpath, mtime, stable, public, runid) VALUES (%s, %s, %s, %s, %s, %s)"
-        c = self._execute(SQL, (rootpath, relpath, mtime, stable, public, runid))
+    def insert_file(self, rootpath, relpath, mtime, stable, public, runname):
+        SQL = "INSERT INTO filewatch (rootpath, relpath, mtime, stable, public, runname) VALUES (%s, %s, %s, %s, %s, %s)"
+        c = self._execute(SQL, (rootpath, relpath, mtime, stable, public, runname))
         return c.rowcount
 
     def update_file(self, fileid, mtime, stable, public):
@@ -312,20 +484,20 @@ class JobDB(mysql):
         c = self._execute(SQL, (mtime, stable, public, fileid))
         return c.rowcount
 
-    def done_file(self, rootpath, relpath, runid):
-        SQL = "UPDATE filewatch SET done=1 WHERE rootpath=%s AND relpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, relpath, runid))
+    def done_file(self, rootpath, relpath, runname):
+        SQL = "UPDATE filewatch SET done=1 WHERE rootpath=%s AND relpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, relpath, runname))
         return c.rowcount
 
-    def undone_files(self, rootpath, runid):
-        SQL = "UPDATE filewatch SET done=0 WHERE rootpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, runid))
+    def undone_files(self, rootpath, runname):
+        SQL = "UPDATE filewatch SET done=0 WHERE rootpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, runname))
         return c.rowcount
 
-    def reset_files(self, rootpath, runid):
-        # SQL = "UPDATE filewatch SET done=0, public=0 WHERE rootpath=%s AND runid=%s"
-        SQL = "DELETE FROM filewatch WHERE rootpath=%s AND runid=%s"
-        c = self._execute(SQL, (rootpath, runid))
+    def reset_files(self, rootpath, runname):
+        # SQL = "UPDATE filewatch SET done=0, public=0 WHERE rootpath=%s AND runname=%s"
+        SQL = "DELETE FROM filewatch WHERE rootpath=%s AND runname=%s"
+        c = self._execute(SQL, (rootpath, runname))
         return c.rowcount
 
     def remove_file(self, fileid):
@@ -333,6 +505,52 @@ class JobDB(mysql):
         c = self._execute(SQL, (fileid,))
         return c.rowcount
 
+    # Profiles
+    def update_profile(self, itemid, module, product=None, addtime=None, type=1,
+                       state=None, worker=None, node=None, priority=None, datasize=None,
+                       cpu=None, memory=None):
+        try:
+            args = []
+
+            # If this is supposedly a new one, the product is specified
+            if product:
+                if not addtime:
+                    addtime = time.time()
+                SQL = "INSERT INTO profile (itemid, module, product, addtime, datasize, priority, type) "\
+                      "VALUES (%s, %s, %s, %s, %s, %s, %s)"
+                self._execute(SQL, [itemid, module, product, addtime, datasize, priority, type])
+            elif state:
+                SQL = "UPDATE profile SET state=%s,"
+                args.append(state)
+                if state == STATE_ALLOCATED:
+                    SQL += "waittime=%s-addtime,worker=%s,node=%s"
+                    args.append(time.time())
+                    args.append(worker)
+                    args.append(node)
+                else:
+                    SQL += "totaltime=%s-addtime,processtime=%s-addtime-waittime"
+                    args.append(time.time())
+                    args.append(time.time())
+
+                    if state == STATE_FAILED:
+                        SQL += ",errors=errors+1"
+                    elif state == STATE_TIMEOUT:
+                        SQL += ",timeouts=timeouts+1"
+                    elif state == STATE_CANCELLED:
+                        SQL += ",cancelled=cancelled+1"
+
+                if memory:
+                    SQL += ",memory_max=%s"
+                    args.append(memory)
+                if cpu:
+                    SQL += ",cpu_time=%s"
+                    args.append(cpu)
+                SQL += " WHERE itemid=%s AND module=%s"
+                args.append(itemid)
+                args.append(module)
+                self._execute(SQL, args)
+        except Exception as e:
+            print("Exception updating profile:", e)
 
 if __name__ == "__main__":
     try:

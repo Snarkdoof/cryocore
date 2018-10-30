@@ -17,6 +17,7 @@ except:
 
 from CryoCore import API
 from CryoCore.Core.Status.StatusDbReader import StatusDbReader
+from CryoCore.Core.LogReader import LogDbReader
 import threading
 
 IRC_DISABLED = False
@@ -72,10 +73,13 @@ if not IRC_DISABLED:
             self._cb(e.arguments[0], self.channel)
 
         def send(self, msg):
-            # if time.time() - self._last_ts > 60:
-                # self.connection.privmsg(self.channel, "Time is: %s" % self.getTime())
-                # self._last_ts = time.time()
-            self.connection.privmsg(self.channel, toUnicode(msg) + " @" + self.getTime())
+            if time.time() - self._last_ts > 60:
+                self.connection.privmsg(self.channel, "Time is: %s" % self.getTime())
+                self._last_ts = time.time()
+            m = toUnicode(msg)
+            if len(m) > 512:
+                m = m[:500] + "..."
+            self.connection.privmsg(self.channel, m)  # + " @" + self.getTime())
 
         def _cb(self, what, dest):
             kws = what.split(" ")
@@ -125,8 +129,9 @@ def toUnicode(string):
 
 class Watchdog:
 
-    def __init__(self, name):
+    def __init__(self, name, logfilter=None):
         self.name = name
+        self.debug = False
         self.cfg = API.get_config(self.name)
         self.cfg.set_default("irc.enabled", True)
         self.cfg.set_default("irc.server", "fanoli01.itek.norut.no")
@@ -151,6 +156,13 @@ class Watchdog:
         self.errors = {}
         self.last_values = {}
         self._user_watch = []  # List of parameters queued for watching - will be resolved periodically
+        self._periodicals = []  # Tuples (relpeat_time, next_execute, function)
+
+        if logfilter:
+            self.logreader = LogDbReader()
+            self._logfilter = logfilter
+        else:
+            self.logreader = None
 
         sender = self.cfg["email.sender"]
         if sender is None:
@@ -160,7 +172,7 @@ class Watchdog:
         if not IRC_DISABLED and self.cfg["irc.enabled"]:
             self.bot = Bot(self.cfg["irc.nick"], self.cfg["irc.channel"], self.cfg["irc.server"], self.cfg["irc.port"])
             self.bot.addHandler("status", self.onstatus)
-            self.bot.addHandler("errors", self.onstatus)
+            self.bot.addHandler("debug", self.ondebug)
         else:
             self.bot = None
 
@@ -177,6 +189,20 @@ class Watchdog:
         except:
             self.log.exception("Making report on request")
             raise Exception("Failed to make a report")
+
+    def ondebug(self, what, args):
+        if self.logreader is None:
+            return ["Debug is disabled, no logfilter has been provided"]
+
+        if len(args) == 1:
+            if args[0].lower() in ["on", "true", "enable", "enabled"]:
+                logs = self.logreader.get_updates(max_lines=1)
+                self._logsince = logs["maxid"]
+                self.debug = True
+            elif args[0].lower() in ["off", "false", "disable", "disabled"]:
+                self.debug = False
+
+        return ["Debug is " + str(self.debug)]
 
     def addDirWatch(self, nick, path, max_time, callback):
         """
@@ -203,6 +229,13 @@ class Watchdog:
         self._user_watch.append((nick, channel, parameter, expected, full_match))
         self._update_watches()
         print("Status watch added", nick, channel, parameter)
+
+    def addPeriodical(self, seconds, method, irc_only=True):
+        """
+        Add a periodical report - return the report as a string - "" or None will
+        be ignored
+        """
+        self._periodicals.append((seconds, time.time() + seconds, method, irc_only))
 
     def _update_watches(self):
         # Go through all user watches and add them to the watch list
@@ -243,7 +276,6 @@ class Watchdog:
                     fail = True
                     if not (chan, param) in self.errors or full_report:
                         self.errors[(chan, param)] = "No response"
-                        print(chan, param, "Not updated in", time.time() - last_time, "seconds")
                         # self.bot.send("%s has not responded in %d seconds" % (nick, time.time() - last_time))
                         message += "E: %s has not responded in %d seconds (%s)\n" % (nick, time.time() - last_time, chan)
                 elif (expected is not None):
@@ -274,35 +306,43 @@ class Watchdog:
         files_failed = 0
         for nick, path, max_time, callback in dirs:
             files = os.listdir(path)
+            total_files = 0
             for filename in files:
                 p = os.path.join(path, filename)
-                if os.path.isfile(p):
-                    stat = os.lstat(p)
-                    if time.time() - stat.st_mtime > max_time:
-                        files_failed += 1
-                        if p not in self._reported_files or full_report:
-                            try:
-                                e = callback(nick, path, p, time.time() - stat.st_mtime)
-                                if e:
-                                    message = message + e + "\n"
-                            except:
-                                self.log.exception("Exception in file watch callback")
-                        self._reported_files[p] = [time.time(), nick, path]
-                    else:
-                        if p in self._reported_files:
-                            del self._reported_files[p]
-                            message += "I: %s: File %s modified\n" % (nick, path)
+                total_files += 1
+                stat = os.lstat(p)
+                if time.time() - stat.st_mtime > max_time:
+                    files_failed += 1
+                    if p not in self._reported_files or full_report:
+                        try:
+                            e = callback(nick, path, p, time.time() - stat.st_mtime)
+                            if e:
+                                message = message + e + "\n"
+                        except:
+                            self.log.exception("Exception in file watch callback")
+                    self._reported_files[p] = [time.time(), nick, path]
+                else:
+                    if p in self._reported_files:
+                        del self._reported_files[p]
+                        message += "I: %s: File %s modified\n" % (self._reported_files[p][1], p)
+            # Stats
+            self.status["files_total.%s" % nick] = total_files
+            self.status["files_too_old.%s" % nick] = files_failed
 
         if len(dirs) > 0 and files_failed == 0 and full_report:
             message += "I: All files OK\n"
 
         # We now check if some of the files appear to have dissapeared (which makes it OK)
         now = time.time()
+        to_remove = []
         for p in self._reported_files:
             if now - self._reported_files[p][0] > 1:  # Not seen this time
                 message += "%s: File %s removed - OK\n" % (self._reported_files[p][1], p)
                 # Remove it, it's gone
-                del self._reported_files[p]
+                to_remove.append(p)
+
+        for p in to_remove:
+            del self._reported_files[p]
 
         return message
 
@@ -312,14 +352,48 @@ class Watchdog:
 
         self.status["state"] = "Running"
         print("RUNNING")
-        while not API.api_stop_event.isSet():
-            message = self._make_report()
-            if len(message) > 0:
-                self.report(message)
+        last_run = time.time()
 
-            for i in range(0, self.cfg["runeach"]):
-                if API.api_stop_event.isSet():
-                    break
+        while not API.api_stop_event.isSet():
+            try:
+                message = self._make_report()
+                if len(message) > 0:
+                    self.report(message)
+
+                while time.time() - last_run < self.cfg["runeach"]:
+                    # Idle loop - see if we should do any periodic reports
+                    if API.api_stop_event.isSet():
+                        break
+                    if self.debug:
+                        logs = self.logreader.get_updates(since=self._logsince, filter=self._logfilter, max_lines=1)
+                        self._logsince = logs["maxid"]
+                        for lines in logs["logs"]:
+                            for line in (lines[5] + ": " + lines[8]).split("\n"):
+                                self.bot.send(API.log_level[lines[3]] + ": " + line)
+
+                    # should we do any periodic reports
+                    now = time.time()
+                    i = 0
+                    while i < len(self._periodicals):
+                        secs, nextrun, method, irc_only = self._periodicals[i]
+                        if nextrun <= now:
+                            try:
+                                report = method(self.db)
+                                next_run = now + secs
+                                self._periodicals[i] = (secs, next_run, method, irc_only)
+                                if report:
+                                    self.report(report, irc_only)
+                            except:
+                                self._periodicals.pop(i)
+                                self.log.exception("Failed to run periodic report")
+                                i -= 1
+                        i += 1
+
+                    time.sleep(1)
+                last_run = time.time()
+            except Exception as e:
+                self.log.exception("In main loop")
+                print("*** Error in main loop: ", e)
                 time.sleep(1)
         try:
             if self.bot:

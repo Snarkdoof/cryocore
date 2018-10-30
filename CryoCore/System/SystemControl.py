@@ -45,6 +45,7 @@ class SystemControl(threading.Thread):
         self.cfg.set_default("default_start_delay", 1.0)
         self.cfg.require(["sample_rate", "monitor_sensors"])
         self.cfg.set_default("cc_expire_time", 7 * 24 * 86400)
+        self.cfg.set_default("monitor_resources", True)
         # We set the expire time for status to 7 days if nothing else is set
         API.cc_default_expire_time = int(self.cfg["cc_expire_time"])
 
@@ -344,6 +345,15 @@ class SystemControl(threading.Thread):
         # Read a block of output and process it
         while not self.stop_event.is_set():
             try:
+                try:
+                    self._check_processes()
+                except:
+                    self.log.exception("Checking processes")
+
+                if not self.cfg["monitor_resources"]:
+                    time.sleep(0.5)
+                    continue
+
                 (r, w, e) = select.select([self._top.stdout], [], [], 1)
                 if len(r) > 0:
                     try:
@@ -363,10 +373,6 @@ class SystemControl(threading.Thread):
                 if not m:
                     m = re.match("Cpu\(s\):\s*(.*)%us,\s*(.*)%sy,\s*(.*)%ni,\s*(.*)%id.*", line, re.IGNORECASE)
                 if m:
-                    try:
-                        self._check_processes()
-                    except:
-                        self.log.exception("Checking processes")
 
                     (self.status["cpu_user"],
                      self.status["cpu_system"],

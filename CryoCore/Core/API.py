@@ -55,6 +55,7 @@ main_configs = {}
 
 LOGS = {}
 LOG_DESTINATION = None
+DEFAULT_LOGLEVEL = logging.DEBUG
 
 global glblStatusReporter
 glblStatusReporter = None
@@ -220,6 +221,7 @@ def shutdown():
     except:
         pass
 
+
 def reset():
     """
     Reset API state.  This function is not completed, but has been
@@ -255,7 +257,7 @@ def get_config(name=None, version="default", db_cfg=None):
     global CONFIGS
     if not (name, version) in CONFIGS:
         CONFIGS[(name, version)] = NamedConfiguration(name, version, main_configs[version])
-        #CONFIGS[(name, version)] = Configuration(root=name,
+        # CONFIGS[(name, version)] = Configuration(root=name,
         #                                         stop_event=api_stop_event,
         #                                         version=version,
         #                                         db_cfg=db_cfg)
@@ -272,7 +274,7 @@ def get_log(name):
     if name not in LOGS:
             LOGS[name] = logging.getLogger(name)
             LOGS[name].propagate = False
-            LOGS[name].setLevel(logging.DEBUG)
+            LOGS[name].setLevel(DEFAULT_LOGLEVEL)
             LOGS[name].addHandler(LOG_DESTINATION)
     return LOGS[name]
 
@@ -308,6 +310,7 @@ def _toUnicode(string):
     Will try utf-8 first, then latin-1.
     TODO: Is there a better way?  There HAS to be!!!
     """
+    import sys
     if sys.version_info.major == 3:
         if string.__class__ == str:
             return string

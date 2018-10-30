@@ -7,6 +7,7 @@ if sys.version_info.major == 2:
 else:
     import queue
 
+
 # Global Variables to save all the Status_holders object and to access to them through a Lock
 
 status_holders = {}
@@ -51,12 +52,15 @@ class StatusHolder(threading.Thread):
     A class to hold (and report) status information for an application.
     A status holder can have multiple reporters, that will report status information on change or periodically.
 
+    Set resumeValues to True if you want to automatically look up status elements from the
+    DB and get the value they had at creation time. Note that this is not synchronized, so
+    it's one-way reporting from then on. Default is False, hence no old values are fetched.
+
     It runs as a thread which asynchronously executes callbacks
     @author: Njaal
     @organization: Norut
     @date: November 2008
     @version: 1.0
-
 
     @ivar name: Name of the application whose status is being kept.
     @type name: C{string}
@@ -82,6 +86,7 @@ class StatusHolder(threading.Thread):
         self.name = name
         self.elements = {}
         self.reporters = {}
+        self.resumeValues = False
 
         self._status_lock = threading.RLock()
 
@@ -275,13 +280,13 @@ class StatusHolder(threading.Thread):
                 self.elements[new_element.name]._updated()
             else:
                 self.elements[new_element.name].set_value(new_element.get_value(),
-                                                      timestamp=new_element.get_timestamp())
+                                                          timestamp=new_element.get_timestamp())
         else:
             self.elements[new_element.name] = new_element
             for reporter in list(self.reporters.values()):
                 reporter.add_element(new_element)
 
-    def create_status_element(self, name, initial_value=None, expire_time=None):
+    def create_status_element(self, name, initial_value=None, expire_time=None, fetch=False):
         """
         Create and return, after having saved a new L{StatusElement<StatusElement>} object with the given parameters: I{name} and I{initial_value} into the C{dictionary} L{elements<elements>}.
         @param name: Name of the new element to be included into the L{StatusElement<StatusElement>}.
@@ -296,10 +301,24 @@ class StatusHolder(threading.Thread):
         @postcondition: the just created status element has been included into the reporters' element list. These reporters are indexed into the status holder dictionary L{reporters<reporters>}.
         """
         assert name
+        if self.resumeValues or fetch:
+            from CryoCore.Core.Status import StatusDbReader
+            db = StatusDbReader.StatusDbReader()
+            ts, value = db.get_last_status_value(self.name, name)
+            if ts and value:
+                if value.isdigit():
+                    initial_value = int(value)
+                elif value.replace(".", "").isdigit():
+                    initial_value = float(value)
+                else:
+                    initial_value = value
+        else:
+            ts = None
+
         with self._status_lock:
             if name in self.elements:
                 raise Exception("Already have a status element with the name '%s'" % name)
-            new_element = StatusElement(name, self, initial_value, expire_time=expire_time)
+            new_element = StatusElement(name, self, initial_value, expire_time=expire_time, timestamp=ts)
             self._add_element(new_element)
         return new_element
 
@@ -338,7 +357,7 @@ class StatusHolder(threading.Thread):
                 raise NoSuchElementException(name)
             return self.elements[name]
 
-    def get_or_create_status_element(self, name, initial_value=None, expire_time=None):
+    def get_or_create_status_element(self, name, initial_value=None, expire_time=None, fetch=False):
         """
         Return the status element which is named by I{name}, but in case of not existing such element it is created as it goes along.
         @postcondition: The status element whose name is I{name} is created if it did not exist before. Moreover, it has been added to every single reporter's element list of L{reporters<reporters>}.
@@ -351,7 +370,7 @@ class StatusHolder(threading.Thread):
         """
         with self._status_lock:
             if name not in self.elements:
-                e = self.create_status_element(name, initial_value, expire_time=expire_time)
+                e = self.create_status_element(name, initial_value, expire_time=expire_time, fetch=fetch)
                 self._add_element(e)
                 return e
             elif expire_time:
@@ -380,11 +399,12 @@ class StatusHolder(threading.Thread):
 
             return self.elements[name]
 
-    def new(self, name, initial_value=None, expire_time=None):
+    def new(self, name, initial_value=None, expire_time=None, fetch=False):
         """
-        Create (or get) a status element (shorthand for get_or_create_status_element). Use this if implicit get using [] operators are sufficient
+        Create (or get) a status element (shorthand for get_or_create_status_element).
+        If fetch is true, potential existing values are fetched from the DB first
         """
-        return self.get_or_create_status_element(name, initial_value, expire_time)
+        return self.get_or_create_status_element(name, initial_value, expire_time, fetch=fetch)
 
     def new2d(self, name, size, initial_value=None, expire_time=None):
         """

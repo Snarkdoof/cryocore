@@ -27,6 +27,11 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
         self._channels = {}
         self._parameters = {}
         self.tasks = queue.Queue()
+
+        self._addLock = threading.Lock()
+        self._addList = []
+        self._addTimer = None
+
         self.start()
 
     def run(self):
@@ -244,19 +249,53 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
         aux = event.aux
         if not aux:
             aux = self.cfg["aux"]
+        if aux == "none":
+            aux = None
         ts = event.get_timestamp()
+        params = [ts, event._db_param_id, event._db_channel_id, value, event.get_expire_time(), aux]
+        with self._addLock:
+            self._addList.append(params)
+            # Set a timer for commit - if multiple ones have been added, they will be added together
+            if self._addTimer is None:
+                self._addTimer = threading.Timer(0.5, self.commit_jobs)
+                self._addTimer.start()
+
         try:
-            params = [ts, event._db_param_id, event._db_channel_id, value, event.get_expire_time()]
-            if aux and aux != "none":
-                SQL = "INSERT INTO status(timestamp, paramid, chanid, value, expires, aux) "\
-                    "VALUES (%s, %s, %s, %s, %s, %s)"
-                params.append(aux)
-            else:
-                SQL = "INSERT INTO status(timestamp, paramid, chanid, value, expires) "\
-                    "VALUES (%s, %s, %s, %s, %s)"
-            self._execute(SQL, params)
+            if 0:
+                if aux and aux != "none":
+                    SQL = "INSERT INTO status(timestamp, paramid, chanid, value, expires, aux) "\
+                        "VALUES (%s, %s, %s, %s, %s, %s)"
+                    params.append(aux)
+                else:
+                    SQL = "INSERT INTO status(timestamp, paramid, chanid, value, expires) "\
+                        "VALUES (%s, %s, %s, %s, %s)"
+                self._execute(SQL, params)
         except Exception:
             self.log.exception("Updating status information %s.%s" % (event.status_holder.get_name(), event.get_name()))
+
+    def commit_jobs(self):
+        """
+        TODO: Could do this more efficient if we held the lock for shorter, but it doesn't seem like a big deal for now
+        """
+        with self._addLock:
+            self._addTimer = None  # TODO: Should likely have a lock protecting this one
+            if len(self._addList) == 0:
+                # print("*** WARNING: commit_jobs called but no queued jobs")
+                return
+
+            SQL = "INSERT INTO status(timestamp, paramid, chanid, value, expires, aux) VALUES "
+            args = []
+            for entry in self._addList:
+                SQL += "(%s, %s, %s, %s, %s, %s),"
+                args.extend(entry)
+
+                if len(args) > 1000:
+                    self._execute(SQL[:-1], args)
+                    SQL = "INSERT INTO status(timestamp, paramid, chanid, value, expires, aux) VALUES "
+                    args = []
+            if len(args) > 0:
+                self._execute(SQL[:-1], args)
+            self._addList = []
 
 if __name__ == "__main__":
     import sys

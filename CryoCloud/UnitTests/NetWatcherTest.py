@@ -129,7 +129,8 @@ class NetWatcherTest(unittest.TestCase):
                         }
                     }
                 }
-            }
+            },
+            "required": ["product"]
         }
 
         self.nw.set_schema(schema)

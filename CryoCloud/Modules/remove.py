@@ -23,7 +23,6 @@ def process_task(self, task):
     done = 0
     errors = ""
     for s in src:
-        print(s)
         try:
             if not os.path.exists(s):
                 raise Exception("Can't delete nonexisting path '%s'" % s)
@@ -41,7 +40,7 @@ def process_task(self, task):
             done += 1
             self.status["progress"] = 100 * done / float(len(src))
         except Exception as e:
-            print("ERROR", e)
+            self.log.error(str(e))
             errors += "Error removing %s: %s\n" % (s, e)
             if "ignoreerrors" in task["args"] and task["args"]["ignoreerrors"]:
                 done += 1

@@ -68,7 +68,7 @@ class StatusTest(unittest.TestCase):
         try:
             status.get_status_element("TestInteger")
             self.fail("Remove does not remove status element 'TestInteger'")
-        except Status.NoSuchElementException:
+        except Status.NoSuchElementException as e:
             # Expected
             pass
 
@@ -305,6 +305,7 @@ class StatusTest(unittest.TestCase):
                     event.clear()
                 else:
                     self.assertFalse(event.isSet())
+        
 
     def test2D(self):
 
@@ -351,8 +352,8 @@ class StatusTest(unittest.TestCase):
         status = Status.StatusHolder("UnitTest", stop_event)
         status["test"] = 0
 
-        self.assertEqual(str(status["test"]), "test=0")
-        # self.assertTrue(status["test"] == 0)
+        self.assertEquals(str(status["test"]), "test=0")
+        #self.assertTrue(status["test"] == 0)
         self.assertFalse(status["test"] != 0)
         self.assertFalse(status["test"] < 0)
         self.assertFalse(status["test"] > 0)
@@ -360,7 +361,7 @@ class StatusTest(unittest.TestCase):
         self.assertTrue(status["test"] >= 0)
 
         status["test"] = "0"
-        self.assertEqual(str(status["test"]), "test=0")
+        self.assertEquals(str(status["test"]), "test=0")
         self.assertTrue(status["test"] == "0")
         self.assertFalse(status["test"] == 0)
         self.assertFalse(status["test"] != "0")
@@ -375,25 +376,22 @@ class StatusTest(unittest.TestCase):
         def thread_run(self, status):
             event = threading.Event()
             status["testParam"].add_event_on_change(event)
-            event.wait(0.5)
+            event.wait(1)
             self.assertTrue(status["testParam"] == "firstevent")
             status["testParam"].remove_event_on_change(event)
-            event.clear()
             status["testParam"].add_event_on_value("thirdevent", event)
-            event.wait(0.5)
+            event.wait(1)
             self.assertTrue(status["testParam"] == "thirdevent")
 
         status["testParam"] = "initializing"
         t = threading.Thread(target=thread_run, args=[self, status])
         t.start()
-        time.sleep(0.25)
         status["testParam"] = "firstevent"
-        time.sleep(0.25)
+        time.sleep(0.5)
         status["testParam"] = "secondevent"
-        time.sleep(0.25)
+        time.sleep(0.5)
         status["testParam"] = "thirdevent"
-        time.sleep(0.25)
-
+        time.sleep(0.5)
 
 class DummyCb:
     def __init__(self):
@@ -416,7 +414,7 @@ class DummyCb:
 
 if __name__ == "__main__":
 
-    print("Testing Status module (takes a while...)")
+    print("Testing Status module")
 
     try:
         unittest.main()

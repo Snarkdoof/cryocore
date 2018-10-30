@@ -15,6 +15,9 @@ class TestDB(InternalDB.mysql):
         self._execute("DROP TABLE IF EXISTS __TestDB__")
         self._execute("CREATE TABLE __TestDB__ (i int)")
 
+global results
+results = []
+
 
 class InternalDBTest(unittest.TestCase):
     """
@@ -29,6 +32,11 @@ class InternalDBTest(unittest.TestCase):
 
     # def testConnections(self):
     #    self.assertEquals(self.db.get_connection(), self.db.get_connection())
+
+    def testInserts(self):
+
+        for i in range(0, 100):
+            self.db._execute("INSERT INTO __TestDB__ values(%s)", [i])
 
     def testThreading(self):
         """

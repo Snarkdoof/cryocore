@@ -1,3 +1,4 @@
+import time
 from CryoCore.Core import API, InternalDB
 
 
@@ -37,11 +38,44 @@ class StatusDbReader(InternalDB.mysql):
             raise Exception("Missing parameter '%s' in channel '%s'" % (name, channel))
         return row[0]
 
+    def get_last_status_values(self, paramlist, since=-60):
+        """
+        Paramlist must be (channel, name), since must be a value.
+        This method will fetch all updates for the given list since
+        the since time, so it might take more resources than you expect.
+        If since is a negative number, it will be regarded as now-time.
+        since=-60 means the last 60 seconds.
+        Returns a map (channel, param) -> (timestamp, value)
+        """
+        rev = {}
+        params = []
+        for channel, name in paramlist:
+            paramid = self._cache_lookup(channel, name)
+            params.append(paramid)
+            rev[paramid] = (channel, name)
+        if since < 0:
+            since = time.time() + since
+        SQL = "SELECT paramid, timestamp, value FROM status WHERE timestamp>%s AND ("
+        args = [since]
+        for p in params:
+            SQL += "paramid=%s OR "
+            args.append(p)
+        SQL = SQL[:-3] + ") ORDER BY timestamp"
+        cursor = self._execute(SQL, args)
+        ret = {}
+        for paramid, timestamp, value in cursor.fetchall():
+            # This will overwrite the value, so only the last will be returned
+            ret[rev[paramid]] = (timestamp, value)
+        return ret
+
     def get_last_status_value(self, channel, name):
         """
         Return the last (timestamp, value) of the given parameter
         """
-        paramid = self._cache_lookup(channel, name)
+        try:
+            paramid = self._cache_lookup(channel, name)
+        except:
+            return (None, None)
 
         # SQL = "SELECT timestamp, value FROM status WHERE id=(SELECT max(id) FROM status WHERE paramid=%s)"
         SQL = "SELECT timestamp, value FROM status WHERE paramid=%s ORDER BY id DESC LIMIT 1"
