@@ -1,4 +1,5 @@
 import time
+import sys
 
 
 class StatusObject:
@@ -52,6 +53,8 @@ class StatusObject:
 
         print("%s [%s] % 10s: " % (colored(time.ctime(), "yellow"), colored(self.root, "red"),
                                    colored(self.name, "blue")), self.value)
+
+        sys.stdout.flush()
 
 
 class Status:
