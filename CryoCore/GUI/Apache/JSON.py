@@ -1,10 +1,10 @@
-
+import os
+os.chdir(os.path.dirname(__file__))
 import db
 import json
 from CryoCore import API
 
-import os
-os.chdir(os.path.dirname(__file__))
+# API.__is_direct = True
 
 cfg = API.get_config()
 db = db.DBWrapper()
@@ -47,7 +47,19 @@ def cfg_set(req, param, value):
     except Exception as e:
         val = value
         error = e
-    cfg[param] = val
+
+    err = None
+    for i in range(3):
+        try:
+            cfg[param] = val
+            err = None
+            break
+        except Exception as e:
+            err = str(e)
+            time.sleep(0.250)
+
+    if err:
+        raise Exception(err)
 
     if error:
         return json.dumps({param: cfg[param], "error": error})
@@ -120,3 +132,7 @@ def log_getlines(req, last_id=None, start=None, end=None, modules="", loggers=""
 def log_getlevels(req):
     levels = db.get_db().get_log_levels()
     return json.dumps({"levels": levels})
+
+
+def get_last_value(req, paramid, num_values=1):
+    return json.dumps(db.get_db().get_last_value(paramid, num_values))

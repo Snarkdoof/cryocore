@@ -14,10 +14,9 @@ apt-get --help > /dev/null
 if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
 	echo "Checking dependencies"
   sudo apt-get update
-	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip python-pyinotify python3-pyinotify python-psutil python3-psutil
+	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip python-pyinotify python3-pyinotify python-psutil python3-psutil bash-completion
 
 	sudo activate-global-python-argcomplete
-  sudo activate-global-python-argcomplete3
 	
 	echo "Installing mysql connector"
   sudo pip install mysql-connector==2.1.4
@@ -37,10 +36,14 @@ else
 fi
 
 echo "Enter password for mysql admin:"
-mysql -u root -p < CryoCore/Install/create_db.sql
+
+# Check if it's mariadb
+sudo mysql < CryoCore/Install/create_db.sql
+# or mysql
+# mysql -u root -p < CryoCore/Install/create_db.sql
 
 echo "Importing default config"
-python CryoCore/Tools/ConfigTool.py import CryoCore/Install/defaultConfiguration.xml
+./bin/ccconfig import CryoCore/Install/defaultConfiguration.xml
 
 
 echo "Copying startup scripts"

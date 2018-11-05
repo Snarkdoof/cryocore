@@ -50,7 +50,7 @@ if __name__ == "__main__":
     try:
         unittest.main()
     finally:
-        print "Got some kind of exception"
+        print("Got some kind of exception")
         stop_event.set()
         API.shutdown()
 

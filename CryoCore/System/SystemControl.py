@@ -403,6 +403,7 @@ class SystemControl(threading.Thread):
                     m = re.match("(\d+)\s*\s*\S*\s*\S*\s*\S*\s*\S*\s*(\S*)\s*\S*\s+\S*[SM]\s*(\d+).*", line)
                     if m:
                         pid, mem, cpu = m.groups()
+                        mem = mem.replace(",", ".")
                         if mem[-1] == "g":
                             mem = float(mem[:-1]) * 1024
                         elif mem[-1] == "m":

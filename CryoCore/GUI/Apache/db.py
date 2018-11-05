@@ -11,6 +11,8 @@ channel_ids = {}
 param_ids = {}
 DEBUG = False
 
+# API.__is_direct = True
+
 
 def toUnicode(string):
     """
@@ -126,7 +128,9 @@ class StatusDB(sqldb):
 
         init_sqls = ["""CREATE TABLE IF NOT EXISTS items (
 item_key VARCHAR(160) PRIMARY KEY,
-value TEXT)"""]
+value TEXT)""",
+                     """set sql_mode="STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+                     """]
         self._init_sqls(init_sqls)
 
     def _get_param_info(self, paramid):
@@ -485,3 +489,11 @@ value TEXT)"""]
         Return a list of textual log levels that are available
         """
         return API.log_level_str
+
+    def get_last_value(self, paramid, num_values=1):
+        """
+        Just return the LAST value directly of this parameter
+        """
+        SQL = "SELECT timestamp, value FROM status WHERE paramid=%s ORDER BY id DESC LIMIT %s"
+        c = self._execute(SQL, [paramid, num_values])
+        return {paramid: c.fetchall()}

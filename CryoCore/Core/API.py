@@ -93,6 +93,9 @@ class GlobalDBConfig:
             for param in self.cfg:
                 if param in cfg:
                     self.cfg[param] = cfg[param]
+            for param in cfg:
+                if param.startswith("override_"):
+                    self.cfg[param] = cfg[param]
 
         # Local override
         if os.path.isfile(".config"):
@@ -100,6 +103,9 @@ class GlobalDBConfig:
                 cfg = json.loads(f.read())
             for param in self.cfg:
                 if param in cfg:
+                    self.cfg[param] = cfg[param]
+            for param in cfg:
+                if param.startswith("override_"):
                     self.cfg[param] = cfg[param]
 
     @staticmethod
@@ -132,9 +138,18 @@ def set_config_db(cfg):
         raise Exception("Bad config supplied", e)
 
 
-def get_config_db():
+def get_config_db(what=None):
     import copy
-    return copy.copy(GlobalDBConfig.get_singleton().get_cfg())
+    cfg = copy.copy(GlobalDBConfig.get_singleton().get_cfg())
+
+    # Do we have a particular override?
+    if what:
+        n = "override_%s" % what
+        if n in cfg:
+            for key in cfg[n]:
+                if key in cfg:
+                    cfg[key] = cfg[n][key]
+    return cfg
 
 
 class ReporterCollection:

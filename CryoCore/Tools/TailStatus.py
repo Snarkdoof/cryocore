@@ -240,7 +240,7 @@ def usage():
 if __name__ == "__main__":
     API.auto_init = False
     API.__is_direct = True
-
+    cleancolor = True
     try:
         tail = None
 
@@ -314,6 +314,8 @@ if __name__ == "__main__":
 
         if not options.bw:
             print("\033[40;97m")  # Go black
+        else:
+            cleancolor = False
 
         if options.clear_all:
             if yn("*** CLEAR ALL status info?  This cannot be undone"):
@@ -360,5 +362,5 @@ if __name__ == "__main__":
     finally:
         API.shutdown()
         print("API Shut down")
-        if not options.bw:
+        if cleancolor:
             print("\033[0m")  # Go back

@@ -48,16 +48,24 @@ var CryoCore = function(_CRYOCORE_) {
     var readycbs = [];
     options = options || {};
 
+    var is_refreshing = false;
     var refresh = function(func) {
+      if (is_refreshing) return;
+      is_refreshing = true;
       XHR.get(SERVER + "/JSON.py/cfg_isupdated", {
-          "since": last_config_update
+          "since": last_config_update,
+          "ts": new Date()/1000
         },
         function(data) {
+          is_refreshing = false;
           last_config_update = data.last_updated;
           if (data.updated) {
-            console.log("Config updated, refreshing");
             reload(func);
           }
+        },
+        function() {
+          // Error
+          is_refreshing = false;
         });
     };
 
@@ -82,7 +90,8 @@ var CryoCore = function(_CRYOCORE_) {
 
     var reload = function(cb) {
       XHR.get(SERVER + "/JSON.py/cfg_serialize", {
-          "root": root
+          "root": root,
+          "ts": new Date()/1000
         },
         function(data) {
           if (root) {
@@ -109,7 +118,8 @@ var CryoCore = function(_CRYOCORE_) {
     var set = function(param, value, opt) {
       XHR.get(SERVER + "/JSON.py/cfg_set", {
           "param": param,
-          "value": value
+          "value": value,
+          "ts": new Date()/1000
         },
         function(res) {
           refresh(options.onchanged);
@@ -157,7 +167,7 @@ var CryoCore = function(_CRYOCORE_) {
     } else {
       setInterval(refresh, 5000); // Auto update 5 seconds          
     }
-    refresh(onReadyCB);
+    refresh(_do_ready_cb);
 
     var self = {};
     self.set = set;
@@ -188,18 +198,31 @@ var CryoCore = function(_CRYOCORE_) {
     var last_id = 0;
     var last_id2d = 0;
     var outstanding = 0; // Ensure that we don't hammer server
+    var _snr = 1;  // used for sequencer things
     options = options || {};
-    options.window_size = options.window_size || 1800; // 30 minutes
-    options.history_size = options.history_size || 2 * 3600; // 2 hours
-    options.refresh = options.refresh || 1000; // 1 second
+    options.window_size = options.window_size || 300; // 5 minutes
+    options.history_size = options.history_size || 1600; // 15 minutes
+    options.refresh = options.refresh || 5000; // 5 seconds
+
+    if (options.timingObject === undefined) {
+      options.timingObject = new TIMINGSRC.TimingObject();
+      options.timingObject.update({position: new Date()/1000, velocity: 1});
+    }
 
     if (options.timingObject) {
       options.timingObject.on("change", function() {
         last_id = 0;
         last_id2d = 0;
-        //_cleanHistorical(true);
+        _cleanHistorical(true);
       });
     }
+
+    if (options.minTimingObject === undefined) {
+      options.minTimingObject = new TIMINGSRC.SkewConverter(options.timingObject, -options.window_size);
+    }
+
+    // We use a sequencer for the data
+    // var sequencer = new TIMINGSRC.Sequencer(options.minTimingObject, options.timingObject);
 
     var init = function() {};
 
@@ -368,6 +391,40 @@ var CryoCore = function(_CRYOCORE_) {
       monitored_keys = k;
     };
 
+    var sequenceMonitor = function(params, sequencer, options) {
+      if (! sequencer || !sequencer._toA) {
+        throw new Error("Need a sequencer with two timing objects");
+      }
+
+      options = options || {};
+
+      // Automatically clean up too old stuff
+      sequencer.on("remove", function(e) {
+        sequencer.removeCue(e.key);
+      });
+
+      sequencer._toA.on("change", function() {
+        // Fill with historic data
+        directLoad(params, sequencer._toA.pos, sequencer._toB.pos, options.aggregate, function(data) {
+          for (var key in data) {
+            if (!data.hasOwnProperty(key)) continue;
+            for (var i=0; i<data[key].length; i++) {
+              var item = data[key][i];
+              sequencer.addCue(String(_snr++), new TIMINGSRC.Interval(item[0], item[0]), {key: key, data: item});
+            }
+          }
+        });        
+      });
+
+      // Monitor this from now on
+      addMonitor(params, function(key, data) {
+        for (var i=0; i<data.length; i++) {
+          var item = data[i];
+          sequencer.addCue(String(_snr++), new TIMINGSRC.Interval(item[0], item[0]), {key: key, data:item});
+        }
+      });
+    };
+
     var update = function() {
       if (monitored_keys.length === 0) {
         return; // No reason to update from server when no parameters are added
@@ -375,12 +432,8 @@ var CryoCore = function(_CRYOCORE_) {
       if (outstanding > 0) return;
 
       var now;
-      if (options.timingObject) {
-        now = options.timingObject.pos;
-      } else {
-        now = (new Date().getTime() / 1000);
-      }
-      var lower_limit = now - options.window_size;
+      now = options.timingObject.pos;
+      var lower_limit = options.minTimingObject.pos;
       var upper_limit = now;
       if (monitored_keys === null || monitored_keys === undefined) {
         throw Exception("Update without keys");
@@ -438,6 +491,7 @@ var CryoCore = function(_CRYOCORE_) {
         if (!data.hasOwnProperty(key)) {
           continue;
         }
+
         /* Add to historical data */
         if (!historical_data[key]) {
           historical_data[key] = data[key];
@@ -482,11 +536,7 @@ var CryoCore = function(_CRYOCORE_) {
 
     var _cleanHistorical = function(cleanFuture) {
       var now;
-      if (options.timingObject) {
-        now = options.timingObject.pos;
-      } else {
-        now = (new Date().getTime() / 1000);
-      }
+      now = options.timingObject.pos;
       var cutoff_time = now - options.history_size;
       var i = 0;
       for (var key in historical_data) {
@@ -496,7 +546,7 @@ var CryoCore = function(_CRYOCORE_) {
         // Search each key and delete older data
         var j;
         for (j = 0; j < historical_data[key].length; j++) {
-          if (historical_data[key][j] > cutoff_time) {
+          if (historical_data[key][j][0] > cutoff_time) {
             /* We cut the array here, then break */
             if (j > 0) {
               historical_data[key] = historical_data[key].splice(j, historical_data[key].length - j);
@@ -507,8 +557,7 @@ var CryoCore = function(_CRYOCORE_) {
         // Delete too new data if specified
         if (cleanFuture) {
           for (i = historical_data[key].length; i > 0; i--) {
-            if (historical_data[key][i] < now) {
-              console.log("Cleaning future data for", key);
+            if (historical_data[key][i][0] < now) {
               /* We cut the array here, then break */
               historical_data[key] = historical_data[key].splice(0, i);
               break;
@@ -530,7 +579,8 @@ var CryoCore = function(_CRYOCORE_) {
       var p = {
         "params": JSON.stringify(params),
         "start": startts,
-        "end": endts
+        "end": endts,
+        "since": 1
       };
       if (aggregate) {
         p.aggregate = aggregate;
@@ -543,16 +593,12 @@ var CryoCore = function(_CRYOCORE_) {
         onComplete(res.data);
       };
 
-      var url = "/get";
+      var url = "/JSON.py/get";
       if (getmax) {
-        url = "/getmax";
+        url = "/JSON.py/getmax";
       }
-      $.ajax({
-        dataType: "json",
-        url: url,
-        data: p,
-        success: success,
-        error: function(err) {
+      XHR.get(SERVER + url, p, success,  
+        function(err) {
           outstanding = 0;
           var rt = err.responseText.replace(/nan/gi, null);
           try {
@@ -564,7 +610,7 @@ var CryoCore = function(_CRYOCORE_) {
             console.log("Bad response: " + rt + ": " + err2);
           }
         }
-      });
+      );
     };
 
     var getData = function(paramid, startts, endts) {
@@ -734,6 +780,7 @@ var CryoCore = function(_CRYOCORE_) {
     self.findValue = findValue;
     self.directLoad = directLoad;
     self.monitorLastValue = monitorLastValue;
+    self.sequenceMonitor = sequenceMonitor;
     self.getTimingObject = function() {
       return options.timingObject;
     };
@@ -766,6 +813,10 @@ var CryoCore = function(_CRYOCORE_) {
 
     self.sequencer = new TIMINGSRC.Sequencer(startto, endto);
 
+    self.sequencer.on("remove", function(e) {
+        self.sequencer.removeCue(e.key);
+    });
+
     self.logLevels = {};
     var update_levels = function() {
       XHR.get(SERVER + "/JSON.py/log_getlevels", {}, function(data) {
@@ -797,16 +848,22 @@ var CryoCore = function(_CRYOCORE_) {
     }
 
     // Refresh 
+    var is_refreshing = false;
     var refresh = function() {
       if (!startto.isReady()) {
         setTimeout(refresh, 100);
         return;
       }
       if (performance.now() - last_refresh_time < 1000) return;  // Not refreshing more than each second MAX
+
+      if (is_refreshing) return;
+      is_refreshing = true;
+
       last_refresh_time = performance.now();
       XHR.get(SERVER + "/JSON.py/log_getlines", 
         {last_id: last_id, start: startto.pos, end: endto.pos, minlevel:self.minLevel},
         function(reply) {
+          is_refreshing = false;
           if (reply.data.length > 0)
             console.log(reply);
           last_id = reply.max_id;
@@ -824,6 +881,9 @@ var CryoCore = function(_CRYOCORE_) {
             };
             self.sequencer.addCue(String(data.id), new TIMINGSRC.Interval(data.time, data.time), data);
           }
+        },
+        function() {
+          is_refreshing = false;
         }
       );
     }
@@ -832,7 +892,7 @@ var CryoCore = function(_CRYOCORE_) {
     startto.on("change", function() { last_updated = 0; refresh()});
     endto.on("change", function() { last_updated = 0; refresh()});
 
-    TIMINGSRC.setIntervalCallback(endto, refresh, 2);
+    TIMINGSRC.setIntervalCallback(endto, refresh, 5);
 
     update_levels();
     return self;

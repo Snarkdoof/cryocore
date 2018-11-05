@@ -376,12 +376,12 @@ class StatusTest(unittest.TestCase):
             event = threading.Event()
             status["testParam"].add_event_on_change(event)
             event.wait(0.5)
-            self.assertTrue(status["testParam"] == "firstevent")
+            self.assertTrue(status["testParam"] == "firstevent", "Lost first update")
             status["testParam"].remove_event_on_change(event)
             event.clear()
             status["testParam"].add_event_on_value("thirdevent", event)
-            event.wait(0.5)
-            self.assertTrue(status["testParam"] == "thirdevent")
+            event.wait(0.8)
+            self.assertTrue(status["testParam"] == "thirdevent", "Lost third update")
 
         status["testParam"] = "initializing"
         t = threading.Thread(target=thread_run, args=[self, status])
@@ -392,7 +392,7 @@ class StatusTest(unittest.TestCase):
         status["testParam"] = "secondevent"
         time.sleep(0.25)
         status["testParam"] = "thirdevent"
-        time.sleep(0.25)
+        time.sleep(0.5)
 
 
 class DummyCb:

@@ -284,6 +284,7 @@ class NamedConfiguration:
             self.root += "."
 
         self.add_version = self._parent.add_version
+        self.clear_version = self._parent.clear_version
         self.delete_version = self._parent.delete_version
         self.set_version = self._parent.set_version
         self.list_versions = self._parent.list_versions
@@ -296,9 +297,37 @@ class NamedConfiguration:
         self.last_updated = self._parent.last_updated
         self.del_callback = self._parent.del_callback
 
-    def serialize(self, path=None, version=None):
+    def _get_datatype(self, value):
+        if value is None:
+            return "string"
+
+        datatype = "string"
+        if value.__class__ == float:
+            datatype = "double"
+        elif value.__class__ == int:
+            datatype = "integer"
+        elif value.__class__ == int:
+            datatype = "integer"
+        elif value.__class__ == bool:
+            datatype = "boolean"
+            value = str(value)
+        elif value.isdigit():
+            datatype = "integer"
+        elif value.count(".") == 1 and value.replace(".", "").isdigit():
+            datatype = "double"
+        elif value.lower() in ["true", "false"]:
+            datatype = "boolean"
+        else:
+            datatype = "string"
+        return datatype
+
+    def serialize(self, path=None, root=None, version=None):
         if not version:
             version = self.version
+        if not root:
+            root = self.root
+        elif self.root:
+            root = self.root + "." + root
         return self._parent.serialize(path, root=self.root, version=version)
 
     def clear_all(self):
@@ -362,7 +391,8 @@ class NamedConfiguration:
           cfg["somefolder.somesubparameter"] = value
         """
         try:
-            self.get(name).set_value(value)
+            datatype = self._get_datatype(value)
+            self.get(name).set_value(value, datatype=datatype, check=False)
         except NoSuchParameterException:
             # Create it
             self.add(name, value)
@@ -424,10 +454,10 @@ class Configuration(threading.Thread):
         self._id_cache = {}
         self.cache = {}
         self._version_cache = {}
-        self._update_callbacks = {}
+        self._callback_items = {}
 
         from .API import get_config_db
-        self._cfg = get_config_db()
+        self._cfg = get_config_db("config")
 
         self.log = logging.getLogger("uav_config")
 
@@ -570,16 +600,6 @@ class Configuration(threading.Thread):
         except:
             pass
 
-        with self._cb_lock:
-            for (cb_id, param_id) in self._update_callbacks:
-                try:
-                    # We do this directly
-                    cursor = self._get_cursor()
-                    cursor.execute("DELETE FROM config_callback WHERE id=%s AND param_id=%s",
-                                   [cb_id, param_id])
-                except:
-                    # self.log.exception("Failed to clean up callbacks")
-                    pass
         try:
             self.db_conn.close()
         except Exception as e:
@@ -612,6 +632,8 @@ class Configuration(threading.Thread):
         # _get_conn_pool(self._db_cfg)._close_connection()
 
     def _get_cursor(self, temporary_connection=False):
+        # return self.get_connection().cursor()
+
         try:
             if self.cursor is None:
                 self.cursor = self.get_connection().cursor()
@@ -815,25 +837,11 @@ class Configuration(threading.Thread):
             self._execute("CREATE INDEX config_parent ON config(parent)",
                           ignore_error=True)
 
-            SQL = """CREATE TABLE IF NOT EXISTS config_callback  (
-    id INT NOT NULL,
-    param_id INT NOT NULL,
-    last_modified TIMESTAMP(6),
-    PRIMARY KEY (id, param_id),
-    FOREIGN KEY (param_id) REFERENCES config(id) ON DELETE CASCADE)"""
-            # Same workaround for missing timestamp precision as above
-            try:
-                # Original code had "ignore errors=True", not sure why
-                self._execute(SQL, ignore_error=True)
-            except:
-                SQL = SQL.replace("TIMESTAMP(6)", "TIMESTAMP")
-                self._execute(SQL, ignore_error=True)
-
     def _reset(self):
         """
         Clear temporary data - should be run before software is started
         """
-        self._execute("DELETE FROM config_callback")
+        pass
 
     def clear_all(self, version):
         """
@@ -873,11 +881,15 @@ class Configuration(threading.Thread):
             # Now we need to get the version ID back
             # TODO: Get the last auto-incremented value directly?
 
-    def delete_version(self, version):
+    def clear_version(self, version):
+        return self.delete_version(version, True)
+
+    def delete_version(self, version, keep_version=False):
         """
         Delete a version (and all config parameters of it!)
+        TODO: This must be fixed, must also clear the caches
         """
-        print("Deleting version", version)
+        print("WARNING: delete_version requires restart")
         with self._load_lock:
             c = self._execute("SELECT id FROM config_version WHERE name=%s", [version])
             version_id = c.fetchone()
@@ -889,7 +901,7 @@ class Configuration(threading.Thread):
             self._execute(SQL, [version])
 
             SQL = "DELETE FROM config WHERE version=%s"
-            self._execute(SQL, [version_id])
+            self._execute(SQL, [version_id[0]])
 
     def set_version(self, version, create=False):
         """
@@ -1021,7 +1033,7 @@ class Configuration(threading.Thread):
         if not full_path:
             return root[:-1]
 
-        if full_path.startswith("root"):
+        if full_path.startswith("root.") or full_path == "root":
             path = full_path[4:]
             if len(path) > 0 and path[0] == ".":
                 path = path[1:]
@@ -1272,7 +1284,6 @@ class Configuration(threading.Thread):
                 args.append(i)
             SQL = SQL[:-4]
             self._execute(SQL, args)
-            self._execute(SQL.replace("FROM config", "FROM config_callback"), args)
             if full_path in self._id_cache:
                 del self._id_cache[full_path]
 
@@ -1511,7 +1522,7 @@ class Configuration(threading.Thread):
             if root and root != "root":
                 if overwrite:
                     try:
-                        self._set(
+                        self.set(
                             root,
                             serialized["value"],
                             serialized["datatype"],
@@ -1611,7 +1622,8 @@ class Configuration(threading.Thread):
           cfg["somefolder.somesubparameter"] = value
         """
         try:
-            self.get(name).set_value(value)
+            datatype = self._get_datatype(value)
+            self.get(name).set_value(value, datatype=datatype, check=False)
         except NoSuchParameterException:
             # Create it
             self.add(name, value)
@@ -1630,7 +1642,7 @@ class Configuration(threading.Thread):
                 if val.__class__ == str:
                     return val.encode("utf-8")
             return val
-        except Exception as e:
+        except Exception:
             return None
 
     def set_default(self, name, value, datatype=None, root=None):
@@ -1681,29 +1693,60 @@ class Configuration(threading.Thread):
         last_notified = 0
         while not self._internal_stop_event.is_set() and not self.stop_event.is_set():
             try:
-                SQL = "SELECT config_callback.id, config_callback.param_id, name, value, config.last_modified FROM config, config_callback WHERE config.id=config_callback.param_id AND config_callback.last_modified<config.last_modified"
-                cursor = self._execute(SQL)
 
-                for cb_id, param_id, name, value, last_modified in cursor.fetchall():
-                    try:
-                        with self._cb_lock:
-                            if not (cb_id, param_id) in self._update_callbacks:
-                                # self.log.error("Requested callback '%s' (%s) that no longer exists: %s" % (name, str((cb_id, param_id)), str(self._update_callbacks)))
-                                continue
-                            (func, args) = self._update_callbacks[(cb_id, param_id)]
-                            try:
-                                param = self.get_by_id(param_id)
-                            except:
-                                # Ignore update on deleted parameter - things are asynchronous, so this might happen
-                                pass
-                        if args:
-                            func(param, *args)
+                # Check all parameters we're interested in
+                params = {}
+                cbs = {}
+                # print("Registered callbacks", self._callback_items)
+                for key in self._callback_items:
+                    registered = self._callback_items[key]
+                    for paramid in registered["params"]:
+                        lastupdate = registered["params"][paramid]
+                        if lastupdate is None:
+                            lastupdate = 0
+                        if paramid not in params:
+                            params[paramid] = lastupdate
+                            cbs[paramid] = [(lastupdate, key)]
                         else:
-                            func(param)
-                    except Exception:
-                        self.log.exception("In callback handler")
+                            params[paramid] = min(lastupdate, registered["params"][paramid])
+                            cbs[paramid].append([(lastupdate, key)])
 
-                    self._execute("UPDATE config_callback SET last_modified=%s WHERE id=%s and param_id=%s", [last_modified, cb_id, param_id])
+                if len(params) == 0:
+                    # This process shoulnd't really run any more...
+                    self.log.info("Callback thread running but no callbacks registered. Stopping")
+                    self._cb_thread = None
+                    return
+
+                # We how have the list with times, make the SQL
+                SQL = "SELECT id, name, value, last_modified FROM config WHERE "
+                p = []
+                for param in params:
+                    SQL += "(id=%s AND last_modified>%s) OR "
+                    p.append(param)
+                    p.append(params[param])
+
+                SQL = SQL[:-3]
+                cursor = self._execute(SQL, p)
+
+                # We should now have a list of all the updated parameters we have, loop and call back
+                for param_id, name, value, last_modified in cursor.fetchall():
+
+                    for lastupdate, cbid in cbs[param_id]:
+                        last_modified = time.mktime(last_modified.timetuple())
+                        if lastupdate >= last_modified:
+                            continue
+                        self._callback_items[cbid]["params"][param_id] = last_modified
+
+                        func = self._callback_items[cbid]["func"]
+                        args = self._callback_items[cbid]["args"]
+                        param = self.get_by_id(param_id)
+                        try:
+                            if args:
+                                func(param, *args)
+                            else:
+                                func(param)
+                        except:
+                            self.log.exception("In callback handler")
 
                 # We use a condition variable to ensure that we are awoken immediately on local changes
                 # we might however be notified multiple times, so we use a counter to ensure that we don't sleep
@@ -1721,12 +1764,10 @@ class Configuration(threading.Thread):
         """
         Remove a callback, using the ID returned by add_callback
         """
-        self._execute("DELETE FROM config_callback WHERE id=%s",
-                      [callback_id])
 
         with self._cb_lock:
-            for (cb_id, param_id) in list(self._update_callbacks.keys())[:]:
-                del self._update_callbacks[(cb_id, param_id)]
+            if callback_id in self._callback_items:
+                del self._callback_items[callback_id]
 
     def add_callback(self, parameter_list, func, root=None, version=None, *args):
         """
@@ -1750,22 +1791,18 @@ class Configuration(threading.Thread):
         import random
         callback_id = random.randint(0, 0xffffff)
 
-        if not self._cb_thread:
-            self._cb_thread = threading.Thread(target=self._callback_thread_main)
-            self._cb_thread.daemon = True
-            self._cb_thread.start()
-
+        items = {}
         for param in parameter_list:
-            param = self.get(param, version_id=version_id, root=root)
-            # Add to the database as callbacks
-            SQL = "INSERT INTO config_callback (id, param_id, last_modified) SELECT " + str(callback_id) + ", id, last_modified FROM config WHERE id=%s"
-            self._execute(SQL, [param.id])
-            with self._cb_lock:
-                self._update_callbacks[(callback_id, param.id)] = (func, args)
-            if DEBUG:
-                self.log.debug("Added callback (%s,%s): %s" %
-                               (callback_id, param.id,
-                                str((func, args))))
+            p = self.get(param, version_id=version_id, root=root)
+            items[p.id] = p.last_modified
+
+        with self._cb_lock:
+            self._callback_items[callback_id] = {"params": items, "func": func, "args": args}
+
+            if not self._cb_thread:
+                self._cb_thread = threading.Thread(target=self._callback_thread_main)
+                self._cb_thread.daemon = True
+                self._cb_thread.start()
 
         return callback_id
 
