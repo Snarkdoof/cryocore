@@ -240,10 +240,9 @@ def usage():
 if __name__ == "__main__":
     API.auto_init = False
     API.__is_direct = True
-
+    cleancolor = True
     try:
         tail = None
-        colors = False
 
         def channel_completer(prefix, parsed_args, **kwargs):
             channels = tail.get_channels()
@@ -314,8 +313,9 @@ if __name__ == "__main__":
         tail = TailStatus("TailStatus", options)
 
         if not options.bw:
-            colors = True
             print("\033[40;97m")  # Go black
+        else:
+            cleancolor = False
 
         if options.clear_all:
             if yn("*** CLEAR ALL status info?  This cannot be undone"):
@@ -361,5 +361,6 @@ if __name__ == "__main__":
 
     finally:
         API.shutdown()
-        if colors:
+        print("API Shut down")
+        if cleancolor:
             print("\033[0m")  # Go back
