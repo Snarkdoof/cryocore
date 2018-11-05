@@ -26,7 +26,7 @@ class TestLoggingService(unittest.TestCase):
         except:
             self.log.exception("Exception message")
 
-        print "DONE"
+        print("DONE")
 
     def testMultiThread(self):
         def runner(name):
