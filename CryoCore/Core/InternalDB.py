@@ -188,7 +188,6 @@ class AsyncDB(threading.Thread):
     def _get_connection(self):
         cfg = self._get_conn_cfg()
         if cfg["ssl.enabled"]:
-            print("USING SSL", cfg)
             return MySQLdb.MySQLConnection(host=cfg["db_host"],
                                            user=cfg["db_user"],
                                            passwd=cfg["db_password"],
@@ -199,8 +198,6 @@ class AsyncDB(threading.Thread):
                                            ssl_key=cfg["ssl.key"],
                                            ssl_ca=cfg["ssl.ca"],
                                            ssl_cert=cfg["ssl.cert"])
-        print("Not using SSL", cfg)
-
         return MySQLdb.MySQLConnection(host=cfg["db_host"],
                                        user=cfg["db_user"],
                                        passwd=cfg["db_password"],
@@ -210,7 +207,6 @@ class AsyncDB(threading.Thread):
                                        charset="utf8")
 
     def get_connection(self):
-        print("getconnection")
         while self.running:  # stop_event.isSet():
             try:
                 if not self.db_conn:
