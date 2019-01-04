@@ -608,13 +608,25 @@ class Configuration(threading.Thread):
         while not self.stop_event.isSet():
             try:
                 if not self.db_conn:
-                    self.db_conn = mysql.MySQLConnection(host=self._cfg["db_host"],
-                                                         user=self._cfg["db_user"],
-                                                         passwd=self._cfg["db_password"],
-                                                         db=self._cfg["db_name"],
-                                                         use_unicode=True,
-                                                         autocommit=True,
-                                                         charset="utf8")
+                    if self._cfg["ssl.enabled"]:
+                        self.db_conn = mysql.MySQLConnection(host=self._cfg["db_host"],
+                                                             user=self._cfg["db_user"],
+                                                             passwd=self._cfg["db_password"],
+                                                             db=self._cfg["db_name"],
+                                                             use_unicode=True,
+                                                             autocommit=True,
+                                                             charset="utf8",
+                                                             ssl_key=self._cfg["ssl.key"],
+                                                             ssl_ca=self._cfg["ssl.ca"],
+                                                             ssl_cert=self._cfg["ssl.cert"])
+                    else:
+                        self.db_conn = mysql.MySQLConnection(host=self._cfg["db_host"],
+                                                             user=self._cfg["db_user"],
+                                                             passwd=self._cfg["db_password"],
+                                                             db=self._cfg["db_name"],
+                                                             use_unicode=True,
+                                                             autocommit=True,
+                                                             charset="utf8")
                 if self.db_conn:
                     return self.db_conn
             except:

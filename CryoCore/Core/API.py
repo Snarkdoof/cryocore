@@ -83,7 +83,11 @@ class GlobalDBConfig:
                     "db_user": "cc",
                     "db_password": u"Kjøkkentrappene bestyrer sørlandske databehandlingsrutiner",
                     "db_compress": False,
-                    "max_connections": 5}
+                    "max_connections": 5,
+                    "ssl.enabled": False,
+                    "ssl.key": None,
+                    "ssl.ca": None,
+                    "ssl.cert": None}
 
         # Check in the user's home dir
         userconfig = os.path.expanduser("~/.cryoconfig")
