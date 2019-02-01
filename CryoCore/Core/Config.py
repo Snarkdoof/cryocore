@@ -284,6 +284,7 @@ class NamedConfiguration:
             self.root += "."
 
         self.add_version = self._parent.add_version
+        self.clear_version = self._parent.clear_version
         self.delete_version = self._parent.delete_version
         self.set_version = self._parent.set_version
         self.list_versions = self._parent.list_versions
@@ -608,13 +609,25 @@ class Configuration(threading.Thread):
         while not self.stop_event.isSet():
             try:
                 if not self.db_conn:
-                    self.db_conn = mysql.MySQLConnection(host=self._cfg["db_host"],
-                                                         user=self._cfg["db_user"],
-                                                         passwd=self._cfg["db_password"],
-                                                         db=self._cfg["db_name"],
-                                                         use_unicode=True,
-                                                         autocommit=True,
-                                                         charset="utf8")
+                    if self._cfg["ssl.enabled"]:
+                        self.db_conn = mysql.MySQLConnection(host=self._cfg["db_host"],
+                                                             user=self._cfg["db_user"],
+                                                             passwd=self._cfg["db_password"],
+                                                             db=self._cfg["db_name"],
+                                                             use_unicode=True,
+                                                             autocommit=True,
+                                                             charset="utf8",
+                                                             ssl_key=self._cfg["ssl.key"],
+                                                             ssl_ca=self._cfg["ssl.ca"],
+                                                             ssl_cert=self._cfg["ssl.cert"])
+                    else:
+                        self.db_conn = mysql.MySQLConnection(host=self._cfg["db_host"],
+                                                             user=self._cfg["db_user"],
+                                                             passwd=self._cfg["db_password"],
+                                                             db=self._cfg["db_name"],
+                                                             use_unicode=True,
+                                                             autocommit=True,
+                                                             charset="utf8")
                 if self.db_conn:
                     return self.db_conn
             except:
@@ -880,11 +893,15 @@ class Configuration(threading.Thread):
             # Now we need to get the version ID back
             # TODO: Get the last auto-incremented value directly?
 
-    def delete_version(self, version):
+    def clear_version(self, version):
+        return self.delete_version(version, True)
+
+    def delete_version(self, version, keep_version=False):
         """
         Delete a version (and all config parameters of it!)
+        TODO: This must be fixed, must also clear the caches
         """
-        print("Deleting version", version)
+        print("WARNING: delete_version requires restart")
         with self._load_lock:
             c = self._execute("SELECT id FROM config_version WHERE name=%s", [version])
             version_id = c.fetchone()
@@ -896,7 +913,7 @@ class Configuration(threading.Thread):
             self._execute(SQL, [version])
 
             SQL = "DELETE FROM config WHERE version=%s"
-            self._execute(SQL, [version_id])
+            self._execute(SQL, [version_id[0]])
 
     def set_version(self, version, create=False):
         """
@@ -1697,6 +1714,8 @@ class Configuration(threading.Thread):
                     registered = self._callback_items[key]
                     for paramid in registered["params"]:
                         lastupdate = registered["params"][paramid]
+                        if lastupdate is None:
+                            lastupdate = 0
                         if paramid not in params:
                             params[paramid] = lastupdate
                             cbs[paramid] = [(lastupdate, key)]
@@ -1760,7 +1779,7 @@ class Configuration(threading.Thread):
 
         with self._cb_lock:
             if callback_id in self._callback_items:
-                self._callback_items[callback_id] = {"params": items, "func": func, "args": args}
+                del self._callback_items[callback_id]
 
     def add_callback(self, parameter_list, func, root=None, version=None, *args):
         """
@@ -1783,7 +1802,6 @@ class Configuration(threading.Thread):
             version_id = self._get_version_id(self.version)
         import random
         callback_id = random.randint(0, 0xffffff)
-
 
         items = {}
         for param in parameter_list:

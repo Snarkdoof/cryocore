@@ -78,13 +78,13 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
         """
         statements = [""" CREATE TABLE IF NOT EXISTS status_channel (
                       chanid INTEGER PRIMARY KEY AUTO_INCREMENT,
-                      name VARCHAR(250) UNIQUE) ENGINE=MyISAM""",
+                      name VARCHAR(250) UNIQUE)""",
 
                       """CREATE TABLE IF NOT EXISTS status_parameter (
                       paramid INTEGER PRIMARY KEY AUTO_INCREMENT,
-                      name VARCHAR(128),
+                      name VARCHAR(256),
                       chanid INTEGER NOT NULL,
-                      UNIQUE KEY uid (name,chanid)) ENGINE=MyISAM""",
+                      UNIQUE KEY uid (name,chanid))""",
 
                       """CREATE TABLE IF NOT EXISTS status  (
             id INTEGER PRIMARY KEY AUTO_INCREMENT,
@@ -94,14 +94,14 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
             value VARCHAR(2048),
             aux INTEGER DEFAULT NULL,
             expires DOUBLE DEFAULT NULL
-            ) ENGINE=MyISAM""",
+            )""",
                       """CREATE TABLE IF NOT EXISTS status_parameter2d (
                       paramid INTEGER PRIMARY KEY AUTO_INCREMENT,
                       name VARCHAR(128),
                       chanid INTEGER NOT NULL,
                       sizex SMALLINT NOT NULL,
                       sizey SMALLINT NOT NULL,
-                      UNIQUE KEY uid (name,chanid)) ENGINE=MyISAM""",
+                      UNIQUE KEY uid (name,chanid))""",
                       """CREATE TABLE IF NOT EXISTS status2d  (
             id INTEGER PRIMARY KEY AUTO_INCREMENT,
             timestamp DOUBLE,
@@ -111,7 +111,7 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
             posy SMALLINT,
             value TINYINT UNSIGNED,
             expires DOUBLE DEFAULT NULL
-            ) ENGINE=MyISAM""",
+            )""",
 
                       "CREATE INDEX stat_time ON status(timestamp)",
                       "CREATE INDEX stat_chanid ON status(chanid)",

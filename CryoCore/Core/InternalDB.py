@@ -187,6 +187,17 @@ class AsyncDB(threading.Thread):
 
     def _get_connection(self):
         cfg = self._get_conn_cfg()
+        if cfg["ssl.enabled"]:
+            return MySQLdb.MySQLConnection(host=cfg["db_host"],
+                                           user=cfg["db_user"],
+                                           passwd=cfg["db_password"],
+                                           db=cfg["db_name"],
+                                           use_unicode=True,
+                                           autocommit=True,
+                                           charset="utf8",
+                                           ssl_key=cfg["ssl.key"],
+                                           ssl_ca=cfg["ssl.ca"],
+                                           ssl_cert=cfg["ssl.cert"])
         return MySQLdb.MySQLConnection(host=cfg["db_host"],
                                        user=cfg["db_user"],
                                        passwd=cfg["db_password"],
@@ -202,8 +213,8 @@ class AsyncDB(threading.Thread):
                     self.db_conn = self._get_connection()
                 if self.db_conn:
                     return self.db_conn
-            except:
-                self.log.exception("Failed to get connection, trying in 5 seconds")
+            except Exception as e:
+                self.log.exception("Failed to get connection, trying in 5 seconds:", e)
                 time.sleep(5)
 
     def _close_connection(self):

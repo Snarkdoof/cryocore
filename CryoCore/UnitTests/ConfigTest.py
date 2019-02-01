@@ -4,7 +4,7 @@ import threading
 
 from CryoCore import API
 from CryoCore.Core import Config
-from CryoCore.Core.Utils import logTiming
+# from CryoCore.Core.Utils import logTiming
 
 stop_event = threading.Event()
 
@@ -17,10 +17,10 @@ class ConfigTest(unittest.TestCase):
     def setUp(self):
         self.cfg = API.get_config("UnitTest", version="unittest")
         if self.cfg["TestBasic"]:
-            print("Cleaning up old crud - bad cleanup?")
+            print("Cleaning up old crud - bad cleanup? 0151")
             self.cfg.remove("TestBasic")
         if self.cfg["TestName"]:
-            print("Cleaning up old crud - bad cleanup?")
+            print("Cleaning up old crud - bad cleanup? 8831")
             self.cfg.remove("TestName")
         self.cfg.set_default("TestName", "TestNameValue")
         self.cfg.set_default("TestBasic.One", 1)
@@ -133,7 +133,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(cfg2["UnitTest.TestParam2"], None, "Have a parameter I wasn't expecting")
 
         cfg2["UnitTest.TestParam2"] = "TestValue2"
-        Config.DEBUG = False
+        # Config.DEBUG = False
         self.assertEqual(cfg2["UnitTest.TestParam2"], "TestValue2", "Implicit create failed")
         self.assertEqual(cfg2["UnitTest.TestParam"], "TestValue", "Set default create failed")
 
@@ -177,7 +177,6 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(last_val["UnitTest.TestBasic.One"][1], "A comment")
 
     def testSearch(self):
-
         # Search is actually a bit strange, as it always searches from the absolute root.
         expected = ["UnitTest", "UnitTest.TestBasic", "UnitTest.TestName", "UnitTest.TestBasic.One", "UnitTest.TestBasic.True"]
         elems = self.cfg.search("e")
@@ -232,6 +231,8 @@ if __name__ == "__main__":
         else:
             unittest.main()
     finally:
+        API.get_config().delete_version("unittest")
+
         # from CryoCore import API
         stop_event.set()
         API.shutdown()

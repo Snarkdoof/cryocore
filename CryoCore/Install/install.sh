@@ -14,7 +14,7 @@ apt-get --help > /dev/null
 if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
 	echo "Checking dependencies"
   sudo apt-get update
-	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip bash-completion
+	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip python-pyinotify python3-pyinotify python-psutil python3-psutil bash-completion
 
 	sudo activate-global-python-argcomplete
 	
@@ -44,5 +44,19 @@ sudo mysql < CryoCore/Install/create_db.sql
 
 echo "Importing default config"
 ./bin/ccconfig import CryoCore/Install/defaultConfiguration.xml
+
+
+echo "Copying startup scripts"
+python -c "import sys;import os;lines=sys.stdin.read();print lines.replace('CCINSTALLDIR', os.getcwd())" < CryoCore/Install/cryocore.service > /tmp/cryocore.service
+sudo mv /tmp/cryocore.service /etc/systemd/system/
+
+python -c "import sys;import os;lines=sys.stdin.read();print lines.replace('CCINSTALLDIR', os.getcwd())" < CryoCore/Install/cryocored > bin/cryocored
+chmod 755 bin/cryocored
+
+systemctl is-enabled cryocore.service
+if test $? == 1; then
+  echo "To autostart, please write:"
+  echo "sudo systemctl enable cryocore.service"
+fi
 
 echo "OK"

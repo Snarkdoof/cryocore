@@ -104,7 +104,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
                            "line INTEGER UNSIGNED NOT NULL, "
                            "`function` VARCHAR(255), "
                            "module VARCHAR(255) NOT NULL, "
-                           "logger VARCHAR(255) NOT NULL) ENGINE MyISAM",
+                           "logger VARCHAR(255) NOT NULL)",
 
                            "CREATE INDEX log_module ON log(module)",
                            "CREATE INDEX log_logger ON log(logger)"]
