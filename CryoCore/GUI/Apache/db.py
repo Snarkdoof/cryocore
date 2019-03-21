@@ -278,7 +278,7 @@ value TEXT)""",
         # print("Getting data between %s and %s (%s)" % (float(start_time) - time.time(), float(end_time) - time.time(), start_time))
         dataset = {}
         params2d = []
-        max_id = since
+        max_id = int(since)
         p = [start_time, end_time, since]
         SQL = "SELECT id, paramid, timestamp, value FROM status WHERE timestamp>%s AND timestamp<%s AND id> %s AND ("
         for param in params:
