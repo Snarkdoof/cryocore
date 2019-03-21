@@ -291,7 +291,6 @@ class NamedConfiguration:
         self.copy_configuration = self._parent.copy_configuration
         self.search = self._parent.search
         self.get_by_id = self._parent.get_by_id
-        self.remove = self._parent.remove
         self.get_version_info_by_id = self._parent.get_version_info_by_id
         self.deserialize = self._parent.deserialize
         self.last_updated = self._parent.last_updated
@@ -333,6 +332,13 @@ class NamedConfiguration:
         elif self.root:
             root = self.root + "." + root
         return self._parent.serialize(path, root=self.root, version=version)
+
+    def remove(self, path, version=None):
+        if not version:
+            version = self.version
+        print("Removing", self.root + path, version)
+
+        self._parent.remove(self.root + path, version)
 
     def clear_all(self):
         self._parent.clear_all(self.version)
