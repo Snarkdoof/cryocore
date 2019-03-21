@@ -346,9 +346,11 @@ class NamedConfiguration:
     def remove(self, path, version=None):
         if not version:
             version = self.version
-        print("Removing", self.root + path, version)
+        r = "root."
+        if self.root:
+            r = self.root
 
-        self._parent.remove(self.root + path, version)
+        self._parent.remove(r + path, version)
 
     def clear_all(self):
         self._parent.clear_all(self.version)
