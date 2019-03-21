@@ -357,7 +357,8 @@ class mysql:
 
     """
 
-    def __init__(self, name, config=None, can_log=True, db_name=None, ssl=None, num_connections=3, min_conn_time=10, is_direct=False):
+    def __init__(self, name, config=None, can_log=True, db_name=None, ssl=None,
+                 num_connections=3, min_conn_time=10, is_direct=False):
         """
         Generic database wrapper
         if can_log is set to False, it will not try to log (should
@@ -458,7 +459,7 @@ class mysql:
                 if SLOW_WARNING:
                     print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
             if not event.isSet():
-                raise TooSlowException("%e Failed to execute query in time (%s)" % (time.ctime(), SQL))
+                raise TooSlowException("%s Failed to execute query in time (%s)" % (time.ctime(), SQL))
 
         if not ignore_error and "error" in retval:
             raise Exception(retval["error"])
