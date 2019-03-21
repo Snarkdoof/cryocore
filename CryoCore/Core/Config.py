@@ -296,6 +296,7 @@ class NamedConfiguration:
         self.deserialize = self._parent.deserialize
         self.last_updated = self._parent.last_updated
         self.del_callback = self._parent.del_callback
+        self.children = self._parent.get(self.root[:-1]).children
 
     def _get_datatype(self, value):
         if value is None:
