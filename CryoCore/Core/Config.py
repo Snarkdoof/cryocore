@@ -295,10 +295,13 @@ class NamedConfiguration:
         self.deserialize = self._parent.deserialize
         self.last_updated = self._parent.last_updated
         self.del_callback = self._parent.del_callback
-        r = "root"
-        if self.root:
-            r = self.root[:-1]
-        self.children = self._parent.get(r).children
+        try:
+            r = "root"
+            if self.root:
+                r = self.root[:-1]
+            self.children = self._parent.get(r).children
+        except:
+            self.children = None
 
     def _get_datatype(self, value):
         if value is None:
@@ -323,6 +326,13 @@ class NamedConfiguration:
         else:
             datatype = "string"
         return datatype
+
+    def get_children(self):
+        r = "root"
+        if self.root:
+            r = self.root[:-1]
+
+        return self._parent.get(r).children
 
     def serialize(self, path=None, root=None, version=None):
         if not version:
