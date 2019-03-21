@@ -277,14 +277,14 @@ class TailLog(mysql):
 
             level_color = {API.log_level_str["DEBUG"]: "yellow",
                            API.log_level_str["INFO"]: "green",
-                           API.log_level_str["WARNING"]: "blue",
+                           API.log_level_str["WARNING"]: "red",
                            API.log_level_str["ERROR"]: "red",
                            API.log_level_str["FATAL"]: "red",
                            API.log_level_str["CRITICAL"]: "red"}
 
             text_color = {API.log_level_str["DEBUG"]: "green",
                           API.log_level_str["INFO"]: "cyan",
-                          API.log_level_str["WARNING"]: "blue",
+                          API.log_level_str["WARNING"]: "yellow",
                           API.log_level_str["ERROR"]: "red",
                           API.log_level_str["FATAL"]: "red",
                           API.log_level_str["CRITICAL"]: "red"}
