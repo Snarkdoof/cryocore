@@ -5,8 +5,6 @@ from CryoCore import API
 from CryoCore.Tools import TailLog
 from CryoCore.Core.InternalDB import mysql as sqldb
 
-global channel_ids
-global param_ids
 channel_ids = {}
 param_ids = {}
 DEBUG = False
@@ -246,6 +244,7 @@ value TEXT)""",
         return params
 
     def get_params_with_ids(self, channel):
+        global param_ids
         if channel not in channel_ids:
             self.get_channels()
 
@@ -253,7 +252,6 @@ value TEXT)""",
         if DEBUG:
             self.log.debug("SELECT paramid, name FROM status_parameter WHERE chanid=%s ORDER BY name" + str([channel_ids[channel]]))
         params = []
-        global param_ids
         for row in cursor.fetchall():
             fullname = channel + "." + row[1]
             if fullname not in param_ids:
@@ -263,7 +261,6 @@ value TEXT)""",
         cursor = self._execute("SELECT paramid, name, sizex, sizey FROM status_parameter2d WHERE chanid=%s ORDER BY name", [channel_ids[channel]])
         if DEBUG:
             self.log.debug("SELECT paramid, name FROM status_parameter2d WHERE chanid=%s ORDER BY name" + str([channel_ids[channel]]))
-        global param_ids
         for row in cursor.fetchall():
             fullname = channel + "." + row[1]
             if fullname not in param_ids:

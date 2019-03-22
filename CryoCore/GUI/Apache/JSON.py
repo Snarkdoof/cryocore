@@ -3,9 +3,9 @@ os.chdir(os.path.dirname(__file__))
 import db
 import json
 from CryoCore import API
+API.__is_direct = True
 
-# API.__is_direct = True
-
+import time
 cfg = API.get_config()
 db = db.DBWrapper()
 
@@ -56,7 +56,7 @@ def cfg_set(req, param, value):
             break
         except Exception as e:
             err = str(e)
-            time.sleep(0.250)
+            # time.sleep(0.250)
 
     if err:
         raise Exception(err)
