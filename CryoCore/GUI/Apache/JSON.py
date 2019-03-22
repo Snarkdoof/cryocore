@@ -23,7 +23,7 @@ def shutdown(sure):
     return json.dumps(ret)
 
 
-def cfg_isupdated(req, since):
+def cfg_isupdated(req, since, ts=None):
     since = float(since)
     last_updated = cfg.last_updated()
     res = {"updated": last_updated > since + 0.00001, "last_updated": float(last_updated)}
