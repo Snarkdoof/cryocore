@@ -120,7 +120,6 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         if "Accept-Encoding" in self.headers:
             if "gzip" in self.headers["Accept-Encoding"]:
                 self._compress = True
-        print("GET", path, args)
 
         # Check if we provide the requested method
         if path.startswith("/JSON.py/"):
