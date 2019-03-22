@@ -89,8 +89,7 @@ var CryoCore = function(_CRYOCORE_) {
 
     var reload = function(cb) {
       XHR.get(SERVER + "/JSON.py/cfg_serialize", {
-          "root": root,
-          "ts": new Date()/1000
+          "root": root
         },
         function(data) {
           if (root) {
@@ -117,8 +116,7 @@ var CryoCore = function(_CRYOCORE_) {
     var set = function(param, value, opt) {
       XHR.get(SERVER + "/JSON.py/cfg_set", {
           "param": param,
-          "value": value,
-          "ts": new Date()/1000
+          "value": value
         },
         function(res) {
           refresh(options.onchanged);
