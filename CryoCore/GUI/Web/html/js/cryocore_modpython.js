@@ -227,7 +227,7 @@ var CryoCore = function(_CRYOCORE_) {
     var init = function() {};
 
     var loadParameters = function(onComplete) {
-      XHR.get(SERVER + "/JSON.py/list_channels_and_params_full/", {},
+      XHR.get(SERVER + "/JSON.py/list_channels_and_params_full", {},
         function(data) {
           channels = data.channels;
 
