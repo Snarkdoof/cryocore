@@ -35,7 +35,7 @@ def cfg_get(req, param):
     return json.dumps({param: res})
 
 
-def cfg_set(req, param, value):
+def cfg_set(req, param, value, ts=None):
     error = ""
     try:
         if value.isdigit():
@@ -72,7 +72,7 @@ def cfg_versions(req):
     return json.dumps(versions)
 
 
-def cfg_serialize(req, root=None, version=None):
+def cfg_serialize(req, root=None, version=None, ts=None):
     if not version:
         version = "default"
 
