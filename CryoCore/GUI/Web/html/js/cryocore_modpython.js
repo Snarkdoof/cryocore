@@ -437,7 +437,7 @@ var CryoCore = function(_CRYOCORE_) {
       }
       var p = {
         params: JSON.stringify(monitored_keys),
-        start: lower_limit, //Math.max(last_update, lower_limit),
+        start: Math.max(last_update, lower_limit),
         end: upper_limit,
         since: last_id,
         since2d: last_id2d
@@ -501,9 +501,9 @@ var CryoCore = function(_CRYOCORE_) {
           // Remove newer data for this instrument (it's most likely a prognosis)
           if (_min_new < _max_current) {
             for (var i = 0; i < historical_data[key].length; i++) {
-              if (historical_data[key][i][0] >= _min_new) {
+              if (historical_data[key][i][0] > _min_new) {
                 // Remove from here out and continue to merge the datasets
-                historical_data[key].splice(i - 1, historical_data[key].length - i);
+                historical_data[key].splice(i, historical_data[key].length - i);
                 break;
               }
             }
@@ -572,6 +572,9 @@ var CryoCore = function(_CRYOCORE_) {
       if (params.length === 0) {
         console.log("Warning: directLoad called with no parameters");
         return;
+      }
+      if (isNaN(startts) || isNaN(endts)) {
+         throw new Error("Can't have NaN as start or endts");
       }
       var p = {
         "params": JSON.stringify(params),
