@@ -574,7 +574,7 @@ var CryoCoreGUI = function(_CRYOCOREGUI_) {
     if (popts.preload != false) {
       var now;
       if (popts.timingObject) {
-        now = popts.timingObject;
+        now = popts.timingObject.pos;
       } else {
         now = new Date().getTime() / 1000
       }
