@@ -1533,15 +1533,14 @@ class Configuration(threading.Thread):
         param = self.get(root, version_id=version_id, absolute_path=True, add=False)
         children = []
         for child in param.children:
-            children.append(self._serialize_recursive(child.get_full_path(),
-                                                      version_id))
+            children.append(self._serialize_recursive(child.get_full_path(), version_id))
+
         serialized = {"name": param.name,
                       "value": param.value,
                       "datatype": param.datatype,
                       "comment": param.comment,
-                      "last_modified": param.last_modified}
-        for child in children:
-            serialized[child["name"]] = child
+                      "last_modified": param.last_modified,
+                      "children": children}
         return serialized
 
     def _deserialize_recursive(self, serialized, root, version_id,
@@ -1579,13 +1578,20 @@ class Configuration(threading.Thread):
                              comment=serialized["comment"],
                              version_id=version_id, overwrite=overwrite)
 
-        for elem in list(serialized.keys()):
-            if elem in ["name", "datatype", "comment", "last_modified"]:
-                continue
+        if "children" in serialized:
+            print("Will do children", serialized["children"])
+            for child in serialized["children"]:
+                path = root + "." + child["name"]
+                self._deserialize_recursive(child, path, version_id,
+                                            overwrite)
+        else:
+            for elem in list(serialized.keys()):
+                if elem in ["name", "datatype", "comment", "last_modified"]:
+                    continue
 
-            path = root + "." + elem
-            self._deserialize_recursive(serialized[elem], path, version_id,
-                                        overwrite)
+                path = root + "." + elem
+                self._deserialize_recursive(serialized[elem], path, version_id,
+                                            overwrite)
 
     # ##################    JSON functionality for (de)serializing ###
 
