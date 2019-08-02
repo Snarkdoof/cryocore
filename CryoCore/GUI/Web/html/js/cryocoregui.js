@@ -221,6 +221,7 @@ var CryoCoreGUI = function(_CRYOCOREGUI_) {
     }
 
     var plot = function(what, altopts) {
+
       if (what.length != 2) {
         throw new Error("Bad parameter, require [data, range] tuple");
       }
@@ -384,7 +385,6 @@ var CryoCoreGUI = function(_CRYOCOREGUI_) {
       // Remove any "now" cursor that's already here
       options.grid.markings.push({ color: "#00cc00", lineWidth: 1, xaxis: { from: now, to: now} });
       var p = $.plot($target, data, options);
-
       // Do we annotate?
      for (var i=0; i<options.grid.markings.length; i++) {
         var marking = options.grid.markings[i];
@@ -556,7 +556,7 @@ var CryoCoreGUI = function(_CRYOCOREGUI_) {
       try {
         return _plot.plot(getData());
       } catch (err) {
-        console.log("Error plotting, stopping monitoring", err);
+        console.log("Error plotting", $target.selector, ", stopping monitoring", err);
         // Plot is gone, unregister monitor
         dataset.removeMonitor(params, plot);
       }
