@@ -761,6 +761,39 @@ var CryoCore = function(_CRYOCORE_) {
       });
     };
 
+    var setValue = function(channel, parameter, value, time) {
+      let args = [{
+        channel: channel,
+        parameter: parameter,
+        values: [{
+          ts: time || options.timingObject.pos,
+          value: value
+        }]
+      }];
+      let p = {args: JSON.stringify(args)};
+      var url = "/JSON.py/set";
+      XHR.get(SERVER + url, p, function(retval) {
+          // console.log("Success:", retval);
+        },  
+        function(err) {
+          console.log("Error setting value:", err);
+        }
+      );
+    };
+
+    var setValues = function(args) {
+      // Ensure that args is correct according to CryoCore specs
+      let p = {args: JSON.stringify(args)};
+      var url = "/JSON.py/set";
+      XHR.get(SERVER + url, p, function(retval) {
+          // console.log("Success:", retval);
+        },  
+        function(err) {
+          console.log("Error setting value:", err);
+        }
+      );      
+    }
+
     /* Update every second */
     loadParameters(options.onReady);
     setInterval(update, options.refresh);
@@ -777,6 +810,8 @@ var CryoCore = function(_CRYOCORE_) {
     self.getLastValueTs = getLastValueTs;
     self.getValue = getValue;
     self.getValueTs = getValueTs;
+    self.setValue = setValue;
+    self.setValues = setValues;
     self.findValue = findValue;
     self.directLoad = directLoad;
     self.monitorLastValue = monitorLastValue;
