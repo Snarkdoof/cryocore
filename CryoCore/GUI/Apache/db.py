@@ -335,9 +335,9 @@ value TEXT)""",
             for param in missing:
                 # Must look for the LAST value of the missing parameters
                 if param not in params2d:
-                    SQL = "SELECT id, paramid, timestamp, value from status where id=(SELECT max(id) FROM status WHERE paramid=%s"
+                    SQL = "SELECT id, paramid, timestamp, value from status where id=(SELECT max(id) FROM status WHERE paramid=%s)"
                 else:
-                    SQL = "SELECT id, paramid, timestamp, value, posx, posy from status2d where id=(SELECT max(id) FROM status2d WHERE paramid=%s"
+                    SQL = "SELECT id, paramid, timestamp, value, posx, posy from status2d where id=(SELECT max(id) FROM status2d WHERE paramid=%s)"
                 c = self._execute(SQL, [param])
                 row = c.fetchone()
                 if row:
