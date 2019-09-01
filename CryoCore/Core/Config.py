@@ -1541,6 +1541,9 @@ class Configuration(threading.Thread):
                       "comment": param.comment,
                       "last_modified": param.last_modified,
                       "children": children}
+        for child in children:  # Needed to simplify web use
+            serialized[child["name"]] = child
+
         return serialized
 
     def _deserialize_recursive(self, serialized, root, version_id,
@@ -1733,7 +1736,6 @@ class Configuration(threading.Thread):
         last_notified = 0
         while not self._internal_stop_event.is_set() and not self.stop_event.is_set():
             try:
-
                 # Check all parameters we're interested in
                 params = {}
                 cbs = {}
