@@ -283,6 +283,21 @@ def get_config(name=None, version="default", db_cfg=None):
     return CONFIGS[(name, version)]
 
 
+def set_log_level(loglevel):
+    if loglevel in log_level:
+        ll = loglevel       
+    else:
+        if loglevel not in log_level_str:
+            raise Exception("Bad loglevel '%s', must be one of %s" % (loglevel, log_level_str.keys()))
+        ll = log_level_str[loglevel]
+
+    global DEFAULT_LOGLEVEL
+    global LOG_DESTINATION
+    DEFAULT_LOGLEVEL = ll
+    if LOG_DESTINATION:
+        LOG_DESTINATION.level = ll
+
+
 # @logTiming
 def get_log(name):
     global LOGS

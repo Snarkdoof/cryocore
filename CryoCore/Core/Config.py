@@ -291,11 +291,17 @@ class NamedConfiguration:
         self.copy_configuration = self._parent.copy_configuration
         self.search = self._parent.search
         self.get_by_id = self._parent.get_by_id
-        self.remove = self._parent.remove
         self.get_version_info_by_id = self._parent.get_version_info_by_id
         self.deserialize = self._parent.deserialize
         self.last_updated = self._parent.last_updated
         self.del_callback = self._parent.del_callback
+        try:
+            r = "root"
+            if self.root:
+                r = self.root[:-1]
+            self.children = self._parent.get(r).children
+        except:
+            self.children = None
 
     def _get_datatype(self, value):
         if value is None:
@@ -321,6 +327,13 @@ class NamedConfiguration:
             datatype = "string"
         return datatype
 
+    def get_children(self):
+        r = "root"
+        if self.root:
+            r = self.root[:-1]
+
+        return self._parent.get(r).children
+
     def serialize(self, path=None, root=None, version=None):
         if not version:
             version = self.version
@@ -329,6 +342,15 @@ class NamedConfiguration:
         elif self.root:
             root = self.root + "." + root
         return self._parent.serialize(path, root=self.root, version=version)
+
+    def remove(self, path, version=None):
+        if not version:
+            version = self.version
+        r = "root."
+        if self.root:
+            r = self.root
+
+        self._parent.remove(r + path, version)
 
     def clear_all(self):
         self._parent.clear_all(self.version)
@@ -1511,15 +1533,17 @@ class Configuration(threading.Thread):
         param = self.get(root, version_id=version_id, absolute_path=True, add=False)
         children = []
         for child in param.children:
-            children.append(self._serialize_recursive(child.get_full_path(),
-                                                      version_id))
+            children.append(self._serialize_recursive(child.get_full_path(), version_id))
+
         serialized = {"name": param.name,
                       "value": param.value,
                       "datatype": param.datatype,
                       "comment": param.comment,
-                      "last_modified": param.last_modified}
-        for child in children:
+                      "last_modified": param.last_modified,
+                      "children": children}
+        for child in children:  # Needed to simplify web use
             serialized[child["name"]] = child
+
         return serialized
 
     def _deserialize_recursive(self, serialized, root, version_id,
@@ -1557,13 +1581,20 @@ class Configuration(threading.Thread):
                              comment=serialized["comment"],
                              version_id=version_id, overwrite=overwrite)
 
-        for elem in list(serialized.keys()):
-            if elem in ["name", "datatype", "comment", "last_modified"]:
-                continue
+        if "children" in serialized:
+            print("Will do children", serialized["children"])
+            for child in serialized["children"]:
+                path = root + "." + child["name"]
+                self._deserialize_recursive(child, path, version_id,
+                                            overwrite)
+        else:
+            for elem in list(serialized.keys()):
+                if elem in ["name", "datatype", "comment", "last_modified"]:
+                    continue
 
-            path = root + "." + elem
-            self._deserialize_recursive(serialized[elem], path, version_id,
-                                        overwrite)
+                path = root + "." + elem
+                self._deserialize_recursive(serialized[elem], path, version_id,
+                                            overwrite)
 
     # ##################    JSON functionality for (de)serializing ###
 
@@ -1705,7 +1736,6 @@ class Configuration(threading.Thread):
         last_notified = 0
         while not self._internal_stop_event.is_set() and not self.stop_event.is_set():
             try:
-
                 # Check all parameters we're interested in
                 params = {}
                 cbs = {}
