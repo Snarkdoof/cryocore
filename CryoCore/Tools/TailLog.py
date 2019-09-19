@@ -244,6 +244,10 @@ class TailLog(mysql):
                 if rows == 0:
                     if not options.follow:
                         break
+                    if options.realtime:
+                        # If we're doing realtime logs, start monitoring the event bus from now on.
+                        # We might get a few duplicates, but not too many.
+                        self._follow_realtime(options)
                     # No new activity, wait a bit before we try again
                     time.sleep(0.1)
 
@@ -251,7 +255,42 @@ class TailLog(mysql):
                 print("Oops:", e)
                 import traceback
                 traceback.print_exc()
-
+    
+    def _follow_realtime(self, options):
+        import traceback
+        import json
+        import threading
+        try:
+            import CCshm_py3
+        except:
+            traceback.print_exc()
+            print("WARNING: Shared memory not available - realtime log reverting to database")
+            options.realtime = False
+            return
+        print("Following in realtime from now")
+        # We need a separate daemon thread to get new data from the shared memory system.
+        # Without it, we would block forever on Ctrl-C if no new log messages appear.
+        def getter():
+            log_bus = None
+            while True:
+                try:
+                    log_bus = CCshm_py3.EventBus("/Users/daniels/Norut/ngv/CCshm/.ccshm-shared-mem-id", 0, 0)
+                    break
+                except:
+                    print("Event bus not ready yet..")
+                    time.sleep(1)
+            while True:
+                data = log_bus.get()
+                if data:
+                    d = json.loads(data.decode("utf-8"))
+                    row = [ -1, d["message"], d["level"], d["time"], d["msecs"], d["line"], d["function"], d["module"], d["logger"] ]
+                    self._print_row(options, row)
+        t = threading.Thread(target=getter, daemon=True)
+        t.start()
+        while True:
+            time.sleep(1)
+            
+    
     def _print_row(self, options, row, noprint=False):
         # Convert time to readable and ignore the ID
         t = time.ctime(row[TIMESTAMP])
@@ -386,7 +425,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--bw", action="store_true", default=False,
                         help="Black and white output")
-
+    
+    parser.add_argument("-r", "--realtime", action="store_true", default=False, help="Dump the realtime log. Does not support historical data")
+    
     parser.add_argument("--db_name", type=str, dest="db_name", default="", help="cryocore or from .config")
     parser.add_argument("--db_user", type=str, dest="db_user", default="", help="cc or from .config")
     parser.add_argument("--db_host", type=str, dest="db_host", default="", help="localhost or from .config")

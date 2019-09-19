@@ -11,7 +11,13 @@ if sys.version_info.major == 3:
     import queue
 else:
     import Queue as queue
-
+from CryoCore.Core import CCshm
+import json
+log_bus = None
+if CCshm.EventBus:
+    # Everyone must use the same size for the event bus (ie, 64K in this case). It's not clear
+    # how we can make this configurable, but it should be sufficient.
+    log_bus = CCshm.EventBus("/Users/daniels/Norut/ngv/CCshm/.ccshm-shared-mem-id", 0, 1024*64)
 
 # dbg_flag = threading.Event()
 
@@ -127,6 +133,11 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         while True:
             try:
                 args = self.tasks.get(should_block, desired_timeout)
+                if log_bus:
+                    names = ["logger", "level", "module", "line", "function", "time", "msecs", "message"]
+                    d = dict(zip(names, args))
+                    j = json.dumps(d)
+                    log_bus.post(j)
                 SQL += "(%s, %s, %s, %s, %s, %s, %s, %s),"
                 params.extend(args)
                 if len(params) > 1000:
