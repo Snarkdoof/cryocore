@@ -14,10 +14,10 @@ else:
 from CryoCore.Core import CCshm
 import json
 log_bus = None
-if CCshm.EventBus:
+if CCshm.available:
     # Everyone must use the same size for the event bus (ie, 64K in this case). It's not clear
     # how we can make this configurable, but it should be sufficient.
-    log_bus = CCshm.EventBus("/Users/daniels/Norut/ngv/CCshm/.ccshm-shared-mem-id", 0, 1024*64)
+    log_bus = CCshm.EventBus("CryoCore.API.Log", 0, 1024*64)
 
 # dbg_flag = threading.Event()
 

@@ -260,10 +260,8 @@ class TailLog(mysql):
         import traceback
         import json
         import threading
-        try:
-            import CCshm_py3
-        except:
-            traceback.print_exc()
+        from CryoCore.Core import CCshm
+        if not CCshm.available:
             print("WARNING: Shared memory not available - realtime log reverting to database")
             options.realtime = False
             return
@@ -274,7 +272,7 @@ class TailLog(mysql):
             log_bus = None
             while True:
                 try:
-                    log_bus = CCshm_py3.EventBus("/Users/daniels/Norut/ngv/CCshm/.ccshm-shared-mem-id", 0, 0)
+                    log_bus = CCshm.EventBus("CryoCore.API.Log", 0, 0)
                     break
                 except:
                     print("Event bus not ready yet..")
@@ -282,9 +280,13 @@ class TailLog(mysql):
             while True:
                 data = log_bus.get()
                 if data:
-                    d = json.loads(data.decode("utf-8"))
-                    row = [ -1, d["message"], d["level"], d["time"], d["msecs"], d["line"], d["function"], d["module"], d["logger"] ]
-                    self._print_row(options, row)
+                    try:
+                        d = json.loads(data.decode("utf-8"))
+                        row = [ -1, d["message"], d["level"], d["time"], d["msecs"], d["line"], d["function"], d["module"], d["logger"] ]
+                        self._print_row(options, row)
+                    except:
+                        print("Failed to parse or print data: %s" % (data))
+                        traceback.print_exc()
         t = threading.Thread(target=getter, daemon=True)
         t.start()
         while True:
