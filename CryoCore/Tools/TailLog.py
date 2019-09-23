@@ -278,15 +278,19 @@ class TailLog(mysql):
                     print("Event bus not ready yet..")
                     time.sleep(1)
             while True:
-                data = log_bus.get()
+                data = log_bus.get_many()
                 if data:
-                    try:
-                        d = json.loads(data.decode("utf-8"))
-                        row = [ -1, d["message"], d["level"], d["time"], d["msecs"], d["line"], d["function"], d["module"], d["logger"] ]
-                        self._print_row(options, row)
-                    except:
-                        print("Failed to parse or print data: %s" % (data))
-                        traceback.print_exc()
+                    for item in data:
+                        try:
+                            d = json.loads(item.decode("utf-8"))
+                            row = [ -1, d["message"], d["level"], d["time"], d["msecs"], d["line"], d["function"], d["module"], d["logger"] ]
+                            self._print_row(options, row)
+                        except:
+                            print("Failed to parse or print data: %s" % (data))
+                            traceback.print_exc()
+                    # Sleep to avoid lock thrashing, and buffer up more data before
+                    # we do anything
+                    time.sleep(0.016)            
         t = threading.Thread(target=getter, daemon=True)
         t.start()
         while True:

@@ -57,8 +57,9 @@ LOGS = {}
 LOG_DESTINATION = None
 DEFAULT_LOGLEVEL = logging.DEBUG
 
-global glblStatusReporter
+global glblStatusReporter, glblSharedMemoryReporter
 glblStatusReporter = None
+glblSharedMemoryReporter = None
 reporter_collection = None
 
 __is_direct = False
@@ -73,6 +74,12 @@ def get_status_reporter():
         glblStatusReporter = DBReporter()
     return glblStatusReporter
 
+def get_shared_memory_status_reporter():
+    global glblSharedMemoryReporter
+    if not glblSharedMemoryReporter:
+        from CryoCore.Core.Status.SharedMemoryReporter import SharedMemoryReporter
+        glblSharedMemoryReporter = SharedMemoryReporter()
+    return glblSharedMemoryReporter 
 
 class GlobalDBConfig:
     singleton = None
@@ -320,6 +327,12 @@ def get_status(name):
         holder.add_reporter(get_status_reporter())
     except Exception as e:
         print("Database reporter could not be added for %s:" % name, e)
+    try:
+        reporter = get_shared_memory_status_reporter()
+        if reporter.can_report():
+            holder.add_reporter(reporter)
+    except Exception as e:
+        print("Failed to add shared memory status reporter for %s:" % name, e)
     return holder
 
     (was_created, reporter) = ReporterCollection.get_singleton().get_reporter(name)
