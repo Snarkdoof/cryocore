@@ -3,7 +3,85 @@ import json
 import traceback
 import threading
 
+from CryoCore import API
 from CryoCore.Core import CCshm
+from CryoCore.Core.Status.StatusDbReader import StatusDbReader
+
+
+class Clock():
+    def __init__(self, starttime=None):
+        if not starttime:
+            self.offset = 0
+        else:
+            self.offset = time.time() - starttime
+
+    def pos(self):
+        return time.time() - self.offset
+
+    def vel(self):
+        return 1
+
+
+def get_status_listener(clock=None):
+    if clock or not CCshm.available:
+        if clock:
+            print("Using DB for time shifted access")
+        else:
+            print("Shared memory not supported, using DB")
+        return StatusListenerDB(clock)
+    return StatusListener()
+
+
+class StatusListenerDB(threading.Thread):
+    def __init__(self, clock=None):
+        threading.Thread.__init__(self)
+        self._channels = {}
+        self._monitors = []  # List of paramids to monitor
+        self._last_values = {}
+        self.clock = clock
+        if not clock:
+            self.clock = Clock()
+        self._db = StatusDbReader()
+        self.start()
+
+    def add_monitors(self, items):
+        for channel, name in items:
+            self._monitors.append((channel, name))
+
+    def run(self):
+        # Periodically fetch values so we don't block on reads
+        last_run = -60
+        while not API.api_stop_event.isSet():
+            now = self.clock.pos()
+            if len(self._monitors) > 0:
+                updates = self._db.get_last_status_values(self._monitors, since=last_run, now=now)
+                for update in updates:
+                    self._last_values[update] = {
+                        "channel": update[0],
+                        "name": update[1],
+                        "ts": updates[update][0],
+                        "value": updates[update][1]
+                    }
+            time.sleep(0.5)
+            last_run = now
+
+    def get_last_value(self, chan, param):
+        if (chan, param) in self._last_values:
+            return self._last_values[(chan, param)]
+
+    def get_last_values(self, items=None):
+        """
+        If items is none, return all last values (by reference)
+        """
+        if items:
+            ret = {}
+            for item in items:
+                if item in self._last_values:
+                    ret[item] = self._last_values[item]
+                else:
+                    ret[item] = None
+            return ret
+        return self._last_values
 
 
 class StatusListener():

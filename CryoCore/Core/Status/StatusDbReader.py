@@ -38,15 +38,19 @@ class StatusDbReader(InternalDB.mysql):
             raise Exception("Missing parameter '%s' in channel '%s'" % (name, channel))
         return row[0]
 
-    def get_last_status_values(self, paramlist, since=-60):
+    def get_last_status_values(self, paramlist, since=-60, now=None):
         """
         Paramlist must be (channel, name), since must be a value.
         This method will fetch all updates for the given list since
         the since time, so it might take more resources than you expect.
         If since is a negative number, it will be regarded as now-time.
         since=-60 means the last 60 seconds.
+        if now is given, that will be used as the max time, and a negative
+        since will be in relation to the 'now' value
         Returns a map (channel, param) -> (timestamp, value)
         """
+        if len(paramlist) == 0:
+            raise Exception("Need parameter list")
         rev = {}
         params = []
         for channel, name in paramlist:
@@ -54,12 +58,21 @@ class StatusDbReader(InternalDB.mysql):
             params.append(paramid)
             rev[paramid] = (channel, name)
         if since < 0:
-            since = time.time() + since
-        SQL = "SELECT paramid, timestamp, value FROM status WHERE timestamp>%s AND ("
-        args = [since]
+            if now:
+                since = now + since
+            else:
+                since = time.time() + since
+        args = []
+        if now:
+            extra = "timestamp<%s AND"
+            args.append(now)
+
+        SQL = "SELECT paramid, timestamp, value FROM status WHERE " + extra + " timestamp>%s AND ("
+        args.append(since)
         for p in params:
             SQL += "paramid=%s OR "
             args.append(p)
+
         SQL = SQL[:-3] + ") ORDER BY timestamp"
         cursor = self._execute(SQL, args)
         ret = {}
