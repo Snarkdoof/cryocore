@@ -8,14 +8,14 @@ CEventBus = None
 try:
     if sys.version_info[0] >= 3:
         import CCshm_py3
-        if CCshm_py3.version < 1:
-        	raise Exception("CCshm version is too old - please pull & recompile")
+        if CCshm_py3.version < 2:
+            raise Exception("CCshm version is too old - please pull & recompile")
         CEventBus = CCshm_py3.EventBus
         available = True
     else:
         import CCshm_py2
-        if CCshm_py2.version < 1:
-        	raise Exception("CCshm version is too old - please pull & recompile")
+        if CCshm_py2.version < 2:
+            raise Exception("CCshm version is too old - please pull & recompile")
         CEventBus = CCshm_py2.EventBus
         available = True
 except:
@@ -51,4 +51,7 @@ class EventBus:
     
     def get_many(self):
         return self.bus.get_many()
+    
+    def get_head(self):
+        return self.bus.get_head()
     
