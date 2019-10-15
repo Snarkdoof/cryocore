@@ -4,17 +4,17 @@ import os
 
 available = False
 CEventBus = None
-
+REQUIRED_CCHSM_VERSION = 3
 try:
     if sys.version_info[0] >= 3:
         import CCshm_py3
-        if CCshm_py3.version < 2:
+        if CCshm_py3.version < REQUIRED_CCHSM_VERSION:
             raise Exception("CCshm version is too old - please pull & recompile")
         CEventBus = CCshm_py3.EventBus
         available = True
     else:
         import CCshm_py2
-        if CCshm_py2.version < 2:
+        if CCshm_py2.version < REQUIRED_CCHSM_VERSION:
             raise Exception("CCshm version is too old - please pull & recompile")
         CEventBus = CCshm_py2.EventBus
         available = True
