@@ -94,7 +94,11 @@ def detect_tty_device(id_model):
     retval = []
     for device in devices.match_subsystem('tty'):
         if "ID_MODEL" in list(device.keys()) and device["ID_MODEL"].lower() == id_model.lower():
-            retval.append(str(device["DEVLINKS"].split(" ")[1]))
+            s = str(device["DEVLINKS"]) 
+            if s.count(" ") > 0:
+                retval.append(s.split(" ")[1])
+            else:
+                retval.append(s)
 
     if idx is not None:
         if idx > len(retval) - 1:
