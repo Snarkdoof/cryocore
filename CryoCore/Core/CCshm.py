@@ -43,8 +43,12 @@ def make_identity_file(name):
         traceback.print_exc()
         print("Failed to set/reset umask")
     fd_path = os.path.join(path, name)
-    fd = open(fd_path, "w")
-    fd.close()
+    try:
+        fd = open(fd_path, "w")
+        fd.close()
+    except:
+        # We want this to raise an exception. If we can't create the file, and we can't stat it, we can't work.
+        os.stat(fd_path)
     return fd_path
     
     
