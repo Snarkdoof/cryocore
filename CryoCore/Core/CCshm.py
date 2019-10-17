@@ -1,6 +1,7 @@
 import sys
 import errno
 import os
+import traceback
 
 available = False
 CEventBus = None
@@ -30,6 +31,17 @@ def make_identity_file(name):
     except OSError as e:
         if e.errno != errno.EEXIST:
             raise
+    try:
+        old_mask = os.umask(0o000)
+        try:
+            os.chmod(path, 0o777);
+        except:
+            traceback.print_exc()
+            print("Failed to change ownership mask on identity path")
+        os.umask(old_mask)
+    except:
+        traceback.print_exc()
+        print("Failed to set/reset umask")
     fd_path = os.path.join(path, name)
     fd = open(fd_path, "w")
     fd.close()
