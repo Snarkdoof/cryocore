@@ -38,11 +38,11 @@ def make_identity_file(name):
         try:
             os.chmod(path, 0o777);
         except:
-            traceback.print_exc()
+            #traceback.print_exc()
             print("Failed to change ownership mask on identity path")
         os.umask(old_mask)
     except:
-        traceback.print_exc()
+        #traceback.print_exc()
         print("Failed to set/reset umask")
     fd_path = os.path.join(path, name)
     try:
