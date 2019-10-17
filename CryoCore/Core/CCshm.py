@@ -31,7 +31,8 @@ def make_identity_file(name):
     except OSError as e:
         if e.errno == errno.EEXIST or e.errno == errno.EPERM:
             pass
-        raise
+        else:
+            raise
     try:
         old_mask = os.umask(0o000)
         try:
