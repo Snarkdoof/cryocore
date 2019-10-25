@@ -130,6 +130,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 if path in functions:
                     ret = functions[path](self, **args)
                     self._send_text(ret)
+                    return  # ALL OK
                 else:
                     return self.failed(404)
             except Exception as e:
