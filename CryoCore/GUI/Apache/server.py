@@ -6,8 +6,10 @@ import gzip
 import urllib
 import cgi
 import inspect
+import mimetypes
+import os
 
-PORT = 8000
+from CryoCore import API
 
 functions = {o[0]: o[1] for o in inspect.getmembers(JSON) if inspect.isfunction(o[1])}
 
@@ -135,6 +137,22 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 import traceback
                 traceback.print_exc()
                 return self.failed(500)
+
+        # Not a JSON request, check if it's a file within our webroot
+        cfg = API.get_config("System.WebServer")
+        p = os.path.join(cfg["web_root"], path[1:])
+        if p.endswith("/"):
+            p += "index.html"
+        if os.path.exists(p):
+            print("SERVING", p)
+            with open(p, "rb") as f:
+                data = f.read()
+                ftype = mimetypes.guess_type(p)[0]
+                self.prepare_send(ftype, len(data))
+                self.wfile.write(data)
+            return
+        print("File does not exist:", p)
+
         return self.failed(404)
 
 
@@ -152,10 +170,18 @@ class MyWebServer(http.server.HTTPServer):
         else:
             return None
 
-httpd = http.server.HTTPServer(("", PORT), MyHandler)
-print("Serving on port", PORT)
-while True:
-    httpd.serve_forever()
+try:
+    cfg = API.get_config("System.WebServer")
+    cfg.set_default("port", 8080)
+    cfg.set_default("web_root", "./")
+    httpd = http.server.HTTPServer(("", cfg["port"]), MyHandler)
+    print("Serving on port", cfg["port"])
+    while True:
+        httpd.serve_forever()
+except KeyboardInterrupt:
+    pass
+finally:
+    API.shutdown()
 
 # with MyWebServer(("", PORT), MyHandler) as httpd:
  #   print("serving at port", PORT)
