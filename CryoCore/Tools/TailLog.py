@@ -6,6 +6,8 @@ from __future__ import print_function
 import time
 import sys
 import re
+import json
+import os
 
 from argparse import ArgumentParser
 
@@ -171,6 +173,12 @@ class TailLog(mysql):
         This function doesn't list all entries, but goes back a few hundred entries
         and tails from there
         """
+        target_file = None
+        if options.tofile:
+            target_file = open(options.tofile, "a+")
+            options.since = time.ctime()
+            options.follow = True
+
         search = ""
         if options.module:
             search += "UPPER(module)='%s' " % options.module.upper()
@@ -239,7 +247,10 @@ class TailLog(mysql):
                             print("Exception executing filter " + str(filter) + ":", e)
 
                     if do_print:
-                        self._print_row(options, row)
+                        if target_file:
+                            self._write_to_file(target_file, options, row)
+                        else:
+                            self._print_row(options, row)
 
                 if rows == 0:
                     if not options.follow:
@@ -251,6 +262,27 @@ class TailLog(mysql):
                 print("Oops:", e)
                 import traceback
                 traceback.print_exc()
+
+    def _write_to_file(self, target, options, row):
+        # Is the file too big? Remove 25% from the start by reading the last 75%, truncate and write
+        if options.maxfilesize:
+            max_size = int(options.maxfilesize) * 1048576
+            if os.path.getsize(options.tofile) > max_size:
+                target.seek(max_size * 0.75)
+                data = target.read()
+                target.seek(0)
+                target.truncate()
+                target.write(data)
+
+        item = {
+            "ts": row[TIMESTAMP],
+            "module": row[MODULE],
+            "line": row[LINE],
+            "logger": row[LOGGER],
+            "text": row[TEXT]
+        }
+        target.write(json.dumps(item) + "\n")
+        target.flush()
 
     def _print_row(self, options, row, noprint=False):
         # Convert time to readable and ignore the ID
@@ -391,6 +423,10 @@ if __name__ == "__main__":
     parser.add_argument("--db_user", type=str, dest="db_user", default="", help="cc or from .config")
     parser.add_argument("--db_host", type=str, dest="db_host", default="", help="localhost or from .config")
     parser.add_argument("--db_password", type=str, dest="db_password", default="", help="defaultpw or from .config")
+
+    parser.add_argument("--tofile", type=str, dest="tofile", default="", help="Dump logs to a given file name, not terminal")
+    parser.add_argument("--maxfilesize", type=str, dest="maxfilesize", default=None, help="Maximum filesize in MB")
+
     try:
         if "argcomplete" in sys.modules:
             argcomplete.autocomplete(parser)
