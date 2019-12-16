@@ -175,6 +175,8 @@ class TailLog(mysql):
         """
         target_file = None
         if options.tofile:
+            if not os.path.isdir(os.path.dirname(options.tofile)):
+                os.makedirs(os.path.dirname(options.tofile))
             target_file = open(options.tofile, "a+")
             options.since = time.ctime()
             options.follow = True
@@ -279,7 +281,8 @@ class TailLog(mysql):
             "module": row[MODULE],
             "line": row[LINE],
             "logger": row[LOGGER],
-            "text": row[TEXT]
+            "level": API.log_level[row[LEVEL]],
+            "text": row[TEXT],
         }
         target.write(json.dumps(item) + "\n")
         target.flush()
