@@ -140,12 +140,15 @@ class TailStatus(mysql):
         Prints the last 100 updates and tails from then on
         """
         last_id = None
-        if options.since:
+        startts = options.since
+        if self.clock:
+            startts = self.clock.pos()
+        if startts:
             SQL = "SELECT MIN(id) FROM status WHERE timestamp>%s"
-            if float(options.since) < 0:
-                args = [time.time() + float(options.since)]
+            if float(startts) < 0:
+                args = [time.time() + float(startts)]
             else:
-                args = [float(options.since)]
+                args = [float(startts)]
             cursor = self._execute(SQL, args)
             row = cursor.fetchone()
             if row:
