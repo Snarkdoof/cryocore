@@ -230,7 +230,7 @@ class TailStatus(mysql):
                         last_id = start_id
                         last_id_2d = start_id_2d
                     last_pos = self.clock.pos()
-                    t = "AND ts<%f " % last_pos
+                    t = "AND timestamp<%f " % last_pos
                 SQL = "SELECT id,timestamp,status_parameter2d.name,status_channel.name,value,sizex,sizey,posx,posy "\
                       "FROM status2d,status_parameter2d,status_channel "\
                       "WHERE status2d.chanid=status_channel.chanid " + t + \
