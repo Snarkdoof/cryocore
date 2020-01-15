@@ -86,7 +86,7 @@ class TailStatus(mysql):
     Allow some basic filtering too
     """
 
-    def __init__(self, name, options, default_show=True):
+    def __init__(self, name, options, default_show=True, clock=None):
         """
         default_show: should I print new messages by default
         """
@@ -95,6 +95,7 @@ class TailStatus(mysql):
 
         self.name = name
         self.options = options
+        self.clock = clock
         cfg = API.get_config("System.Status.MySQL")
         mysql.__init__(self, self.name, cfg, is_direct=True)
 
@@ -188,6 +189,9 @@ class TailStatus(mysql):
         else:
             exporter = None
 
+        start_id = last_id
+        start_id_2d = last_id_2d
+        last_pos = 0
         while True:
             try:
                 def process_results(c, max_id, is2D=None):
@@ -220,9 +224,16 @@ class TailStatus(mysql):
                                 self._print_row(row, is2D)
                     return (r, max_id)
                 rows = 0
+                t = ""
+                if self.clock:
+                    if self.clock.pos() < last_pos:
+                        last_id = start_id
+                        last_id_2d = start_id_2d
+                    last_pos = self.clock.pos()
+                    t = "AND ts<%f " % last_pos
                 SQL = "SELECT id,timestamp,status_parameter2d.name,status_channel.name,value,sizex,sizey,posx,posy "\
                       "FROM status2d,status_parameter2d,status_channel "\
-                      "WHERE status2d.chanid=status_channel.chanid AND "\
+                      "WHERE status2d.chanid=status_channel.chanid AND " + t + \
                       "status2d.paramid=status_parameter2d.paramid AND id>%s" + additional2d + " ORDER BY id"
                 a = [last_id_2d]
                 a.extend(params)
@@ -233,7 +244,7 @@ class TailStatus(mysql):
 
                 SQL = "SELECT id,timestamp,status_parameter.name,status_channel.name,value "\
                       "FROM status,status_parameter,status_channel "\
-                      "WHERE status.chanid=status_channel.chanid AND "\
+                      "WHERE status.chanid=status_channel.chanid AND " + t + \
                       "status.paramid=status_parameter.paramid AND "\
                       "id>%s" + additional + " ORDER BY id"
                 a = [last_id]
@@ -415,6 +426,9 @@ if __name__ == "__main__":
                             help="When exporting timeseries, the last value from all listed instruments is used "
                                  "whenever a value is flushed. If not given, non-aligning items are left empty")
 
+        parser.add_argument("--motion", dest="motion", action="store_true", default=False,
+                            help="Replay a mission according to motions")
+
         if "argcomplete" in sys.modules:
             argcomplete.autocomplete(parser)
         options = parser.parse_args()
@@ -433,7 +447,17 @@ if __name__ == "__main__":
         if len(db_cfg) > 0:
             API.set_config_db(db_cfg)
 
-        tail = TailStatus("TailStatus", options)
+        clock = None
+        if options.motion:
+            try:
+                import MCorp
+                # app = MCorp.App("6459748540093085075", API.api_stop_event)
+                app = MCorp.App("5479276526614340281", API.api_stop_event)
+                clock = app.motions["live"]
+            except Exception as e:
+                print("Failed to use motion:", e)
+
+        tail = TailStatus("TailStatus", options, clock=clock)
 
         if not options.bw:
             print("\033[40;97m")  # Go black
