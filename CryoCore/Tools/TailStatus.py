@@ -233,8 +233,8 @@ class TailStatus(mysql):
                     t = "AND ts<%f " % last_pos
                 SQL = "SELECT id,timestamp,status_parameter2d.name,status_channel.name,value,sizex,sizey,posx,posy "\
                       "FROM status2d,status_parameter2d,status_channel "\
-                      "WHERE status2d.chanid=status_channel.chanid AND " + t + \
-                      "status2d.paramid=status_parameter2d.paramid AND id>%s" + additional2d + " ORDER BY id"
+                      "WHERE status2d.chanid=status_channel.chanid " + t + \
+                      "AND status2d.paramid=status_parameter2d.paramid AND id>%s" + additional2d + " ORDER BY id"
                 a = [last_id_2d]
                 a.extend(params)
                 cursor = self._execute(SQL, a)
@@ -244,8 +244,8 @@ class TailStatus(mysql):
 
                 SQL = "SELECT id,timestamp,status_parameter.name,status_channel.name,value "\
                       "FROM status,status_parameter,status_channel "\
-                      "WHERE status.chanid=status_channel.chanid AND " + t + \
-                      "status.paramid=status_parameter.paramid AND "\
+                      "WHERE status.chanid=status_channel.chanid " + t + \
+                      "AND status.paramid=status_parameter.paramid AND "\
                       "id>%s" + additional + " ORDER BY id"
                 a = [last_id]
                 a.extend(params)
@@ -455,7 +455,7 @@ if __name__ == "__main__":
                 app = MCorp.App("5479276526614340281", API.api_stop_event)
                 clock = app.motions["live"]
             except Exception as e:
-                print("Failed to use motion:", e)
+                raise SystemExit("Failed to use motion:", e)
 
         tail = TailStatus("TailStatus", options, clock=clock)
 
