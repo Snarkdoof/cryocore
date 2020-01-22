@@ -222,9 +222,9 @@ class TailStatus(mysql):
 
                         if do_print:
                             if exporter:
-                                exporter.print_row(row, is2D)
+                                exporter.print_row(row, is2D, options.words)
                             else:
-                                self._print_row(row, is2D)
+                                self._print_row(row, is2D, options.words)
                     return (r, max_id)
                 rows = 0
                 t = ""
@@ -270,7 +270,7 @@ class TailStatus(mysql):
             finally:
                 pass
 
-    def _print_row(self, row, is2D):
+    def _print_row(self, row, is2D, words=None):
 
         # Use a bit of color to make it PRETTY! :D
         def colored(text, color):
@@ -296,9 +296,19 @@ class TailStatus(mysql):
         if (is2D):
             size = row[SIZEX], row[SIZEY]
             pos = row[POSX], row[POSY]
-            print(t + " [%s] %s = %s" % (channel, name, value), pos, size)
+            line = t + " [%s] %s = %s" % (channel, name, value), pos, size 
         else:
-            print(t + " [%s] %s = %s" % (channel, name, value))
+            line = t + " [%s] %s = %s" % (channel, name, value)
+
+        if words:
+            # Filter on words
+            do_print = False
+            for word in words:
+                if line.find(word) > -1:
+                    do_print = True
+                    break
+            if do_print:
+                print(line)
 
     def print_all(self, channel=None):
         SQL = "SELECT * FROM status"
@@ -393,8 +403,8 @@ if __name__ == "__main__":
             return res
         parser = ArgumentParser()
 
-        parser.add_argument('parameters', type=str, nargs='*',
-                            help='Filter upates on channel:name (use autocomplete)').completer = completer
+        parser.add_argument('words', type=str, nargs='*',
+                            help='Only show lines containing these ORed words')  # .completer = completer
 
         parser.add_argument("--clear-all", action="store_true",
                             default=False,
@@ -446,6 +456,7 @@ if __name__ == "__main__":
         if options.db_password:
             db_cfg["db_password"] = options.db_password
         options.lines = int(options.lines)
+        options.parameters = []
 
         if len(db_cfg) > 0:
             API.set_config_db(db_cfg)
