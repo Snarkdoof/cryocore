@@ -309,6 +309,8 @@ class TailStatus(mysql):
                     break
             if do_print:
                 print(line)
+        else:
+            print(line)
 
     def print_all(self, channel=None):
         SQL = "SELECT * FROM status"
