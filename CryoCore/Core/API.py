@@ -285,7 +285,7 @@ def get_config(name=None, version="default", db_cfg=None):
 
 def set_log_level(loglevel):
     if loglevel in log_level:
-        ll = loglevel       
+        ll = loglevel
     else:
         if loglevel not in log_level_str:
             raise Exception("Bad loglevel '%s', must be one of %s" % (loglevel, log_level_str.keys()))
@@ -298,8 +298,26 @@ def set_log_level(loglevel):
         LOG_DESTINATION.level = ll
 
 
+class PrefixedLogger(logging.getLoggerClass()):
+
+    def __init__(self, name, level=0, prefix=None):
+        logging.Logger.__init__(self, name, level)
+        self.prefix = prefix
+
+    def makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=None, extra=None, sinfo=None):
+        if self.prefix:
+            if callable(self.prefix):
+                msg = "<%s> " % self.prefix() + msg
+            else:
+                msg = "<%s> " % self.prefix + msg
+
+        return logging.Logger.makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=func, extra=extra, sinfo=sinfo)
+
+logging.setLoggerClass(PrefixedLogger)
+
+
 # @logTiming
-def get_log(name):
+def get_log(name, prefix=None):
     global LOGS
     global LOG_DESTINATION
     if not LOG_DESTINATION:
@@ -308,6 +326,7 @@ def get_log(name):
     if name not in LOGS:
             LOGS[name] = logging.getLogger(name)
             LOGS[name].propagate = False
+            LOGS[name].prefix = prefix
             LOGS[name].setLevel(DEFAULT_LOGLEVEL)
             LOGS[name].addHandler(LOG_DESTINATION)
     return LOGS[name]
