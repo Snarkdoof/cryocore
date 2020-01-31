@@ -304,14 +304,16 @@ class PrefixedLogger(logging.getLoggerClass()):
         logging.Logger.__init__(self, name, level)
         self.prefix = prefix
 
-    def makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=None, extra=None, sinfo=None):
-        if self.prefix:
-            if callable(self.prefix):
-                msg = "<%s> " % self.prefix() + msg
-            else:
-                msg = "<%s> " % self.prefix + msg
+    def _log(self, level, msg, args, exc_info=None, extra=None, prefix=None):
+        if not prefix and self.prefix:
+            prefix = self.prefix
 
-        return logging.Logger.makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=func, extra=extra, sinfo=sinfo)
+        if prefix:
+            if callable(prefix):
+                msg = "<%s> " % prefix() + msg
+            else:
+                msg = "<%s> " % prefix + msg
+        return super(PrefixedLogger, self)._log(level, msg, args, exc_info, extra)
 
 logging.setLoggerClass(PrefixedLogger)
 
