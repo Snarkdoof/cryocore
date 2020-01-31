@@ -5,8 +5,6 @@ from CryoCore import API
 from CryoCore.Tools import TailLog
 from CryoCore.Core.InternalDB import mysql as sqldb
 
-global channel_ids
-global param_ids
 channel_ids = {}
 param_ids = {}
 DEBUG = False
@@ -246,6 +244,7 @@ value TEXT)""",
         return params
 
     def get_params_with_ids(self, channel):
+        global param_ids
         if channel not in channel_ids:
             self.get_channels()
 
@@ -253,7 +252,6 @@ value TEXT)""",
         if DEBUG:
             self.log.debug("SELECT paramid, name FROM status_parameter WHERE chanid=%s ORDER BY name" + str([channel_ids[channel]]))
         params = []
-        global param_ids
         for row in cursor.fetchall():
             fullname = channel + "." + row[1]
             if fullname not in param_ids:
@@ -263,7 +261,6 @@ value TEXT)""",
         cursor = self._execute("SELECT paramid, name, sizex, sizey FROM status_parameter2d WHERE chanid=%s ORDER BY name", [channel_ids[channel]])
         if DEBUG:
             self.log.debug("SELECT paramid, name FROM status_parameter2d WHERE chanid=%s ORDER BY name" + str([channel_ids[channel]]))
-        global param_ids
         for row in cursor.fetchall():
             fullname = channel + "." + row[1]
             if fullname not in param_ids:
@@ -278,7 +275,7 @@ value TEXT)""",
         # print("Getting data between %s and %s (%s)" % (float(start_time) - time.time(), float(end_time) - time.time(), start_time))
         dataset = {}
         params2d = []
-        max_id = since
+        max_id = int(since)
         p = [start_time, end_time, since]
         SQL = "SELECT id, paramid, timestamp, value FROM status WHERE timestamp>%s AND timestamp<%s AND id> %s AND ("
         for param in params:
@@ -338,9 +335,9 @@ value TEXT)""",
             for param in missing:
                 # Must look for the LAST value of the missing parameters
                 if param not in params2d:
-                    SQL = "SELECT id, paramid, timestamp, value FROM status WHERE paramid=%s ORDER BY id DESC LIMIT 1"
+                    SQL = "SELECT id, paramid, timestamp, value from status where id=(SELECT max(id) FROM status WHERE paramid=%s)"
                 else:
-                    SQL = "SELECT id, paramid, timestamp, value, posx, posy FROM status2d WHERE paramid=%s ORDER BY id DESC LIMIT 1"
+                    SQL = "SELECT id, paramid, timestamp, value, posx, posy from status2d where id=(SELECT max(id) FROM status2d WHERE paramid=%s)"
                 c = self._execute(SQL, [param])
                 row = c.fetchone()
                 if row:

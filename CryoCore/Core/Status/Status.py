@@ -17,13 +17,16 @@ status_lock = threading.Lock()
 # ===============================================================
 def get_status_holder(name, stop_event=None):
     """
-    It returns the status of the application I{name}. In case of this I{name} was not already included into the L{status_holder<status_holders>} dictionary, it would be included.
+    It returns the status of the application I{name}. In case of this I{name} was not
+    already included into the L{status_holder<status_holders>} dictionary, it would be included.
     @param name: Name of the application which status will be saved.
     @type name: C{string}
     @return: The L{StatusHolder<StatusHolder>} object which keeps all the related-status data.
     @rtype: L{StatusHolder<StatusHolder>}
-    @postcondition: the application status, which is named I{name}, woudl be kept in L{status_holders<status_holders>}, if it was not included before the call.
-    @note: this function has been synchronized by means of a C{Lock}, therefore it can be accessed by different threads at the same time safely.
+    @postcondition: the application status, which is named I{name}, woudl be kept in
+    L{status_holders<status_holders>}, if it was not included before the call.
+    @note: this function has been synchronized by means of a C{Lock}, therefore it can be
+    accessed by different threads at the same time safely.
     """
     global status_lock, status_holders
     with status_lock:
@@ -67,7 +70,8 @@ class StatusHolder(threading.Thread):
     @ivar elements: parameters which are related to the status to be kept.
     @type elements: C{dictionary} of L{BaseElement<BaseElement>}
     @ivar reporters: objects to be called either periodically or in case of change of the watched status.
-    @type reporters: L{StatusReporter<StatusReporter>} object: L{OnChangeStatusReporter<OnChangeStatusReporter>} or L{PeriodicStatusReporter<PeriodicStatusReporter>}
+    @type reporters: L{StatusReporter<StatusReporter>} object: L{OnChangeStatusReporter<OnChangeStatusReporter>}
+    or L{PeriodicStatusReporter<PeriodicStatusReporter>}
     @ivar events: C{list} of events
     @type events: C{list}
     @ivar lock: lock to guarantee the methods are thread-safe.
@@ -76,10 +80,14 @@ class StatusHolder(threading.Thread):
 
     def __init__(self, name, stop_event):
         """
-        This builder should be called just once. Therefore, do not create new StatusHolder    if you don't know what you're doing. Use the L{getStatusHolder<getStatusHolder>} function to retrieve StatusHolder object instead.
+        This builder should be called just once. Therefore, do not create new StatusHolder
+        if you don't know what you're doing. Use the L{getStatusHolder<getStatusHolder>} function
+        to retrieve StatusHolder object instead.
         @param name: application name which saves its status inside the object's dictionary.
         @type name: C{string}
-        @postcondition: The object has been initialized by setting the application name, setting to void the internal dictionaries and list, and getting the lock to synchronize the access to the already mentioned dictionaries.
+        @postcondition: The object has been initialized by setting the application name, setting
+        to void the internal dictionaries and list, and getting the lock to synchronize the access
+        to the already mentioned dictionaries.
         """
         threading.Thread.__init__(self)
 
@@ -138,7 +146,7 @@ class StatusHolder(threading.Thread):
             try:
                 while self._set_value_queue.unfinished_tasks > 0:
                     (elem, value, force_update, timestamp) = self._set_value_queue.get(block=False)
-                    elem.set_value(value, force_update, timestamp, async=False)
+                    elem.set_value(value, force_update, timestamp, _async=False)
             except queue.Empty:
                 pass
             except:
@@ -226,9 +234,11 @@ class StatusHolder(threading.Thread):
 
     def get_reporter(self, name):
         """
-        Get a given reporter from the status, using the name of the reporter. It returns the reporter addressed by its L{name} which has been saved by calling L{add_reporter<add_reporter>}.
+        Get a given reporter from the status, using the name of the reporter. It returns the reporter
+        addressed by its L{name} which has been saved by calling L{add_reporter<add_reporter>}.
         @return: The reporter linked to the I{name}.
-        @rtype: a C{object} based on L{StatusReporter<StatusReporter>}: L{OnChangeStatusReporter<OnChangeStatusReporter>} or L{PeriodicStatusReporter<PeriodicStatusReporter>}.
+        @rtype: a C{object} based on L{StatusReporter<StatusReporter>}:
+        L{OnChangeStatusReporter<OnChangeStatusReporter>} or L{PeriodicStatusReporter<PeriodicStatusReporter>}.
         @note: This method is synchronized by C{Lock}, therefore it is thread-safe.
         @param name: name of the searched reporter.
         @type name: C{string}
@@ -247,7 +257,8 @@ class StatusHolder(threading.Thread):
         @postcondition: the internal dictionary has got another reporeter to be indexed by its name.
         @note: This method is synchronized by C{Lock}, therefore it is thread-safe.
         @param reporter: The reporter object to be saved inside.
-        @type reporter: L{StatusReporter<StatusReporter>} object: L{OnChangeStatusReporter<OnChangeStatusReporter>} or L{PeriodicStatusReporter<PeriodicStatusReporter>}
+        @type reporter: L{StatusReporter<StatusReporter>} object: L{OnChangeStatusReporter<OnChangeStatusReporter>}
+        or L{PeriodicStatusReporter<PeriodicStatusReporter>}
         @raise AssertionError: the parameter I{reporter} was C{None}
         @raise Exception: the I{reporter}, which is distinguished by its field name, has been already saved.
         """
@@ -267,10 +278,12 @@ class StatusHolder(threading.Thread):
 
     def _add_element(self, new_element):
         """
-        Add the element I{new_element} to the C{dictionary} with the element and it is added as element to every single reporter of the C{dictionary} reporter.
+        Add the element I{new_element} to the C{dictionary} with the element and it is added as element
+        to every single reporter of the C{dictionary} reporter.
         @param new_element: new element to be added to the dictionaries.
         @type new_element: a element based on L{BaseElement<BaseElement>}
-        @postcondition: save the I{new_element} into the L{elements<elements>} besides saving the element into the every single reporter in L{reporters<reporters>}.
+        @postcondition: save the I{new_element} into the L{elements<elements>} besides saving the element
+        into the every single reporter in L{reporters<reporters>}.
         """
 
         if new_element.name in self.elements:
@@ -288,7 +301,8 @@ class StatusHolder(threading.Thread):
 
     def create_status_element(self, name, initial_value=None, expire_time=None, fetch=False):
         """
-        Create and return, after having saved a new L{StatusElement<StatusElement>} object with the given parameters: I{name} and I{initial_value} into the C{dictionary} L{elements<elements>}.
+        Create and return, after having saved a new L{StatusElement<StatusElement>} object with
+        the given parameters: I{name} and I{initial_value} into the C{dictionary} L{elements<elements>}.
         @param name: Name of the new element to be included into the L{StatusElement<StatusElement>}.
         @type name: C{string}
         @param initial_value: Initial value which will be refreshed after the first update
@@ -298,7 +312,8 @@ class StatusHolder(threading.Thread):
         @note: This method is synchronized by C{Lock}, therefore it is thread-safe.
         @raise AssertionError: the parameter I{name} was C{None}.
         @raise Exception: the element was already saved into the dictionary L{elements<elements>}.
-        @postcondition: the just created status element has been included into the reporters' element list. These reporters are indexed into the status holder dictionary L{reporters<reporters>}.
+        @postcondition: the just created status element has been included into the reporters' element list.
+        These reporters are indexed into the status holder dictionary L{reporters<reporters>}.
         """
         assert name
         if self.resumeValues or fetch:
@@ -324,8 +339,10 @@ class StatusHolder(threading.Thread):
 
     def add_status_element(self, element):
         """
-        Add the L{StatusElement<StatusElement>} I {status_element} object. This status element can be accessed by L{get_status_element<get_status_element>}.
-        @postcondition: the dictionary L{elements<elements>} has added the I{element}, furthermore it has been added to every single reporter's element list of L{reporters<reporters>}.
+        Add the L{StatusElement<StatusElement>} I {status_element} object. This status element can be
+        accessed by L{get_status_element<get_status_element>}.
+        @postcondition: the dictionary L{elements<elements>} has added the I{element}, furthermore it
+        has been added to every single reporter's element list of L{reporters<reporters>}.
         @note: This method is synchronized by C{Lock}, therefore it is thread-safe.
         @param element: created element to be kept.
         @type element: L{StatusElement<StatusElement>}
@@ -359,8 +376,10 @@ class StatusHolder(threading.Thread):
 
     def get_or_create_status_element(self, name, initial_value=None, expire_time=None, fetch=False):
         """
-        Return the status element which is named by I{name}, but in case of not existing such element it is created as it goes along.
-        @postcondition: The status element whose name is I{name} is created if it did not exist before. Moreover, it has been added to every single reporter's element list of L{reporters<reporters>}.
+        Return the status element which is named by I{name}, but in case of not existing such
+        element it is created as it goes along.
+        @postcondition: The status element whose name is I{name} is created if it did not exist before.
+        Moreover, it has been added to every single reporter's element list of L{reporters<reporters>}.
         @param name: name of the searched status element.
         @type name: C{string}
         @param initial_value: initial value for the status element if its creation is required. Its default values is C{None}.
@@ -379,11 +398,14 @@ class StatusHolder(threading.Thread):
 
     def get_or_create_status2d_element(self, name, size, initial_value=None, expire_time=None):
         """
-        Return the status element which is named by I{name}, but in case of not existing such element it is created as it goes along.
-        @postcondition: The status element whose name is I{name} is created if it did not exist before. Moreover, it has been added to every single reporter's element list of L{reporters<reporters>}.
+        Return the status element which is named by I{name}, but in case of not existing such element
+        it is created as it goes along.
+        @postcondition: The status element whose name is I{name} is created if it did not exist before.
+        Moreover, it has been added to every single reporter's element list of L{reporters<reporters>}.
         @param name: name of the searched status element.
         @type name: C{string}
-        @param initial_value: initial value for the status element if its creation is required. Its default values is C{None}.
+        @param initial_value: initial value for the status element if its creation is required. Its
+        default values is C{None}.
         @type initial_value: C{object}
         @raise AssertionError: from L{create_status_element<create_status_element>}
         @raise Exception: from L{create_status_element<create_status_element>}
@@ -408,7 +430,8 @@ class StatusHolder(threading.Thread):
 
     def new2d(self, name, size, initial_value=None, expire_time=None):
         """
-        Create (or get) a 2D status element (shorthand for get_or_create_status2d_element).  Use this for all 2d status elements
+        Create (or get) a 2D status element (shorthand for get_or_create_status2d_element).
+        Use this for all 2d status elements
         """
         return self.get_or_create_status2d_element(name, size, initial_value, expire_time)
 
@@ -431,7 +454,8 @@ class StatusHolder(threading.Thread):
         Get or create a status element from I{key}.
         @param key: dictionary-like kye to address the status, the name of the status.
         @type key: C{string}
-        @return: the status which is addressed by I{key}, or in case of having been created yet, the recently created status with the name I{key}.
+        @return: the status which is addressed by I{key}, or in case of having been created yet,
+        the recently created status with the name I{key}.
         @rtype: L{StatusElement<StatusElement>}
         @raise AssertionError: from L{get_or_create_status_element<get_or_create_status_element>}.
         @raise Exception: from L{get_or_create_status_element<get_or_create_status_element>}.
@@ -448,7 +472,8 @@ class StatusHolder(threading.Thread):
         @param element: element to be removed
         @type element: L{StatusElement<StatusElement>}
         @raise AssertionError: the parameter I{element} was C{None}.
-        @raise NoSuchElementException: the I{element}, which is addressed by its name, was not found in the L{elements<elements>}.
+        @raise NoSuchElementException: the I{element}, which is addressed by its name, was not found
+        in the L{elements<elements>}.
         """
         assert element
         with self._status_lock:
@@ -477,7 +502,9 @@ class StatusHolder(threading.Thread):
 
     def add_event(self, event):
         """
-        Add the I{event} to the L{events<events>} list of the status holder. Besides, the L{_add_element<_add_element>} is called, so I{event} is saved into the L{elements<elements>} dictionary and into every single reporters' element list of L{reporters<reporters>}.
+        Add the I{event} to the L{events<events>} list of the status holder. Besides, the
+        L{_add_element<_add_element>} is called, so I{event} is saved into the L{elements<elements>}
+        dictionary and into every single reporters' element list of L{reporters<reporters>}.
         @param event: event to be saved.
         @type event: L{EventElement<EventElement>}
         @note: This method is synchronized by C{Lock}, therefore it is thread-safe.
@@ -511,8 +538,10 @@ class StatusHolder(threading.Thread):
 
     def create_and_add_event(self, name, values=[]):
         """
-        Create and add the event which is addressed by I{name}, by calling L{create_event<create_event>} and L{add_event<add_event>} afterwards.
-        @postcondition: A event called I{name} with the I{values} has been added to the L{events<events>} list, L{elements<elements>} dictionary and every single reporters' element list of L{reporters<reporters>}.
+        Create and add the event which is addressed by I{name}, by calling L{create_event<create_event>} and
+        L{add_event<add_event>} afterwards.
+        @postcondition: A event called I{name} with the I{values} has been added to the L{events<events>}
+        list, L{elements<elements>} dictionary and every single reporters' element list of L{reporters<reporters>}.
         @param name: name of the event to be created
         @type name: C{string}
         @param values: list of values for the event. Its default value is '[]'.
@@ -539,14 +568,17 @@ class StatusHolder(threading.Thread):
         @param rng: range to be saved.
         @type range: L{RangeElement<RangeElement>}
         @note: This method is synchronized by C{Lock}, therefore it is thread-safe.
-        @postcondition: I{range} has been added to the L{events<events>} list, L{elements<elements>} dictionary and into every single reporters' element list of L{reporters<reporters>}.
+        @postcondition: I{range} has been added to the L{events<events>} list, L{elements<elements>}
+        dictionary and into every single reporters' element list of L{reporters<reporters>}.
         """
         self.add_event(rng)
 
     def create_and_add_range(self, name, values=[]):
         """
-        Create and add the range which is addressed by I{name}, by calling L{create_range<create_range>} and L{add_range<add_range>} afterwards.
-        @postcondition: A range called I{name} with the I{values} has been added to the L{events<events>} list, L{elements<elements>} dictionary and every single reporters' element list of L{reporters<reporters>}.
+        Create and add the range which is addressed by I{name}, by calling L{create_range<create_range>}
+        and L{add_range<add_range>} afterwards.
+        @postcondition: A range called I{name} with the I{values} has been added to the L{events<events>}
+        list, L{elements<elements>} dictionary and every single reporters' element list of L{reporters<reporters>}.
         @param name: name of the range to be created
         @type name: C{string}
         @param values: list of values for the range. Its default value is '[]'.
@@ -567,7 +599,8 @@ class StatusHolder(threading.Thread):
 
     def get_events(self):
         """
-        Return a list of all the collected events until now, reseting the L{events<events>} list afterwards. This method is provided especially for the reporters.
+        Return a list of all the collected events until now, reseting the L{events<events>} list afterwards.
+        This method is provided especially for the reporters.
         @postcondition: the L{events<events>} list is set to [].
         @return: a list of events.
         @rtype: C{list} of L{EventElement}
@@ -609,7 +642,8 @@ class BaseElement:
     @ivar type: type of element class, in this case it is "BaseElement"
     @type type: C{string}
 
-    @ivar timestamp: time when the object was created. Time is expressed as a floating point number, in seconds, since the epoch, in UTC.
+    @ivar timestamp: time when the object was created. Time is expressed as a floating point number,
+    in seconds, since the epoch, in UTC.
     @type timestamp: C{float}
     @ivar status_holder: reference to the L{status holder<StatusHolder>} which keeps this element.
     @type timestamp: L{statusHolder<StatusHolder>}
@@ -628,12 +662,14 @@ class BaseElement:
 
     def __init__(self, name, status_holder, timestamp=None, expire_time=None):
         """
-        Create a new element. It must be called by L{create_status_element()<StatusHolder.create_status_element>} throught a status holder object.
+        Create a new element. It must be called by L{create_status_element()<StatusHolder.create_status_element>}
+        throught a status holder object.
         @param name: name of the element
         @type name: C{string}
         @param status_holder: reference to the status holder which keeps this element
         @type status_holder: L{statusHolder<StatusHolder>}
-        @param timestamp: time when this element was created. Its default value is the actual time when the object was initialized.
+        @param timestamp: time when this element was created. Its default value is the actual time
+        when the object was initialized.
         @type timestamp: C{float}
         @postcondition: all the field of the object has been initialized.
         @raise AssertionError: the I{name} was C{None}.
@@ -791,7 +827,9 @@ class BaseElement:
 
     def add_callback(self, callback, *args):
         """
-        Add a callback that will be executed when this element is changed. The callback function will be passed the status element itself and any given arguments too. If the I{callback} function already exists in the list with the same arguments I{args}, nothing is done.
+        Add a callback that will be executed when this element is changed. The callback
+        function will be passed the status element itself and any given arguments too.
+        If the I{callback} function already exists in the list with the same arguments I{args}, nothing is done.
         @param callback: name of the function to be called.
         @type callback: C{string}
         @param args: list of arguments of the function I{callback}.
@@ -806,7 +844,10 @@ class BaseElement:
 
     def add_limited_callback(self, callback, *args):
         """
-        Add a callback that will be executed when this element is changed according to downsample specification. The callback function will be passed the status element itself and any given arguments too. If the I{callback} function already exists in the list with the same arguments I{args}, nothing is done.
+        Add a callback that will be executed when this element is changed according to
+        downsample specification. The callback function will be passed the status element
+        itself and any given arguments too. If the I{callback} function already exists in
+        the list with the same arguments I{args}, nothing is done.
         @param callback: name of the function to be called.
         @type callback: C{string}
         @param args: list of arguments of the function I{callback}.
@@ -886,9 +927,12 @@ class BaseElement:
 
     def add_event_on_value(self, value, event, once=False):
         """
-        Add a threading.Event (or similar - needs set() function) that will be set when the value of this status element becomes the given value.
+        Add a threading.Event (or similar - needs set() function) that will be set when the value
+        of this status element becomes the given value.
         @note: This method is synchronized by C{Lock}, therefore it is thread-safe.
-        @postcondition: the I{event} and its modifier I{once} have been saved into the L{on_value_events<on_value_events>} dictionary, indexed by the I{value}, so when this value is reached by the element, the event will be called as many time as I{once} points out.
+        @postcondition: the I{event} and its modifier I{once} have been saved into the L{on_value
+        events<on_value_events>} dictionary, indexed by the I{value}, so when this value is
+        reached by the element, the event will be called as many time as I{once} points out.
         @param value: the value which the element must reach to set the event.
         @type value: C{object}
         @param event: event to be set if the value is hit.
@@ -1025,7 +1069,7 @@ class StatusElement(BaseElement):
         self.value = initial_value
         self.aux = None
 
-    def set_value(self, value, force_update=False, timestamp=None, async=False, aux=None):
+    def set_value(self, value, force_update=False, timestamp=None, _async=False, aux=None):
         """
         Update the value of this status element
         """
@@ -1034,7 +1078,7 @@ class StatusElement(BaseElement):
         else:
             self.timestamp = timestamp
         self.aux = aux
-        if async:
+        if _async:
             self.status_holder.async_set_value(self, value, force_update, timestamp)
             return
 
@@ -1050,7 +1094,7 @@ class StatusElement(BaseElement):
     def __float__(self):
         return float(self.value)
 
-    def inc(self, value=1, async=False, commit=True, timestamp=None):
+    def inc(self, value=1, _async=False, commit=True, timestamp=None):
         """
         Will only work for numbers!
         """
@@ -1062,7 +1106,7 @@ class StatusElement(BaseElement):
         else:
             self.timestamp = time.time()
 
-        if async:
+        if _async:
             with self._status_lock:
                 self.value += value
                 if commit:
@@ -1234,7 +1278,7 @@ class Status2DElement(StatusElement):
                 print("% 5s" % self.value[x][y],)
             print()
 
-    def set_value(self, pos, value, force_update=False, timestamp=None, async=False, aux=None, expand=True):
+    def set_value(self, pos, value, force_update=False, timestamp=None, _async=False, aux=None, expand=True):
         """
         Update the value of the x,y component of this status element
         """
@@ -1265,7 +1309,7 @@ class Status2DElement(StatusElement):
             self.timestamp = timestamp
         self.aux = aux
 
-        if async:
+        if _async:
             raise Exception("Async updates not supported for 2d staus yet")
             # self.status_holder.async_set_value(self, value, force_update, timestamp)
             # return

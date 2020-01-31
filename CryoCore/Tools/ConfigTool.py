@@ -247,6 +247,7 @@ if __name__ == "__main__":
             if len(args) != 2:
                 usage()
             try:
+                print(cfg, "Removing", args[1])
                 cfg.remove(args[1], version=options.version)
             except:
                 pass

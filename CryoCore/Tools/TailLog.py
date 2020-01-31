@@ -62,11 +62,12 @@ class TailLog(mysql):
     Allow some basic filtering too
     """
 
-    def __init__(self, name="TailLog", default_show=True):
+    def __init__(self, name="TailLog", default_show=True, clock=None):
         """
         default_show: should I print new messages by default
         """
         self.name = name
+        self.clock = clock
 
         cfg = API.get_config("System.LogDB")
         mysql.__init__(self, self.name, config=cfg, can_log=False, is_direct=True)
@@ -116,7 +117,7 @@ class TailLog(mysql):
         reg = re.compile(r)
         # Search in text, module, logger
         while not API.api_stop_event.isSet():
-            SQL = "SELECT * FROM log WHERE id> %s ORDER BY id LIMIT 10000"
+            SQL = "SELECT * FROM log WHERE id>%s ORDER BY id LIMIT 10000"
             cursor = self._execute(SQL, [last_id])
             last_lines = []
             should_print = 0
@@ -200,7 +201,10 @@ class TailLog(mysql):
         elif options.all:
             last_id = 0
         else:
-            cursor = self._execute("SELECT MAX(id) FROM log")
+            if self.clock:
+                cursor = self._execute("SELECT MAX(id) FROM log WHERE time<%s", [self.clock.pos()])
+            else:
+                cursor = self._execute("SELECT MAX(id) FROM log")
             row = cursor.fetchone()
             if row:
                 if not row[0]:
@@ -211,8 +215,16 @@ class TailLog(mysql):
                 print("No log entries, tailing from now")
                 last_id = 0
 
+        last_pos = 0
+        start_id = last_id
         while True:
             try:
+                t = ""
+                if self.clock:
+                    if self.clock.pos() < last_pos:
+                        last_id = start_id
+                    last_pos = self.clock.pos()
+                    t = " AND time<%f " % last_pos
                 rows = 0
                 if options.verbose:
                     print("Searching")
@@ -220,10 +232,10 @@ class TailLog(mysql):
                     SQL = args[0] + " AND id>%s"
                     params = [last_id]
                 elif search:
-                    SQL = "SELECT * FROM log WHERE id>%s AND level>=%s AND " + search + " ORDER BY id"
+                    SQL = "SELECT * FROM log WHERE id>%s AND level>=%s AND " + t + search + " ORDER BY id"
                     params = [last_id, API.log_level_str[options.level]]
                 else:
-                    SQL = "SELECT * FROM log WHERE id>%s AND level>=%s ORDER BY id"
+                    SQL = "SELECT * FROM log WHERE id>%s AND level>=%s" + t + " ORDER BY id"
                     params = [last_id, API.log_level_str[options.level]]
 
                 SQL += " LIMIT 10000"
@@ -312,14 +324,14 @@ class TailLog(mysql):
 
             level_color = {API.log_level_str["DEBUG"]: "yellow",
                            API.log_level_str["INFO"]: "green",
-                           API.log_level_str["WARNING"]: "blue",
+                           API.log_level_str["WARNING"]: "red",
                            API.log_level_str["ERROR"]: "red",
                            API.log_level_str["FATAL"]: "red",
                            API.log_level_str["CRITICAL"]: "red"}
 
             text_color = {API.log_level_str["DEBUG"]: "green",
                           API.log_level_str["INFO"]: "cyan",
-                          API.log_level_str["WARNING"]: "blue",
+                          API.log_level_str["WARNING"]: "yellow",
                           API.log_level_str["ERROR"]: "red",
                           API.log_level_str["FATAL"]: "red",
                           API.log_level_str["CRITICAL"]: "red"}
@@ -430,6 +442,9 @@ if __name__ == "__main__":
     parser.add_argument("--tofile", type=str, dest="tofile", default="", help="Dump logs to a given file name, not terminal")
     parser.add_argument("--maxfilesize", type=str, dest="maxfilesize", default=None, help="Maximum filesize in MB")
 
+    # parser.add_argument("--motion", dest="motion", action="store_true", default=False,
+    #                     help="Replay a mission according to motions")
+
     try:
         if "argcomplete" in sys.modules:
             argcomplete.autocomplete(parser)
@@ -448,7 +463,17 @@ if __name__ == "__main__":
         if len(db_cfg) > 0:
             API.set_config_db(db_cfg)
 
-        tail = TailLog()
+        clock = None
+        if 0:  # options.motion:
+            try:
+                import MCorp
+                # app = MCorp.App("6459748540093085075", API.api_stop_event)
+                app = MCorp.App("5479276526614340281", API.api_stop_event)
+                clock = app.motions["live"]
+            except Exception as e:
+                print("Failed to use motion:", e)
+
+        tail = TailLog(clock=clock)
 
         if options.clear_all:
             if _should_delete(options, "DELETE all logs"):

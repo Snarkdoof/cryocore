@@ -83,7 +83,11 @@ class GlobalDBConfig:
                     "db_user": "cc",
                     "db_password": u"Kjøkkentrappene bestyrer sørlandske databehandlingsrutiner",
                     "db_compress": False,
-                    "max_connections": 5}
+                    "max_connections": 5,
+                    "ssl.enabled": False,
+                    "ssl.key": None,
+                    "ssl.ca": None,
+                    "ssl.cert": None}
 
         # Check in the user's home dir
         userconfig = os.path.expanduser("~/.cryoconfig")
@@ -279,8 +283,43 @@ def get_config(name=None, version="default", db_cfg=None):
     return CONFIGS[(name, version)]
 
 
+def set_log_level(loglevel):
+    if loglevel in log_level:
+        ll = loglevel
+    else:
+        if loglevel not in log_level_str:
+            raise Exception("Bad loglevel '%s', must be one of %s" % (loglevel, log_level_str.keys()))
+        ll = log_level_str[loglevel]
+
+    global DEFAULT_LOGLEVEL
+    global LOG_DESTINATION
+    DEFAULT_LOGLEVEL = ll
+    if LOG_DESTINATION:
+        LOG_DESTINATION.level = ll
+
+
+class PrefixedLogger(logging.getLoggerClass()):
+
+    def __init__(self, name, level=0, prefix=None):
+        logging.Logger.__init__(self, name, level)
+        self.prefix = prefix
+
+    def _log(self, level, msg, args, exc_info=None, extra=None, prefix=None):
+        if not prefix and self.prefix:
+            prefix = self.prefix
+
+        if prefix:
+            if callable(prefix):
+                msg = "<%s> " % prefix() + msg
+            else:
+                msg = "<%s> " % prefix + msg
+        return super(PrefixedLogger, self)._log(level, msg, args, exc_info, extra)
+
+logging.setLoggerClass(PrefixedLogger)
+
+
 # @logTiming
-def get_log(name):
+def get_log(name, prefix=None):
     global LOGS
     global LOG_DESTINATION
     if not LOG_DESTINATION:
@@ -289,6 +328,7 @@ def get_log(name):
     if name not in LOGS:
             LOGS[name] = logging.getLogger(name)
             LOGS[name].propagate = False
+            LOGS[name].prefix = prefix
             LOGS[name].setLevel(DEFAULT_LOGLEVEL)
             LOGS[name].addHandler(LOG_DESTINATION)
     return LOGS[name]
