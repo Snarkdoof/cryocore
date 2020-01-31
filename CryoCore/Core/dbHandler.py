@@ -1,8 +1,6 @@
 #!/usr/bin/env python
-
 import logging
 import logging.handlers
-import time
 import threading
 import os
 from CryoCore.Core import API, InternalDB
@@ -35,6 +33,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
 
     """
+    MAX_LEN = 50000
 
     def __init__(self, level=logging.NOTSET, aux_filename="/tmp/dbHandler_exceptions.txt"):
         """
@@ -224,7 +223,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
                 toRecord.append(program_stack_string)
             else:
                 message = (str(record.getMessage()) + program_stack_string.replace("'", "\""))
-                toRecord.append(message)
+                toRecord.append(message[:self.MAX_LEN])
 
             self.tasks.put(toRecord)
 
