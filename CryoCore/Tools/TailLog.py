@@ -300,7 +300,7 @@ class TailLog(mysql):
             "line": row[LINE],
             "logger": row[LOGGER],
             "level": API.log_level[row[LEVEL]],
-            "text": row[TEXT],
+            "text": text,
         }
 
         if pbl:
