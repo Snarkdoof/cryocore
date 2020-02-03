@@ -288,6 +288,12 @@ class TailLog(mysql):
                 target.truncate()
                 target.write(data)
 
+        if not row[TEXT].startswith("<pbl"):
+            text = row[TEXT]
+            pbl = None
+        else:
+            pbl, text = row[TEXT][4:].split("> ", 1)
+
         item = {
             "ts": row[TIMESTAMP],
             "module": row[MODULE],
@@ -296,6 +302,10 @@ class TailLog(mysql):
             "level": API.log_level[row[LEVEL]],
             "text": row[TEXT],
         }
+
+        if pbl:
+            item["pebble"] = pbl
+
         target.write(json.dumps(item) + "\n")
         target.flush()
 
