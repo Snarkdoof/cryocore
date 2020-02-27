@@ -1129,6 +1129,8 @@ class StatusElement(BaseElement):
         """
         self.timestamp = time.time()
         with self._status_lock:
+            if self.value is None:
+                self.value = 0
             try:
                 self.value -= value
                 self._updated()
