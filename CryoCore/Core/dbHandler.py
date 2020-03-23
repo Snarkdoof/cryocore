@@ -52,7 +52,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
         self.level = level
         self._formatter = logging.Formatter()
-
+        self._the_funk = "func"
         logging.Handler.__init__(self, self.level)
 
         self.cfg = API.get_config("System.LogDB")
@@ -111,6 +111,11 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         if API.api_auto_init:
             self._init_sqls(init_statements)
 
+        try:
+            self._execute("SELECT count(func) from log")
+        except:
+            self._the_funk = "function"
+
         # Thread entry point
         while not self.stop_event.is_set():
             self.get_log_entry_and_insert(True, 1.0)
@@ -121,7 +126,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
     def get_log_entry_and_insert(self, should_block, desired_timeout):
 
-        SQL = "INSERT INTO log (logger, level, module, line, func, time, msecs, message) VALUES "
+        SQL = "INSERT INTO log (logger, level, module, line, " + self._the_funk + ", time, msecs, message) VALUES "
         params = []
         while True:
             try:
