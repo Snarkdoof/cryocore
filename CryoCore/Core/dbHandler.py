@@ -78,7 +78,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
         self.tasks = queue.Queue()
         # We use two internal events to control the handler.
-        # The stop_event is set in the handler's close() function,
+        # The stop_event is set in the handler's close() func,
         # which in turn will wait for complete_event to be set.
         self.stop_event = API.api_stop_event
         self.complete_event = threading.Event()
@@ -101,7 +101,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
                            "time DOUBLE, "
                            "msecs FLOAT, "
                            "line INTEGER UNSIGNED NOT NULL, "
-                           "function VARCHAR(255), "
+                           "func VARCHAR(255), "
                            "module VARCHAR(255) NOT NULL, "
                            "logger VARCHAR(255) NOT NULL)",
 
@@ -121,7 +121,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
     def get_log_entry_and_insert(self, should_block, desired_timeout):
 
-        SQL = "INSERT INTO log (logger, level, module, line, function, time, msecs, message) VALUES "
+        SQL = "INSERT INTO log (logger, level, module, line, func, time, msecs, message) VALUES "
         params = []
         while True:
             try:
@@ -152,7 +152,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
     def close(self):
         """
-        Close the C{logging.Handler} object. It closes both the C{sqlite3.Connection} L{con<DbHandler.con>} and the C{sqlite3.Cursor} L{cur<DbHandler.cur>} variables, and calls the base class close function.
+        Close the C{logging.Handler} object. It closes both the C{sqlite3.Connection} L{con<DbHandler.con>} and the C{sqlite3.Cursor} L{cur<DbHandler.cur>} variables, and calls the base class close func.
         @postcondition: The object variables L{con<DbHandler.con>} and L{cur<DbHandler.cur>} are closed, therefore they are no longer available.
         """
         # self.stop_event.set()
@@ -171,8 +171,8 @@ class DbHandler(logging.Handler, InternalDB.mysql):
                 - "ERROR"
                 - "CRITICAL"
             - Line number. The line where the event was generated. In case of not having been defined, 0 is saved.
-            - Function name. The name of the function which called the logger. If it was called from none function, "<module>" is saved. Furthermore, in case of not having been defined, "<no_funcName>" is saved.
-            - Created time. When the log event was created. This field was returned by the C{time.time()} function. Its precision is second. In case of not having been defined, 0.0 is saved.
+            - func name. The name of the func which called the logger. If it was called from none func, "<module>" is saved. Furthermore, in case of not having been defined, "<no_funcName>" is saved.
+            - Created time. When the log event was created. This field was returned by the C{time.time()} func. Its precision is second. In case of not having been defined, 0.0 is saved.
             - Msecs time. The precise miliseconds when the log event was generated. In case of not having been defined, 0.0 is saved.
             - Message. The messages which was included when the log event was generated. In case of not having been defined, "<no_message>" is saved.
         @param record: This is the object which is provided with all the data from the logging event. The data which are accessed to be saved into the table log of the database.
