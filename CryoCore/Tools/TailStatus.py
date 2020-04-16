@@ -27,6 +27,58 @@ POSX = 7
 POSY = 8
 
 
+class CSVExporter:
+    def __init__(self, filename, parameters, options):
+        self._target = open(filename, "w")
+        self._parameters = parameters
+        self._options = options
+        self._lastts = None
+        self._values = {}
+        self._write_header()
+        self._last_flush = 0  # Flush periodically in case we follow
+
+    def _write_header(self):
+        self._target.write("Time," + ",".join(self._parameters) + "\n")
+
+    def close(self):
+        self._flush()
+        self._target.close()
+
+    def __del__(self):
+        try:
+            self.close()
+        except:
+            pass
+
+    def _flush(self):
+        s = "%s," % self._lastts
+        for p in self._parameters:
+            c, n = p.split(":")
+            if (c, n) in self._values:
+                s += "%s," % self._values[(c, n)]
+            else:
+                s += ","
+        self._target.write(s[:-1] + "\n")
+
+        if not self._options.fill:
+            self._values = {}
+
+        if time.time() - self._last_flush > 1.0:
+            self._target.flush()
+            self._last_flush = time.time()
+
+    def print_row(self, row, is2D):
+        t = row[TIMESTAMP]
+        channel = row[CHANNEL]
+        name = row[NAME]
+        value = row[VALUE]
+        # We write if the difference in timestamp is more than .01 seconds, which we regard as "simultaneous"
+        if self._lastts is not None and abs(t - self._lastts) > 0.01:
+            self._flush()
+        self._lastts = t
+        self._values[(channel, name)] = value
+
+
 class TailStatus(mysql):
     """
 
@@ -34,7 +86,7 @@ class TailStatus(mysql):
     Allow some basic filtering too
     """
 
-    def __init__(self, name, options, default_show=True):
+    def __init__(self, name, options, default_show=True, clock=None):
         """
         default_show: should I print new messages by default
         """
@@ -43,6 +95,7 @@ class TailStatus(mysql):
 
         self.name = name
         self.options = options
+        self.clock = clock
         cfg = API.get_config("System.Status.MySQL")
         mysql.__init__(self, self.name, cfg, is_direct=True)
 
@@ -67,27 +120,81 @@ class TailStatus(mysql):
         self._execute("TRUNCATE status_channel")
         print("ALL CLEARED")
 
-    def print_status(self, follow, max_lines=100):
+    def get_param_id(self, channel, name):
+        """
+        Return the parameter ID of the given channel, name
+        """
+        SQL = "SELECT paramid FROM status_parameter,status_channel WHERE status_channel.name=%s AND status_parameter.name=%s AND status_parameter.chanid=status_channel.chanid"
+        cursor = self._execute(SQL, (channel, name))
+        if cursor.rowcount == 0:
+            raise Exception("Missing parameter %s.%s" % (channel, name))
+        row = cursor.fetchone()
+        if row is None:
+            raise Exception("Missing parameter '%s' in channel '%s'" % (name, channel))
+        return row[0]
+
+    def print_status(self, options):
         """
         Loop and print status. Does never return - kill it.
 
         Prints the last 100 updates and tails from then on
         """
-        cursor = self._execute("SELECT MAX(id) FROM status")
-        row = cursor.fetchone()
-        if row[0]:
-            last_id = max(row[0] - max_lines, 0)
-        else:
-            print("No status entries, tailing from now")
-            last_id = 0
+        last_id = None
+        startts = options.since
+        if self.clock:
+            startts = self.clock.pos()
+        if startts:
+            SQL = "SELECT MIN(id) FROM status WHERE timestamp>%s"
+            if float(startts) < 0:
+                args = [time.time() + float(startts)]
+            else:
+                args = [float(startts)]
+            cursor = self._execute(SQL, args)
+            row = cursor.fetchone()
+            if row:
+                last_id = row[0]
+        if not last_id:
+            SQL = "SELECT MAX(id) FROM status"
+            cursor = self._execute(SQL)
+            row = cursor.fetchone()
+            if row[0]:
+                if not options.since:
+                    last_id = max(row[0] - options.lines, 0)
+                else:
+                    last_id = row[0]
+            else:
+                print("No status entries, tailing from now")
+                last_id = 0
 
         cursor = self._execute("SELECT MAX(id) FROM status2d")
         row = cursor.fetchone()
         if row[0]:
-            last_id_2d = max(row[0] - max_lines, 0)
+            last_id_2d = max(row[0] - options.lines, 0)
         else:
             last_id_2d = 0
 
+        params = []
+        for p in options.parameters:
+            if p.find(":") == -1:
+                raise Exception("Bad parameter specification '%s', must be channel:paramname" % p)
+            chan, param = p.split(":", 1)
+            paramid = self.get_param_id(chan, param)
+            params.append(paramid)
+        if len(options.parameters) == 0:
+            additional = ""
+            additional2d = ""
+        else:
+            additional = " AND (" + ("status.paramid=%s OR " * len(options.parameters))[:-4] + ")"
+            additional2d = " AND (" + ("status2d.paramid=%s OR " * len(options.parameters))[:-4] + ")"
+
+        if options.timeseries:
+            exporter = CSVExporter(options.timeseries, options.parameters, options)
+        else:
+            exporter = None
+
+        start_id = last_id
+        start_id_2d = last_id_2d
+        last_pos = 0
         while True:
             try:
                 def process_results(c, max_id, is2D=None):
@@ -97,40 +204,60 @@ class TailStatus(mysql):
                         if row[ID] > max_id:
                             max_id = row[ID]
 
-                        do_print = self.default_show
+                        # do_print = self.default_show
+                        do_print = True
+                        if len(self.filters) > 0:
+                            do_print = False
 
                         # Any matches to hide it?
                         for filter in self.filters:
                             try:
                                 if filter(row):
                                     do_print = True
-                                else:
-                                    do_print = False
-                                if do_print != self.default_show:
-                                    break  # Found a match, stop now
+                                    break
                             except Exception as e:
                                 print("Exception executing filter " + str(filter) + ":", e)
                                 import traceback
                                 traceback.print_exc()
+
                         if do_print:
-                            self._print_row(row, is2D)
+                            if exporter:
+                                exporter.print_row(row, is2D, options.words)
+                            else:
+                                self._print_row(row, is2D, options.words)
                     return (r, max_id)
                 rows = 0
-                SQL = "SELECT id,timestamp,status_parameter2d.name,status_channel.name,value,sizex,sizey,posx,posy FROM status2d,status_parameter2d,status_channel WHERE status2d.chanid=status_channel.chanid AND status2d.paramid=status_parameter2d.paramid AND id>%s ORDER BY id"
-                cursor = self._execute(SQL,
-                                       [last_id_2d])
+                t = ""
+                if self.clock:
+                    if self.clock.pos() < last_pos:
+                        last_id = start_id
+                        last_id_2d = start_id_2d
+                    last_pos = self.clock.pos()
+                    t = "AND timestamp<%f " % last_pos
+                SQL = "SELECT id,timestamp,status_parameter2d.name,status_channel.name,value,sizex,sizey,posx,posy "\
+                      "FROM status2d,status_parameter2d,status_channel "\
+                      "WHERE status2d.chanid=status_channel.chanid " + t + \
+                      "AND status2d.paramid=status_parameter2d.paramid AND id>%s" + additional2d + " ORDER BY id"
+                a = [last_id_2d]
+                a.extend(params)
+                cursor = self._execute(SQL, a)
                 (r, i) = process_results(cursor, last_id_2d, True)
                 rows += r
                 last_id_2d = i
 
-                SQL = "SELECT id,timestamp,status_parameter.name,status_channel.name,value FROM status,status_parameter,status_channel WHERE status.chanid=status_channel.chanid AND status.paramid=status_parameter.paramid AND id>%s ORDER BY id"
-                cursor = self._execute(SQL,
-                                       [last_id])
+                SQL = "SELECT id,timestamp,status_parameter.name,status_channel.name,value "\
+                      "FROM status,status_parameter,status_channel "\
+                      "WHERE status.chanid=status_channel.chanid " + t + \
+                      "AND status.paramid=status_parameter.paramid AND "\
+                      "id>%s" + additional + " ORDER BY id"
+                a = [last_id]
+                a.extend(params)
+                cursor = self._execute(SQL, a)
                 (r, i) = process_results(cursor, last_id)
                 rows += r
                 last_id = i
 
-                if not follow:
+                if not options.follow:
                     return
 
                 if rows == 0:
@@ -139,10 +266,11 @@ class TailStatus(mysql):
             except Exception:
                 import traceback
                 traceback.print_exc()
+                raise SystemExit()
             finally:
                 pass
 
-    def _print_row(self, row, is2D):
+    def _print_row(self, row, is2D, words=None):
 
         # Use a bit of color to make it PRETTY! :D
         def colored(text, color):
@@ -168,9 +296,21 @@ class TailStatus(mysql):
         if (is2D):
             size = row[SIZEX], row[SIZEY]
             pos = row[POSX], row[POSY]
-            print(t + " [%s] %s = %s" % (channel, name, value), pos, size)
+            line = t + " [%s] %s = %s" % (channel, name, value), pos, size 
         else:
-            print(t + " [%s] %s = %s" % (channel, name, value))
+            line = t + " [%s] %s = %s" % (channel, name, value)
+
+        if words:
+            # Filter on words
+            do_print = False
+            for word in words:
+                if line.find(word) > -1:
+                    do_print = True
+                    break
+            if do_print:
+                print(line)
+        else:
+            print(line)
 
     def print_all(self, channel=None):
         SQL = "SELECT * FROM status"
@@ -265,7 +405,8 @@ if __name__ == "__main__":
             return res
         parser = ArgumentParser()
 
-        parser.add_argument('parameters', type=str, nargs='*', help='Filter upates on channel:name (use autocomplete)').completer = completer
+        parser.add_argument('words', type=str, nargs='*',
+                            help='Only show lines containing these ORed words')  # .completer = completer
 
         parser.add_argument("--clear-all", action="store_true",
                             default=False,
@@ -292,6 +433,17 @@ if __name__ == "__main__":
         parser.add_argument("--bw", action="store_true", default=False,
                             help="Black and white output")
 
+        parser.add_argument("--since", dest="since",
+                            help="List/export since a given time - negative is regarded as relative from now")
+        parser.add_argument("--timeseries", dest="timeseries",
+                            help="Export a time series for the listed parameters & time to the given file name")
+        parser.add_argument("--fill", action="store_true",
+                            help="When exporting timeseries, the last value from all listed instruments is used "
+                                 "whenever a value is flushed. If not given, non-aligning items are left empty")
+
+        parser.add_argument("--motion", dest="motion", action="store_true", default=False,
+                            help="Replay a mission according to motions")
+
         if "argcomplete" in sys.modules:
             argcomplete.autocomplete(parser)
         options = parser.parse_args()
@@ -306,11 +458,22 @@ if __name__ == "__main__":
         if options.db_password:
             db_cfg["db_password"] = options.db_password
         options.lines = int(options.lines)
+        options.parameters = []
 
         if len(db_cfg) > 0:
             API.set_config_db(db_cfg)
 
-        tail = TailStatus("TailStatus", options)
+        clock = None
+        if options.motion:
+            try:
+                import MCorp
+                # app = MCorp.App("6459748540093085075", API.api_stop_event)
+                app = MCorp.App("5479276526614340281", API.api_stop_event)
+                clock = app.motions["live"]
+            except Exception as e:
+                raise SystemExit("Failed to use motion:", e)
+
+        tail = TailStatus("TailStatus", options, clock=clock)
 
         if not options.bw:
             print("\033[40;97m")  # Go black
@@ -348,16 +511,22 @@ if __name__ == "__main__":
                 if r.startswith(":"):
                     r = ".*" + r
                 opts.append(re.compile(r))
-            options.parameters = opts
+            options.filters = opts
 
             def filter_params(row):
                 l = ":".join([row[CHANNEL], row[NAME]])
-                for r in options.parameters:
-                    return r.match(l) is not None
+                match = False
+                for r in options.filters:
+                    if r.match(l):
+                        match = True
+                        break
+
+                    #return r.match(l) is not None
+                return match
 
             tail.add_filter(filter_params)
 
-        tail.print_status(options.follow, options.lines)
+        tail.print_status(options)
 
     finally:
         API.shutdown()

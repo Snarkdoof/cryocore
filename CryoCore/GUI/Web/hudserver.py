@@ -8,9 +8,10 @@ import base64
 from Tools import HUD
 
 
-from Common import API
+from CryoCore import API
 DEBUG = True
 WebSocketMagic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
 
 class HUDServer(threading.Thread):
     def __init__(self):
@@ -19,18 +20,18 @@ class HUDServer(threading.Thread):
         self._socket = None
         self.log = API.get_log("System.HUDServer")
 
-        for res in socket.getaddrinfo('::', 
+        for res in socket.getaddrinfo('::',
                                       4322,
                                       socket.AF_UNSPEC,
                                       socket.SOCK_STREAM, 0,
                                       socket.AI_PASSIVE):
-            
+
             af, socktype, proto, canonname, sa = res
             self._socket = socket.socket(af, socktype, proto)
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._socket.bind(sa)
-            self._socket.listen(5) 
-            self.log.info("WebSocketServer listening on %s"%str(sa))
+            self._socket.listen(5)
+            self.log.info("WebSocketServer listening on %s" % str(sa))
             break
 
         if not self._socket:
@@ -51,18 +52,18 @@ class HUDServer(threading.Thread):
 
         # GET request - get the URL part, which should describe what to get
         path = data[5:data.find(" ", 5)]
-        self.log.info("Request for '%s'"%path)
+        self.log.info("Request for '%s'" % path)
 
-        #if path != "hud":
+        # if path != "hud":
         # TODO: SEND 404
-        
+
         for line in data.split("\n"):
             if line.find(":") > -1:
                 name, val = line.split(":", 1)
                 headers[name.lower()] = val.strip()
-                
-        if DEBUG: 
-            self.log.debug("Got request: '%s'"%str(headers))
+
+        if DEBUG:
+            self.log.debug("Got request: '%s'" % str(headers))
 
         valid = True
         if "upgrade" in list(headers.keys()):
@@ -73,7 +74,7 @@ class HUDServer(threading.Thread):
                 out_headers["Connection"] = "Upgrade"
                 out_headers["Upgrade"] = "websocket"
                 out_headers["Sec-WebSocket-Version"] = 13
-                the_string = headers["sec-websocket-key"] + WebSocketMagic;
+                the_string = headers["sec-websocket-key"] + WebSocketMagic
                 m = hashlib.sha1()
                 m.update(the_string)
                 out_headers["Sec-WebSocket-Accept"] = \
@@ -83,12 +84,12 @@ class HUDServer(threading.Thread):
             valid = False
             self.log.error("Request is not web socket upgrade request")
             response = "HTTP/1.1 400 Unsupported Request"
-            
+
         if response:
             if response[-2:] != "\r\n":
                 response += "\r\n"
             for key in list(out_headers.keys()):
-                response += "%s: %s\r\n"%(key, out_headers[key])
+                response += "%s: %s\r\n" % (key, out_headers[key])
             response += "\r\n"
             sock.send(response)
 
@@ -108,7 +109,7 @@ class HUDServer(threading.Thread):
             if len(r) == 0:
                 continue
 
-            s,addr = self._socket.accept()
+            s, addr = self._socket.accept()
             if self._handshake(s):
                 hud.add_socket(s)
 

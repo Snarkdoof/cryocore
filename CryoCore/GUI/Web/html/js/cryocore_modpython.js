@@ -53,8 +53,7 @@ var CryoCore = function(_CRYOCORE_) {
       if (is_refreshing) return;
       is_refreshing = true;
       XHR.get(SERVER + "/JSON.py/cfg_isupdated", {
-          "since": last_config_update,
-          "ts": new Date()/1000
+          "since": last_config_update
         },
         function(data) {
           is_refreshing = false;
@@ -90,8 +89,7 @@ var CryoCore = function(_CRYOCORE_) {
 
     var reload = function(cb) {
       XHR.get(SERVER + "/JSON.py/cfg_serialize", {
-          "root": root,
-          "ts": new Date()/1000
+          "root": root
         },
         function(data) {
           if (root) {
@@ -118,8 +116,7 @@ var CryoCore = function(_CRYOCORE_) {
     var set = function(param, value, opt) {
       XHR.get(SERVER + "/JSON.py/cfg_set", {
           "param": param,
-          "value": value,
-          "ts": new Date()/1000
+          "value": value
         },
         function(res) {
           refresh(options.onchanged);
@@ -227,7 +224,7 @@ var CryoCore = function(_CRYOCORE_) {
     var init = function() {};
 
     var loadParameters = function(onComplete) {
-      XHR.get(SERVER + "/JSON.py/list_channels_and_params_full/", {},
+      XHR.get(SERVER + "/JSON.py/list_channels_and_params_full", {},
         function(data) {
           channels = data.channels;
 
@@ -440,7 +437,7 @@ var CryoCore = function(_CRYOCORE_) {
       }
       var p = {
         params: JSON.stringify(monitored_keys),
-        start: lower_limit, //Math.max(last_update, lower_limit),
+        start: Math.max(last_update, lower_limit),
         end: upper_limit,
         since: last_id,
         since2d: last_id2d
@@ -504,9 +501,9 @@ var CryoCore = function(_CRYOCORE_) {
           // Remove newer data for this instrument (it's most likely a prognosis)
           if (_min_new < _max_current) {
             for (var i = 0; i < historical_data[key].length; i++) {
-              if (historical_data[key][i][0] >= _min_new) {
+              if (historical_data[key][i][0] > _min_new) {
                 // Remove from here out and continue to merge the datasets
-                historical_data[key].splice(i - 1, historical_data[key].length - i);
+                historical_data[key].splice(i, historical_data[key].length - i);
                 break;
               }
             }
@@ -575,6 +572,9 @@ var CryoCore = function(_CRYOCORE_) {
       if (params.length === 0) {
         console.log("Warning: directLoad called with no parameters");
         return;
+      }
+      if (isNaN(startts) || isNaN(endts)) {
+         throw new Error("Can't have NaN as start or endts");
       }
       var p = {
         "params": JSON.stringify(params),
@@ -761,6 +761,39 @@ var CryoCore = function(_CRYOCORE_) {
       });
     };
 
+    var setValue = function(channel, parameter, value, time) {
+      let args = [{
+        channel: channel,
+        parameter: parameter,
+        values: [{
+          ts: time || options.timingObject.pos,
+          value: value
+        }]
+      }];
+      let p = {args: JSON.stringify(args)};
+      var url = "/JSON.py/set";
+      XHR.get(SERVER + url, p, function(retval) {
+          // console.log("Success:", retval);
+        },  
+        function(err) {
+          console.log("Error setting value:", err);
+        }
+      );
+    };
+
+    var setValues = function(args) {
+      // Ensure that args is correct according to CryoCore specs
+      let p = {args: JSON.stringify(args)};
+      var url = "/JSON.py/set";
+      XHR.get(SERVER + url, p, function(retval) {
+          // console.log("Success:", retval);
+        },  
+        function(err) {
+          console.log("Error setting value:", err);
+        }
+      );      
+    }
+
     /* Update every second */
     loadParameters(options.onReady);
     setInterval(update, options.refresh);
@@ -777,6 +810,8 @@ var CryoCore = function(_CRYOCORE_) {
     self.getLastValueTs = getLastValueTs;
     self.getValue = getValue;
     self.getValueTs = getValueTs;
+    self.setValue = setValue;
+    self.setValues = setValues;
     self.findValue = findValue;
     self.directLoad = directLoad;
     self.monitorLastValue = monitorLastValue;

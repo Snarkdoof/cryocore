@@ -14,13 +14,13 @@ apt-get --help > /dev/null
 if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
 	echo "Checking dependencies"
   sudo apt-get update
-	sudo apt-get install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip python-pyinotify python3-pyinotify python-psutil python3-psutil bash-completion
+	sudo apt-get -y install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip python-pyinotify python3-pyinotify python-psutil python3-psutil bash-completion
 
 	sudo activate-global-python-argcomplete
 	
 	echo "Installing mysql connector"
-  sudo pip install mysql-connector==2.1.4
-  sudo pip3 install mysql-connector==2.1.4
+  sudo pip install mysql-connector
+  sudo pip3 install mysql-connector
 	# sudo dpkg -i CryoCore/Install/libs/mysql-connector-python*.deb
 
 	echo "Detecting sensors"

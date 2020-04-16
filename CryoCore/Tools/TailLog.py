@@ -6,6 +6,8 @@ from __future__ import print_function
 import time
 import sys
 import re
+import json
+import os
 
 from argparse import ArgumentParser
 
@@ -60,11 +62,12 @@ class TailLog(mysql):
     Allow some basic filtering too
     """
 
-    def __init__(self, name="TailLog", default_show=True):
+    def __init__(self, name="TailLog", default_show=True, clock=None):
         """
         default_show: should I print new messages by default
         """
         self.name = name
+        self.clock = clock
 
         cfg = API.get_config("System.LogDB")
         mysql.__init__(self, self.name, config=cfg, can_log=False, is_direct=True)
@@ -114,7 +117,7 @@ class TailLog(mysql):
         reg = re.compile(r)
         # Search in text, module, logger
         while not API.api_stop_event.isSet():
-            SQL = "SELECT * FROM log WHERE id> %s ORDER BY id LIMIT 10000"
+            SQL = "SELECT * FROM log WHERE id>%s ORDER BY id LIMIT 10000"
             cursor = self._execute(SQL, [last_id])
             last_lines = []
             should_print = 0
@@ -171,6 +174,14 @@ class TailLog(mysql):
         This function doesn't list all entries, but goes back a few hundred entries
         and tails from there
         """
+        target_file = None
+        if options.tofile:
+            if not os.path.isdir(os.path.dirname(options.tofile)):
+                os.makedirs(os.path.dirname(options.tofile))
+            target_file = open(options.tofile, "a+")
+            options.since = time.ctime()
+            options.follow = True
+
         search = ""
         if options.module:
             search += "UPPER(module)='%s' " % options.module.upper()
@@ -190,7 +201,10 @@ class TailLog(mysql):
         elif options.all:
             last_id = 0
         else:
-            cursor = self._execute("SELECT MAX(id) FROM log")
+            if self.clock:
+                cursor = self._execute("SELECT MAX(id) FROM log WHERE time<%s", [self.clock.pos()])
+            else:
+                cursor = self._execute("SELECT MAX(id) FROM log")
             row = cursor.fetchone()
             if row:
                 if not row[0]:
@@ -201,8 +215,16 @@ class TailLog(mysql):
                 print("No log entries, tailing from now")
                 last_id = 0
 
+        last_pos = 0
+        start_id = last_id
         while True:
             try:
+                t = ""
+                if self.clock:
+                    if self.clock.pos() < last_pos:
+                        last_id = start_id
+                    last_pos = self.clock.pos()
+                    t = " AND time<%f " % last_pos
                 rows = 0
                 if options.verbose:
                     print("Searching")
@@ -210,10 +232,10 @@ class TailLog(mysql):
                     SQL = args[0] + " AND id>%s"
                     params = [last_id]
                 elif search:
-                    SQL = "SELECT * FROM log WHERE id>%s AND level>=%s AND " + search + " ORDER BY id"
+                    SQL = "SELECT * FROM log WHERE id>%s AND level>=%s AND " + t + search + " ORDER BY id"
                     params = [last_id, API.log_level_str[options.level]]
                 else:
-                    SQL = "SELECT * FROM log WHERE id>%s AND level>=%s ORDER BY id"
+                    SQL = "SELECT * FROM log WHERE id>%s AND level>=%s" + t + " ORDER BY id"
                     params = [last_id, API.log_level_str[options.level]]
 
                 SQL += " LIMIT 10000"
@@ -239,7 +261,10 @@ class TailLog(mysql):
                             print("Exception executing filter " + str(filter) + ":", e)
 
                     if do_print:
-                        self._print_row(options, row)
+                        if target_file:
+                            self._write_to_file(target_file, options, row)
+                        else:
+                            self._print_row(options, row)
 
                 if rows == 0:
                     if not options.follow:
@@ -251,6 +276,38 @@ class TailLog(mysql):
                 print("Oops:", e)
                 import traceback
                 traceback.print_exc()
+
+    def _write_to_file(self, target, options, row):
+        # Is the file too big? Remove 25% from the start by reading the last 75%, truncate and write
+        if options.maxfilesize:
+            max_size = int(options.maxfilesize) * 1048576
+            if os.path.getsize(options.tofile) > max_size:
+                target.seek(max_size * 0.75)
+                data = target.read()
+                target.seek(0)
+                target.truncate()
+                target.write(data)
+
+        if not row[TEXT].startswith("<pbl"):
+            text = row[TEXT]
+            pbl = None
+        else:
+            pbl, text = row[TEXT][4:].split("> ", 1)
+
+        item = {
+            "ts": row[TIMESTAMP],
+            "module": row[MODULE],
+            "line": row[LINE],
+            "logger": row[LOGGER],
+            "level": API.log_level[row[LEVEL]],
+            "text": text,
+        }
+
+        if pbl:
+            item["pebble"] = pbl
+
+        target.write(json.dumps(item) + "\n")
+        target.flush()
 
     def _print_row(self, options, row, noprint=False):
         # Convert time to readable and ignore the ID
@@ -277,14 +334,14 @@ class TailLog(mysql):
 
             level_color = {API.log_level_str["DEBUG"]: "yellow",
                            API.log_level_str["INFO"]: "green",
-                           API.log_level_str["WARNING"]: "blue",
+                           API.log_level_str["WARNING"]: "red",
                            API.log_level_str["ERROR"]: "red",
                            API.log_level_str["FATAL"]: "red",
                            API.log_level_str["CRITICAL"]: "red"}
 
             text_color = {API.log_level_str["DEBUG"]: "green",
                           API.log_level_str["INFO"]: "cyan",
-                          API.log_level_str["WARNING"]: "blue",
+                          API.log_level_str["WARNING"]: "yellow",
                           API.log_level_str["ERROR"]: "red",
                           API.log_level_str["FATAL"]: "red",
                           API.log_level_str["CRITICAL"]: "red"}
@@ -391,6 +448,13 @@ if __name__ == "__main__":
     parser.add_argument("--db_user", type=str, dest="db_user", default="", help="cc or from .config")
     parser.add_argument("--db_host", type=str, dest="db_host", default="", help="localhost or from .config")
     parser.add_argument("--db_password", type=str, dest="db_password", default="", help="defaultpw or from .config")
+
+    parser.add_argument("--tofile", type=str, dest="tofile", default="", help="Dump logs to a given file name, not terminal")
+    parser.add_argument("--maxfilesize", type=str, dest="maxfilesize", default=None, help="Maximum filesize in MB")
+
+    # parser.add_argument("--motion", dest="motion", action="store_true", default=False,
+    #                     help="Replay a mission according to motions")
+
     try:
         if "argcomplete" in sys.modules:
             argcomplete.autocomplete(parser)
@@ -409,7 +473,17 @@ if __name__ == "__main__":
         if len(db_cfg) > 0:
             API.set_config_db(db_cfg)
 
-        tail = TailLog()
+        clock = None
+        if 0:  # options.motion:
+            try:
+                import MCorp
+                # app = MCorp.App("6459748540093085075", API.api_stop_event)
+                app = MCorp.App("5479276526614340281", API.api_stop_event)
+                clock = app.motions["live"]
+            except Exception as e:
+                print("Failed to use motion:", e)
+
+        tail = TailLog(clock=clock)
 
         if options.clear_all:
             if _should_delete(options, "DELETE all logs"):

@@ -3,9 +3,9 @@ os.chdir(os.path.dirname(__file__))
 import db
 import json
 from CryoCore import API
+API.__is_direct = True
 
-# API.__is_direct = True
-
+import time
 cfg = API.get_config()
 db = db.DBWrapper()
 
@@ -23,7 +23,7 @@ def shutdown(sure):
     return json.dumps(ret)
 
 
-def cfg_isupdated(req, since):
+def cfg_isupdated(req, since, ts=None):
     since = float(since)
     last_updated = cfg.last_updated()
     res = {"updated": last_updated > since + 0.00001, "last_updated": float(last_updated)}
@@ -35,7 +35,7 @@ def cfg_get(req, param):
     return json.dumps({param: res})
 
 
-def cfg_set(req, param, value):
+def cfg_set(req, param, value, ts=None):
     error = ""
     try:
         if value.isdigit():
@@ -56,7 +56,7 @@ def cfg_set(req, param, value):
             break
         except Exception as e:
             err = str(e)
-            time.sleep(0.250)
+            # time.sleep(0.250)
 
     if err:
         raise Exception(err)
@@ -72,7 +72,7 @@ def cfg_versions(req):
     return json.dumps(versions)
 
 
-def cfg_serialize(req, root=None, version=None):
+def cfg_serialize(req, root=None, version=None, ts=None):
     if not version:
         version = "default"
 
@@ -104,6 +104,23 @@ def get(req, params, start, end, since=0, since2d=0, aggregate=None):
     max_id, max_id2d, dataset = db.get_db().get_data(params, float(start), float(end), int(since), int(since2d), aggregate, get_last_values)
     return json.dumps({"max_id": max_id, "max_id2d": max_id2d, "data": dataset, "glv": get_last_values})
 
+
+# ## Also allow setting some values if we want to
+def set(req, args):  # Values should be on the format [{channel: ..., "parameter": ..., values: [{"ts": timestamp, "value": ...}]}
+    args = json.loads(args)
+
+    for arg in args:
+        if "channel" not in arg or "parameter" not in arg or "values" not in arg:
+            raise Exception("Bad format, items need to have 'channel', 'parameter' and 'values' keys")
+        status = API.get_status(arg["channel"])
+        a = status[arg["parameter"]]
+        for value in arg["values"]:
+            if "value" not in value or "ts" not in value:
+                raise Exception("Bad format, values must be a list of items with 'value' and 'ts' keys")
+
+            a.set_value(value["value"], timestamp=value["ts"])
+
+    return json.dumps({"result": "ok"})
 
 # ## Logs ###
 

@@ -187,6 +187,17 @@ class AsyncDB(threading.Thread):
 
     def _get_connection(self):
         cfg = self._get_conn_cfg()
+        if cfg["ssl.enabled"]:
+            return MySQLdb.MySQLConnection(host=cfg["db_host"],
+                                           user=cfg["db_user"],
+                                           passwd=cfg["db_password"],
+                                           db=cfg["db_name"],
+                                           use_unicode=True,
+                                           autocommit=True,
+                                           charset="utf8",
+                                           ssl_key=cfg["ssl.key"],
+                                           ssl_ca=cfg["ssl.ca"],
+                                           ssl_cert=cfg["ssl.cert"])
         return MySQLdb.MySQLConnection(host=cfg["db_host"],
                                        user=cfg["db_user"],
                                        passwd=cfg["db_password"],
@@ -202,8 +213,8 @@ class AsyncDB(threading.Thread):
                     self.db_conn = self._get_connection()
                 if self.db_conn:
                     return self.db_conn
-            except:
-                self.log.exception("Failed to get connection, trying in 5 seconds")
+            except Exception as e:
+                self.log.exception("Failed to get connection, trying in 5 seconds:", e)
                 time.sleep(5)
 
     def _close_connection(self):
@@ -346,7 +357,8 @@ class mysql:
 
     """
 
-    def __init__(self, name, config=None, can_log=True, db_name=None, ssl=None, num_connections=3, min_conn_time=10, is_direct=False):
+    def __init__(self, name, config=None, can_log=True, db_name=None, ssl=None,
+                 num_connections=3, min_conn_time=10, is_direct=False):
         """
         Generic database wrapper
         if can_log is set to False, it will not try to log (should
@@ -447,7 +459,7 @@ class mysql:
                 if SLOW_WARNING:
                     print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
             if not event.isSet():
-                raise TooSlowException("%e Failed to execute query in time (%s)" % (time.ctime(), SQL))
+                raise TooSlowException("%s Failed to execute query in time (%s)" % (time.ctime(), SQL))
 
         if not ignore_error and "error" in retval:
             raise Exception(retval["error"])
