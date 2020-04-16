@@ -71,3 +71,11 @@ class Status:
 
     def __getitem__(self, key):
         return self._values[key]
+
+
+class StatusDbReader:
+    def __init__(self):
+        pass
+
+    def get_last_status_value(self, channel, name):
+        return None, None

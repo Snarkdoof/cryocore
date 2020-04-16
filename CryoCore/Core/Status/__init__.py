@@ -35,3 +35,4 @@ See the StatusTest.py class for more examples
 """
 
 from .Status import *
+from .StatusDbReader import StatusDbReader
