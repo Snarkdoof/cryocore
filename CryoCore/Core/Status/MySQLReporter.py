@@ -24,6 +24,7 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
         self.log = API.get_log(name)
         InternalDB.mysql.__init__(self, "MySQLStatusReporter", self.cfg)
         self.cfg.set_default("isconfigured", False)
+        self.cfg.set_default("autoclean", True)
         self._channels = {}
         self._parameters = {}
         self.tasks = queue.Queue()
@@ -56,9 +57,10 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
                         # We have a few seconds "grace time" to ensure that we get all status messages
                         continue
                     break
-                if time.time() - last_clean > 300:
-                    last_clean = time.time()
-                    self._clean_expired()  # Clean, we're idling
+                if self.cfg["autoclean"]:
+                    if time.time() - last_clean > 300:
+                        last_clean = time.time()
+                        self._clean_expired()  # Clean, we're idling
             except Exception as e:
                 self.log.exception("Async status reporting fail")
                 print("Async exception on status reporting", e)
