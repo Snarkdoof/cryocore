@@ -101,7 +101,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
                            "time DOUBLE, "
                            "msecs FLOAT, "
                            "line INTEGER UNSIGNED NOT NULL, "
-                           "function VARCHAR(255), "
+                           "func VARCHAR(255), "
                            "module VARCHAR(255) NOT NULL, "
                            "logger VARCHAR(255) NOT NULL)",
 
@@ -110,6 +110,13 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
         if API.api_auto_init:
             self._init_sqls(init_statements)
+
+        # update table if necessary
+        try:
+            self._execute("SELECT func FROM log LIMIT 1")
+        except:
+            self._execute("ALTER TABLE log RENAME function TO func")
+
 
         # Thread entry point
         while not self.stop_event.is_set():
@@ -121,7 +128,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
     def get_log_entry_and_insert(self, should_block, desired_timeout):
 
-        SQL = "INSERT INTO log (logger, level, module, line, function, time, msecs, message) VALUES "
+        SQL = "INSERT INTO log (logger, level, module, line, func, time, msecs, message) VALUES "
         params = []
         while True:
             try:
