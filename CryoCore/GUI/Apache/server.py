@@ -5,6 +5,7 @@ import io
 import gzip
 import urllib
 import cgi
+import urllib
 import inspect
 import mimetypes
 import os
@@ -49,7 +50,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
     def _get_params(self):
         path = self.getPath()
         if path.find("?") > -1:
-            args = cgi.parse_qs(path[path.find("?") + 1:])
+            args = urllib.parse.parse_qs(path[path.find("?") + 1:])
             for key in args:
                 args[key] = args[key][0]
             path = path[:path.find("?")]
