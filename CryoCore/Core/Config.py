@@ -368,7 +368,6 @@ class NamedConfiguration:
             root = self.root[:-1]
         else:
             root = self.root + root
-        print("getleaves for root", root)
         for leave in self._parent.get_leaves(root, True, recursive=recursive):
             leaves.append(leave.replace(root + ".", ""))
 
@@ -850,7 +849,7 @@ class Configuration(threading.Thread):
             SQL = """CREATE TABLE IF NOT EXISTS config (
     id INT PRIMARY KEY AUTO_INCREMENT,
     version INT NOT NULL,
-    last_modified TIMESTAMP(6),
+    last_modified TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     parent INT NOT NULL,
     name VARCHAR(128),
     value VARCHAR(256),
@@ -1054,7 +1053,7 @@ class Configuration(threading.Thread):
                 self.log.debug("Tried to get param id for %s (version %s) but failed" %
                                (name, version))
                 c = self._execute("SELECT name, parent from config where version=%s", [version])
-                print(c.fetchall())
+                # print(c.fetchall())
             return None
 
         # self._id_cache[version][(parent_id, name)] = row[0]
@@ -1225,7 +1224,6 @@ class Configuration(threading.Thread):
                 if not row:
                     # Caching failures fails - a create is typically called
                     # self._cache_update(version, full_path, None, time.time() + 0.2)
-                    print("No parameter", full_path)
                     # No parameter - add it to the full cache
                     self._cache_update(self.version_id, full_path, None)
                     raise NoSuchParameterException("No such parameter: " + full_path)
@@ -1751,7 +1749,7 @@ class Configuration(threading.Thread):
                             cbs[paramid] = [(lastupdate, key)]
                         else:
                             params[paramid] = min(lastupdate, registered["params"][paramid])
-                            cbs[paramid].append([(lastupdate, key)])
+                            cbs[paramid].append((lastupdate, key))
 
                 if len(params) == 0:
                     # This process shoulnd't really run any more...
