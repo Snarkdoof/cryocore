@@ -198,6 +198,8 @@ class SystemControl(threading.Thread):
         cwd = self.cfg["process.%s.dir" % name]
         if not cwd:
             cwd = self.cfg["default_cwd"]
+        if not cwd:
+            cwd = self.cfg["default_dir"]
         self._process[name] = subprocess.Popen(command, cwd=cwd, preexec_fn=os.setsid)
         self.status["process.%s.pid" % name] = self._process[name].pid
         self._add_process_monitor(self._process[name].pid, name)
