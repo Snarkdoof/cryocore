@@ -123,7 +123,7 @@ var CryoCoreGUI = function(_CRYOCOREGUI_) {
     options.fill_color = options.fill_color || "blue";
     options.text = options.text || "";
 
-    element.innerHTML = "<div class='ccprogressbar' id='" + id + "' style='width:100%;height:100%;position:relative'><div class='ccbar_full' style='width:0%;height:100%'></div><div class='ccbar_text' style='width:100%;text-align:center;position:absolute;top:50%;transform:translateY(-50%)'></div></div>";
+    element.innerHTML = "<div class='ccprogressbar' id='" + id + "' style='width:100%;height:100%;position:relative'><div class='ccbar_full' style='position:absolute;width:0%;height:100%'></div><div class='ccbar_text' style='width:100%;text-align:center;position:absolute;top:50%;transform:translateY(-50%)'></div></div>";
     var bar_full = document.querySelector("#" + id + " .ccbar_full");
     var bar_text = document.querySelector("#" + id + " .ccbar_text");
     bar_text.innerHTML = options.text;
@@ -139,13 +139,26 @@ var CryoCoreGUI = function(_CRYOCOREGUI_) {
       }
       if (!event) return;
       var fraction = 100 * (event.value + options.min) / (options.max - options.min);
-      var elemWidth = element.offsetWidth;
+      // var elemWidth = element.offsetWidth;
       if (typeof options.fill_color === "function") {
         bar_full.style.background = options.fill_color(fraction);   
       }
-      bar_full.style.width = fraction + "%";
+
+      if (options.vertical) {
+        bar_full.style.width = "100%";        
+        bar_full.style.height = fraction + "%";
+        if (!options.fromTop)
+          bar_full.style.top = 100 - fraction + "%";
+      } else {
+        bar_full.style.width = fraction + "%";
+        bar_full.style.hgieht = "100%";
+      }
       if (options.showText) {
-        bar_text.innerHTML = options.text + " " + fraction.toFixed(0) + "%";      
+        if (options.text_func) {
+          bar_text.innerHTML = options.text_func(options.text, event.value, fraction);
+        } else {
+          bar_text.innerHTML = options.text + " " + fraction.toFixed(0) + "%";      
+        }
       }
     }
     dataset.monitorLastValue(paramid, onUpdate);
