@@ -130,7 +130,6 @@ var CryoCore = function(_CRYOCORE_) {
         if (!frags.hasOwnProperty(idx)) {
           continue;
         }
-
         if (!frags.hasOwnProperty(idx)) {
           continue;
         }
@@ -407,6 +406,7 @@ var CryoCore = function(_CRYOCORE_) {
             if (!data.hasOwnProperty(key)) continue;
             for (var i=0; i<data[key].length; i++) {
               var item = data[key][i];
+              // Add paramid?
               sequencer.addCue(String(_snr++), new TIMINGSRC.Interval(item[0], item[0]), {key: key, data: item});
             }
           }
@@ -794,12 +794,22 @@ var CryoCore = function(_CRYOCORE_) {
       );      
     }
 
+    var customFunc = function(func, args, success, error) {
+      let p = {args: JSON.stringify(args)};
+      if (!args)
+        p = undefined;
+      var url = "/JSON.py/" +  func;
+      console.log("URL:", SERVER + url);
+      XHR.get(SERVER + url, p, success, error);
+    };
+
     /* Update every second */
     loadParameters(options.onReady);
     setInterval(update, options.refresh);
 
     var self = {};
     self.init = init;
+    self.customFunc = customFunc; 
     self.resolveParams = resolveParams;
     self.addMonitor = addMonitor;
     self.removeMonitor = removeMonitor;
