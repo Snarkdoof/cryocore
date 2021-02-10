@@ -82,7 +82,7 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
 
                       """CREATE TABLE IF NOT EXISTS status_parameter (
                       paramid INTEGER PRIMARY KEY AUTO_INCREMENT,
-                      name VARCHAR(256),
+                      name VARCHAR(120),
                       chanid INTEGER NOT NULL,
                       UNIQUE KEY uid (name,chanid))""",
 
