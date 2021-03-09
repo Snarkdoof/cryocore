@@ -5,6 +5,7 @@ import curses
 from CryoCore import API
 import CryoCore.Core.Config as Config
 import locale
+import traceback
 from argparse import ArgumentParser
 
 locale.setlocale(locale.LC_ALL, '')
@@ -76,7 +77,7 @@ class Category:
             s.value = s.value.replace("\t", " ").replace("\n", " ")
         s.truncValue = s.value.encode(code)  # str(s.value)
         if len(s.truncValue) > truncateLength:
-            s.truncValue = s.truncValue[0:truncateLength - 4] + ".."
+            s.truncValue = s.truncValue[0:truncateLength - 4] + "..".encode(code)
         if commit:
             try:
                 s.cfg.set(s.lookupKey, s.value, None)
@@ -163,7 +164,7 @@ class Category:
             if s.isValue:
                 screen.hline(line, 0, " ", width, color)
                 screen.addstr(line, x, displayName, color)
-                screen.addstr(line, width - truncateLength - 2, "| " + s.truncValue, color)
+                screen.addstr(line, width - truncateLength - 2, "| ".encode(code) + s.truncValue, color)
             else:
                 displayName = marker + displayName
                 screen.hline(line, 0, " ", width, color)
@@ -171,7 +172,8 @@ class Category:
                 screen.hline(line, x + len(displayName) + 1, "-", width - (x + len(displayName)) - truncateLength, color)
                 screen.hline(line, width - truncateLength, "=", truncateLength, color)
                 screen.addstr(line, width - truncateLength - 2, "+=", color)
-        except Exception:
+        except:
+            traceback.print_exc()
             pass
 
 
@@ -272,15 +274,15 @@ class Editor:
                 x = y * s.width
                 line = s.value[x:x + s.width]
                 s.window.addstr(y, 0, line.encode(code), color)
-            cursX = s.cursorPos % s.width
-            cursY = s.cursorPos / s.width
+            cursX = int(s.cursorPos % s.width)
+            cursY = int(s.cursorPos / s.width)
             if s.cursorPos < len(s.value):
                 s.window.addstr(cursY, cursX, s.value[s.cursorPos].encode(code), s.cursorColor)
             else:
                 s.window.addstr(cursY, cursX, " ", s.cursorColor)
-        except Exception as e:
+        except:
+            traceback.print_exc()
             # Hopefully we'll never have settings that require more than 8 lines of space to render.
-            print(e)
         s.window.refresh()
 
 helpText = """The editor works as follows:
@@ -431,7 +433,7 @@ class ConsoleUI:
         global truncateLength
         s.screen = screen
         s.height, s.width = s.screen.getmaxyx()
-        truncateLength = s.width / 2
+        truncateLength = int(s.width / 2)
         # Set up some colors
         curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
         curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
@@ -457,12 +459,12 @@ class ConsoleUI:
         s.filterWindow = curses.newwin(1, s.width, s.height - 1, 0)
         s.filterEditor = Editor(s.filterWindow, curses.color_pair(5), True)
         s.screen.hline(0, 0, "*", s.width, s.borderColor)
-        s.centerText(s.screen, 0, "UAV Config Tool", s.borderColor, 3)
+        s.centerText(s.screen, 0, "CryoCore Config Tool", s.borderColor, 3)
 
         s.pushPrompt("Arrow keys: Move/expand selection | / : Filter | T: Toggle setting | Enter: Modify setting | Q: Exit | ? : Help", False)
         s.screen.hline(s.height - 1, 0, " ", s.width, s.inputColor)
         s.screen.hline(s.height - 1, 0, " ", s.width)
-        s.screen.addstr(0, 0, "Width: %d Height: %d" % (s.width, s.height))
+        #s.screen.addstr(0, 0, "Width: %d Height: %d" % (s.width, s.height))
         s.screen.refresh()
         curses.doupdate()
         s.selectedCategory = 0
@@ -488,7 +490,7 @@ class ConsoleUI:
         if start < 0:
             start = 0
         pad = " " * pad
-        text = "%s%s%s" % (pad, text.encode(code), pad)
+        text = "%s%s%s" % (pad, text, pad)
         if text.__class__ == "bytes":
             text = str(text, "utf-8")
         screen.addstr(line, start, text[0:width], color)
