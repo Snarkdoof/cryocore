@@ -91,6 +91,8 @@ class mysql:
         if SQL.find("INSERT IGNORE") > -1:
             SQL = SQL.replace(" IGNORE", "")
             ignore_error = True
+        if SQL.find("AUTO_INCREMENT") > -1:
+            SQL = SQL.replace("AUTO_INCREMENT", "AUTO INCREMENT")
 
 
         if parameters is None:
