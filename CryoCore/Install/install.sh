@@ -19,8 +19,8 @@ if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
 	sudo activate-global-python-argcomplete
 	
 	echo "Installing mysql connector"
-  sudo pip install mysql-connector
-  sudo pip3 install mysql-connector
+  sudo pip install mysql-connector-python
+  sudo pip3 install mysql-connector-python
 	# sudo dpkg -i CryoCore/Install/libs/mysql-connector-python*.deb
 
 	echo "Detecting sensors"
