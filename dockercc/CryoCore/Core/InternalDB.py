@@ -92,7 +92,7 @@ class mysql:
             SQL = SQL.replace(" IGNORE", "")
             ignore_error = True
         if SQL.find("AUTO_INCREMENT") > -1:
-            SQL = SQL.replace("AUTO_INCREMENT", "AUTO INCREMENT")
+            SQL = SQL.replace("AUTO_INCREMENT", "AUTOINCREMENT")
 
 
         if parameters is None:
