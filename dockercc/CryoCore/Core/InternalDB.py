@@ -1,6 +1,7 @@
 import sqlite3
 import logging
 import sys
+import re
 
 DEBUG = False
 
@@ -92,8 +93,12 @@ class mysql:
             SQL = SQL.replace(" IGNORE", "")
             ignore_error = True
         if SQL.find("AUTO_INCREMENT") > -1:
-            SQL = SQL.replace("AUTO_INCREMENT", "AUTOINCREMENT")
-
+            # Auto increment is a bit shit
+            m = re.search("(BIGINT [^,]* AUTO_INCREMENT)", SQL)
+            if m:
+                SQL = SQL.replace(m[0], "INTEGER PRIMARY KEY AUTOINCREMENT")
+            else:
+                SQL = SQL.replace("AUTO_INCREMENT", "AUTOINCREMENT")
 
         if parameters is None:
             parameters = []
