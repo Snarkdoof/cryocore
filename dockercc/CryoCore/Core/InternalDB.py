@@ -5,7 +5,7 @@ from __future__ import print_function
 import time
 import threading as threading
 from CryoCore.Core import API
-from CryoCore.Core.Utils import *
+# from CryoCore.Core.Utils import *
 # from sys import stderr
 # import MySQLdb
 import mysql.connector as MySQLdb
