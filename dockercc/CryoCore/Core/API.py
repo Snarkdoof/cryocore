@@ -88,6 +88,12 @@ class GlobalDBConfig:
                     "ssl.ca": None,
                     "ssl.cert": None}
 
+
+        # Check if this is in a docker, if so, localhost should be replaced
+        # with the IP of the "host"
+        if os.path.exists("/.dockerenv"):
+            self.cfg["db_host"] = "172.17.0.1"
+
         # Check in the user's home dir
         userconfig = os.path.expanduser("~/.cryoconfig")
         if os.path.isfile(userconfig):
