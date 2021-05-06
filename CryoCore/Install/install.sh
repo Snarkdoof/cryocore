@@ -47,10 +47,10 @@ echo "Importing default config"
 
 
 echo "Copying startup scripts"
-python -c "import sys;import os;lines=sys.stdin.read();print lines.replace('CCINSTALLDIR', os.getcwd())" < CryoCore/Install/cryocore.service > /tmp/cryocore.service
+python3 -c "import sys;import os;lines=sys.stdin.read();print(lines.replace('CCINSTALLDIR', os.getcwd()))" < CryoCore/Install/cryocore.service > /tmp/cryocore.service
 sudo mv /tmp/cryocore.service /etc/systemd/system/
 
-python -c "import sys;import os;lines=sys.stdin.read();print lines.replace('CCINSTALLDIR', os.getcwd())" < CryoCore/Install/cryocored > bin/cryocored
+python3 -c "import sys;import os;lines=sys.stdin.read();print(lines.replace('CCINSTALLDIR', os.getcwd()))" < CryoCore/Install/cryocored > bin/cryocored
 chmod 755 bin/cryocored
 
 systemctl is-enabled cryocore.service
