@@ -20,7 +20,7 @@ class LogDbReader(InternalDB.mysql):
 
         retval = {"maxid": since, "logs": []}
         args = [since]
-        SQL = "SELECT id, time, msecs, level, module, logger, line, function, message FROM log WHERE id>%s AND ("
+        SQL = "SELECT id, time, msecs, level, module, logger, line, `function`, message FROM log WHERE id>%s AND ("
         for module in modules:
             SQL += "module=%s OR "
             args.append(module)

@@ -849,7 +849,7 @@ class Configuration(threading.Thread):
             SQL = """CREATE TABLE IF NOT EXISTS config (
     id INT PRIMARY KEY AUTO_INCREMENT,
     version INT NOT NULL,
-    last_modified TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_modified TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     parent INT NOT NULL,
     name VARCHAR(128),
     value VARCHAR(256),
@@ -1259,7 +1259,7 @@ class Configuration(threading.Thread):
             res.append(ConfigParameter(self, id, name, parent_ids, path,
                                        datatype, value, version, timestamp,
                                        config=self, comment=comment))
-            my_timestamp = max(timestamp, my_timestamp)
+            my_timestamp = max(timestamp, my_timestamp) if timestamp is not None else my_timestamp
 
         return my_timestamp, res
 
