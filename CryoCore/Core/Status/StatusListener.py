@@ -93,6 +93,7 @@ class StatusListenerDB(threading.Thread):
 class StatusListener():
     def __init__(self, monitor_all=False):
         self._channels = {}
+        self._param_ids = []
         self._last_values = {}
         self._monitor_all = monitor_all
         self.condition_lock = threading.Condition()
@@ -111,6 +112,14 @@ class StatusListener():
             if chan not in self._channels:
                 self._channels[chan] = []
             self._channels[chan].append(name)
+
+    def add_monitors_by_id(self, items):
+        """
+        Items should be a list of parameter ids
+        """
+        for paramid in items:
+            if paramid not in self._param_ids:
+                self._param_ids.append(paramid)
 
     def run(self):
         # We need a separate daemon thread to get new data from the shared memory system.
@@ -134,6 +143,8 @@ class StatusListener():
                                (d["channel"] in self._channels and
                                 d["name"] in self._channels[d["channel"]]):
                                     self._last_values[(d["channel"], d["name"])] = d
+                            elif d["id"] in self._param_ids:
+                                self._last_values[d["id"]] = d
                         except:
                             print("Failed to parse or print data: %s" % (data))
                             traceback.print_exc()
@@ -151,6 +162,10 @@ class StatusListener():
     def get_last_value(self, chan, param):
         if (chan, param) in self._last_values:
             return self._last_values[(chan, param)]
+
+    def get_last_value_by_id(self, paramid):
+        if paramid in self._last_values:
+            return self._last_values[paramid]
 
     def get_last_values(self, items=None):
         """
