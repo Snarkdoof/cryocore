@@ -4,7 +4,7 @@ import JSON
 import io
 import gzip
 import urllib
-import cgi
+# import cgi
 import inspect
 import mimetypes
 import os
@@ -61,7 +61,8 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
     def _get_params(self):
         path = self.getPath()
         if path.find("?") > -1:
-            args = cgi.parse_qs(path[path.find("?") + 1:])
+            # args = cgi.parse_qs(path[path.find("?") + 1:])
+            args = urllib.parse.parse_qs(path[path.find("?") + 1:])
             for key in args:
                 args[key] = args[key][0]
             path = path[:path.find("?")]
@@ -290,19 +291,27 @@ class LiveHandler(WebSocket):
                 if len(items) > 0:
                     getStatusListener().add_monitors(items)
 
+                items = []
+                for paramid in req["params"]:
+                    items.append(paramid)
+                if len(items) > 0:
+                    getStatusListener().add_monitors_by_id(items)
+
             elif req["type"] == "unsubscribe":
                 items = []
                 for chan in req["channels"]:
                     print("Channel", chan)
                     for param in req["channels"][chan]:
-                        print("Param", param, req["channels"][chan]);
-                        print("Subscribe to", chan, param)
-
                         if (chan, param) in self.last_vals:
                             del self.last_vals[(chan, param)]
 
                     # StatusListener don't support removing things yet
-                    # getStatusListener().add_monitors(items)
+                    # getStatusListener().remove_monitors(items)
+
+                for param in req["params"]:
+                    if (param in self._last_vals):
+                        # TODO: Unsubscribe
+                        del self.last_vals(param)
 
         except Exception as e:
             print("Badly shaped live request", req, e)

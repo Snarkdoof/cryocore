@@ -195,10 +195,13 @@ var CryoCore = function(_CRYOCORE_) {
     var last_id2d = 0;
     var outstanding = 0; // Ensure that we don't hammer server
     var _snr = 1;  // used for sequencer things
+    var live_data;  // Live (push) data source if used
+
     options = options || {};
     options.window_size = options.window_size || 300; // 5 minutes
     options.history_size = options.history_size || 1600; // 15 minutes
     options.refresh = options.refresh || 5000; // 5 seconds
+
 
     if (options.timingObject === undefined) {
       options.timingObject = new TIMINGSRC.TimingObject();
@@ -221,6 +224,109 @@ var CryoCore = function(_CRYOCORE_) {
     // var sequencer = new TIMINGSRC.Sequencer(options.minTimingObject, options.timingObject);
 
     var init = function() {};
+
+    let LiveData = function(URL) {
+
+      let ws;
+      let subs = {};  // (chan, param) -> [functions]
+      let reconn;
+
+      let getConnection = function(url) {
+          if (ws && ws.readyState == ws.OPEN)
+              return ws;
+          console.log("Connecting to", url);
+          ws = new WebSocket(url);
+
+          ws.onopen = function() {
+              console.log("Connected to", url);
+              clearInterval(reconn);
+
+              // If we already had subscriptions, resubscribe
+              let chans = {};
+              for (let k in subs) {
+                  let chan = k.split(",")[0];
+                  let param = k.split(",")[1];
+
+                  if (!chans[chan]) chans[chan] = [];
+                  chans[chan].push(param);
+              }
+              if (Object.keys(chans).length > 0) {
+                  ws.send(JSON.stringify({"type": "subscribe", "channels": chans}));
+              }
+          }
+
+          ws.onclose = function() {
+              console.log("Closed, auto-reconnecting");
+              reconn = setInterval(() => getConnection(url), 1000);
+          }
+
+          ws.onmessage= function(msg) {
+              let data = JSON.parse(msg.data);
+              if (data.type == "update") {
+                  console.log(data);
+                  data.values.forEach(v => {
+                      let itm = [v.channel, v.name];
+                      if (subs[itm].length > 0) {
+                          subs[itm].forEach(f => f(v));
+                      }
+
+                  });
+              }
+          };
+
+          return ws;
+      }
+
+      let subscribe = function(channel, parameter, onChange) {
+          if (!onChange) throw new Error("Need a callback function")
+          if (!subs[[channel, parameter]]) {
+              subs[[channel, parameter]] = [onChange];
+
+              // Subscribe to server
+              console.log("Subscribing to channel", channel, "param", parameter);
+              let chans = {};
+              chans[channel] = [parameter];
+              let ws = getConnection(URL);
+              if (ws.readyState != ws.open) {
+                  setTimeout(function() {
+                      ws.send(JSON.stringify({"type": "subscribe", "channels": chans}));
+                  }, 1000);
+              } else {
+                  ws.send(JSON.stringify({"type": "subscribe", "channels": chans}));            
+              }
+          } else {
+              if (subs[[channel, parameter]].indexOf(onChange) > -1) {
+                  throw new Error("Already have this callback registered");
+              }
+              subs[[channel, parameter]].push(onChange);
+          }
+      };
+
+      let unsubscribe = function(channel, parameter, onChange) {
+
+          if (!subs[[channel, parameter]]) {
+              throw new Error("No registered callbacks for", channel, parameter);
+          } else {
+              let pos = subs[[channel, parameter]].indexOf(onChange);
+              if (pos == -1) {
+                  throw new Error("Callback not registered");
+              }
+
+              subs[[channel, parameter]].splice(pos, 1);
+
+              // Unsubscribe on server
+              let chans = {};
+              chans[channel] = [parameter];
+              getConnection().send(JSON.stringify({"type": "unsubscribe", "channels": chans}));
+          }
+      };
+
+      let LiveAPI = {
+        subscribe: subscribe,
+        unsubscribe: unubscribe
+      };
+      return LiveAPI;
+    };
 
     var loadParameters = function(onComplete) {
       XHR.get(SERVER + "/JSON.py/list_channels_and_params_full", {},
@@ -334,6 +440,13 @@ var CryoCore = function(_CRYOCORE_) {
         if (params[i] === null || !params[i]) {
           continue;
         }
+
+        if (live_data) {
+          console.log("Should use live data as opposed to polling");
+          console.log("Params are", params);
+          return;
+        }
+          
         if (monitored_keys.indexOf(params[i]) == -1) {
           monitored_keys.push(params[i]);
         }
@@ -844,6 +957,11 @@ var CryoCore = function(_CRYOCORE_) {
     /* not needed */
     self.loadHistorical = loadHistorical;
     self.triggerUpdate = triggerUpdate;
+
+    // Do we also use live data?
+    if (options.liveurl) {
+      livedata = LiveData(options.liveurl);
+    }
 
     return self;
 
