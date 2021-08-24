@@ -8,10 +8,22 @@ import cgi
 import inspect
 import mimetypes
 import os
+import json
 
 from CryoCore import API
 
+# We also allow shared memory status listener if possible
+try:
+    from CryoCore.Core.Status.StatusListener import StatusListener
+    use_status_listener = True 
+    import threading
+except:
+    use_status_listener = False 
+
 functions = {o[0]: o[1] for o in inspect.getmembers(JSON) if inspect.isfunction(o[1])}
+
+from SimpleWebSocketServer import SimpleWebSocketServer, WebSocket
+
 
 
 class MyHandler(http.server.SimpleHTTPRequestHandler):
@@ -171,12 +183,176 @@ class MyWebServer(http.server.HTTPServer):
         else:
             return None
 
+
+
+class FakeStatusListener:
+    """
+    Just for debugging
+    """
+    monitoring = {}
+    import threading
+    lock = threading.Condition()
+
+    def add_monitors(self, stuff):
+
+        for s in stuff:
+            if not s in self.monitoring:
+                self.monitoring[s] = None
+
+        print("FakeStatusListener monitoring", self.monitoring)
+
+
+    def wait(self, timeout):
+        with self.lock:
+            self.lock.wait(timeout)
+
+    def get_last_values(self, items):
+
+        print("--- Getting last values for", items)
+        # We're totally faking everything!
+        import random
+        vals = {item: (random.random(), time.time()) for item in items}
+
+        # vals = {vals[item]: monitoring[item] for item in items}
+        return vals
+
+
+livethreads = []
+global statusListener
+statusListener = None
+
+def getStatusListener():
+    global statusListener
+    if not statusListener:
+        # statusListener = FakeStatusListener()
+        statusListener = StatusListener()
+    return statusListener
+
+
+class LiveHandler(WebSocket):
+    """
+    Handle requests for live updates
+    """
+    last_vals = {}
+    stopped = False
+
+    def monitorThread(self):
+        # last_vals is a map with {(chan, param): (value, timestamp)}
+
+        print(" *** Monitor thread started", self.last_vals.keys())
+
+        # Check for all of the chan, param subscriptions and send any updates
+        listener = getStatusListener()
+        while not self.stopped:
+
+            tosend = []
+
+            vals = listener.get_last_values(self.last_vals.keys())
+            for i in vals:
+                val = vals[i]
+                if val is None:
+                    continue
+                print("VALS", val)
+                print("Last vals:", self.last_vals)
+
+                if i in self.last_vals and self.last_vals[i] and self.last_vals[i]["ts"] < val["ts"]:
+                    tosend.append(val)
+                    # updated
+                    # tosend["|".join(i)] = val
+                    self.last_vals[i] = val
+
+            if len(tosend) > 0:
+                print("Sending", tosend)
+                self.sendMessage(json.dumps({"type": "update", "values": tosend}))
+
+            listener.wait(1.0)  # Wait for any updates
+
+    def handleMessage(self):
+        print("GOT LIVE REQUEST", self.data)
+        try:
+            req = json.loads(self.data)
+        except Exception as e:
+            print("Bad live request, not json?", self.data, e)
+            self.sendMessage(json.dumps({"type": "error", "msg": "Expected JSON request"}))
+            # API.get_log("System.WebServer").error("Bad live request")
+            return
+
+        try:
+            if req["type"] == "subscribe":
+                items = []
+                for chan in req["channels"]:
+                    print("Channel", chan)
+                    for param in req["channels"][chan]:
+                        print("Param", param, req["channels"][chan]);
+                        print("Subscribe to", chan, param)
+                        items.append((chan, param))
+                        self.last_vals[(chan, param)] = {"ts": 0}
+                if len(items) > 0:
+                    getStatusListener().add_monitors(items)
+
+            elif req["type"] == "unsubscribe":
+                items = []
+                for chan in req["channels"]:
+                    print("Channel", chan)
+                    for param in req["channels"][chan]:
+                        print("Param", param, req["channels"][chan]);
+                        print("Subscribe to", chan, param)
+
+                        if (chan, param) in self.last_vals:
+                            del self.last_vals[(chan, param)]
+
+                    # StatusListener don't support removing things yet
+                    # getStatusListener().add_monitors(items)
+
+        except Exception as e:
+            print("Badly shaped live request", req, e)
+            self.sendMessage(json.dumps({"type": "error", "msg": "Badly shaped request"}))
+
+    def handleConnected(self):
+        print("Got LIVE connect from", self.address)
+        self.last_vals = {}
+
+        # Start a thread to check for changes
+        t = threading.Thread(target=self.monitorThread)
+        t.start()
+
+    def handleClose(self):
+        print("Closed LIVE connection from", self.address)
+        # The statuslistener doesn't support unsubscribing, otherwise we'd clean up here
+        self.stopped = True
+
 try:
     cfg = API.get_config("System.WebServer")
     cfg.set_default("port", 8080)
     cfg.set_default("web_root", "./")
+
+    cfg.set_default("live_port", 8081)
+    cfg.set_default("enable_live", False)
+
+
+    log = API.get_log("System.WebServer")
+    if cfg["enable_live"]:
+        if not use_status_listener:
+            print("ERROR: Live is enabled, but no shared memory status listener is available")
+            log.error("Live is enabled, but no shared memory status listener is available")
+        else:
+            import time
+            def run_until_stopped(s):
+                while not API.api_stop_event.isSet():
+                    s.serveonce()
+                    time.sleep(0.050)
+
+            # Start the web socket server
+            server = SimpleWebSocketServer('', int(cfg["live_port"]), LiveHandler)
+            t = threading.Thread(target=run_until_stopped, args=(server,))
+            t.start()
+
+            log.info("Started live server on port %s" % cfg["live_port"])
+
     httpd = http.server.HTTPServer(("", cfg["port"]), MyHandler)
     print("Serving on port", cfg["port"])
+    log.info("Serving on port %s" % cfg["port"])
+
     while True:
         httpd.serve_forever()
 except KeyboardInterrupt:
