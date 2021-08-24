@@ -63,6 +63,14 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         self.cfg = API.get_config("System.LogDB")
         InternalDB.mysql.__init__(self, "SystemLog", self.cfg, can_log=False, num_connections=1)
 
+
+        # We must check if the db has the old "function" variable defined, which is reserved
+        # and makes all kind of troubles
+        try:
+            self._execute("ALTER TABLE log change function func VARCHAR(255)")
+        except:
+            pass
+
         # We get ready to deal with problems in the database connection
         self.aux_logger = logging.getLogger('dbHandler_exception')
         if len(self.aux_logger.handlers) < 1:
@@ -106,7 +114,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
                            "time DOUBLE, "
                            "msecs FLOAT, "
                            "line INTEGER UNSIGNED NOT NULL, "
-                           "`function` VARCHAR(255), "
+                           "func VARCHAR(255), "
                            "module VARCHAR(255) NOT NULL, "
                            "logger VARCHAR(255) NOT NULL)",
 
@@ -126,7 +134,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
     def get_log_entry_and_insert(self, should_block, desired_timeout):
 
-        SQL = "INSERT INTO log (logger, level, module, line, `function`, time, msecs, message) VALUES "
+        SQL = "INSERT INTO log (logger, level, module, line, func, time, msecs, message) VALUES "
         params = []
         while True:
             try:
