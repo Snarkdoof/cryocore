@@ -143,8 +143,6 @@ class StatusListener():
                                (d["channel"] in self._channels and
                                 d["name"] in self._channels[d["channel"]]):
                                     self._last_values[(d["channel"], d["name"])] = d
-                            elif d["id"] in self._param_ids:
-                                self._last_values[d["id"]] = d
                         except:
                             print("Failed to parse or print data: %s" % (data))
                             traceback.print_exc()
