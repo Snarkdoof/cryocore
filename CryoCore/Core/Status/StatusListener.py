@@ -51,8 +51,14 @@ class StatusListenerDB(threading.Thread):
     def run(self):
         # Periodically fetch values so we don't block on reads
         last_run = -60
+        # If the clock jumps, we need to clear stuff and restart it a bit
+        last_pos = self.clock.pos()
         while not API.api_stop_event.isSet():
             now = self.clock.pos()
+            if abs(now - last_pos) > 2:
+                # RESET
+                print("Skip detected")
+                last_run = -60
             if len(self._monitors) > 0:
                 updates = self._db.get_last_status_values(self._monitors, since=last_run, now=now)
                 for update in updates:
@@ -89,6 +95,7 @@ class StatusListener():
         self._channels = {}
         self._last_values = {}
         self._monitor_all = monitor_all
+        self.condition_lock = threading.Condition()
 
         if not CCshm.available:
             raise Exception("Shared memory not available and no db implementation is done")
@@ -130,10 +137,15 @@ class StatusListener():
                         except:
                             print("Failed to parse or print data: %s" % (data))
                             traceback.print_exc()
+                    with self.condition_lock:
+                        self.condition_lock.notifyAll()
+
                     # Sleep to avoid lock thrashing, and buffer up more data before
-                    # we do anything
-                    time.sleep(0.016)
-        t = threading.Thread(target=getter, daemon=True)
+                    # we do anything (is this necessary?)
+                    time.sleep(0.005)
+
+        t = threading.Thread(target=getter)
+        t.setDaemon(True)
         t.start()
 
     def get_last_value(self, chan, param):
@@ -153,3 +165,11 @@ class StatusListener():
                     ret[item] = None
             return ret
         return self._last_values
+
+    def wait(self, timeout=1.0):
+        """
+        Wait for any updates or at most timeout seconds
+        """
+
+        with self.condition_lock:
+            self.condition_lock.wait(timeout=timeout)
