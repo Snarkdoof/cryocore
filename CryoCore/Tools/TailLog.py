@@ -280,7 +280,6 @@ class TailLog(mysql):
                 print("Oops:", e)
                 import traceback
                 traceback.print_exc()
-<<<<<<< HEAD
 
     def _write_to_file(self, target, options, row):
         # Is the file too big? Remove 25% from the start by reading the last 75%, truncate and write
