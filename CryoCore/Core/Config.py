@@ -1540,6 +1540,9 @@ class Configuration(threading.Thread):
                       "last_modified": param.last_modified,
                       "children": children}
         for child in children:  # Needed to simplify web use
+            if not isinstance(child["name"], str):
+                print("*** JIKES *** Expected string as child name, got", child["name"].__class__, child["name"])
+                continue
             serialized[child["name"]] = child
 
         return serialized
@@ -1772,7 +1775,8 @@ class Configuration(threading.Thread):
                 for param_id, name, value, last_modified in cursor.fetchall():
 
                     for lastupdate, cbid in cbs[param_id]:
-                        last_modified = time.mktime(last_modified.timetuple())
+                        if not isinstance(last_modified, float):
+                            last_modified = time.mktime(last_modified.timetuple())
                         if lastupdate >= last_modified:
                             continue
                         self._callback_items[cbid]["params"][param_id] = last_modified

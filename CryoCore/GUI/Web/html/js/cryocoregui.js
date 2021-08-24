@@ -195,7 +195,6 @@ var CryoCoreGUI = function(_CRYOCOREGUI_) {
 
   var _Plot = function($target, opt) {
     var _crosshair_timer = null;
-
     var get_range = function(data) {
 
       var min_val = 1000000000000;
@@ -308,8 +307,6 @@ var CryoCoreGUI = function(_CRYOCOREGUI_) {
         options.series.lines = {
           show: false
         }
-
-
       if (opt.alarm != undefined) {
         // Create a red line here
         if (!range) { // Use range of data

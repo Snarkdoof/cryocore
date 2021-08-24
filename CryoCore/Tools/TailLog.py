@@ -498,8 +498,8 @@ if __name__ == "__main__":
     parser.add_argument("--tofile", type=str, dest="tofile", default="", help="Dump logs to a given file name, not terminal")
     parser.add_argument("--maxfilesize", type=str, dest="maxfilesize", default=None, help="Maximum filesize in MB")
 
-    # parser.add_argument("--motion", dest="motion", action="store_true", default=False,
-    #                     help="Replay a mission according to motions")
+    parser.add_argument("--motion", dest="motion", action="store_true", default=False,
+                        help="Replay a mission according to motions")
 
     try:
         if "argcomplete" in sys.modules:
@@ -520,12 +520,13 @@ if __name__ == "__main__":
             API.set_config_db(db_cfg)
 
         clock = None
-        if 0:  # options.motion:
+        if options.motion:
             try:
                 import MCorp
                 # app = MCorp.App("6459748540093085075", API.api_stop_event)
                 app = MCorp.App("5479276526614340281", API.api_stop_event)
                 clock = app.motions["live"]
+                print("Motion time is", time.ctime(clock.pos()), clock.pos())
             except Exception as e:
                 print("Failed to use motion:", e)
 

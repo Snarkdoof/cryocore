@@ -207,7 +207,7 @@ var CryoCore = function(_CRYOCORE_) {
 
     if (options.timingObject) {
       options.timingObject.on("change", function() {
-        last_id = 0;
+        last_id = 0; {}
         last_id2d = 0;
         _cleanHistorical(true);
       });
@@ -401,13 +401,15 @@ var CryoCore = function(_CRYOCORE_) {
 
       sequencer._toA.on("change", function() {
         // Fill with historic data
+        //console.log("Direct loading", sequencer._toA.pos, "to", sequencer._toB.pos, options.aggregate);
         directLoad(params, sequencer._toA.pos, sequencer._toB.pos, options.aggregate, function(data) {
+          //console.log("Got direct data", data);
           for (var key in data) {
             if (!data.hasOwnProperty(key)) continue;
             for (var i=0; i<data[key].length; i++) {
               var item = data[key][i];
               // Add paramid?
-              sequencer.addCue(String(_snr++), new TIMINGSRC.Interval(item[0], item[0]), {key: key, data: item});
+              sequencer.addCue(String(_snr++), new TIMINGSRC.Interval(item[0], item[0]), {key: key, data: item, param:key});
             }
           }
         });        
@@ -417,6 +419,7 @@ var CryoCore = function(_CRYOCORE_) {
       addMonitor(params, function(key, data) {
         for (var i=0; i<data.length; i++) {
           var item = data[i];
+          console.log("UPDATING DATA", item);
           sequencer.addCue(String(_snr++), new TIMINGSRC.Interval(item[0], item[0]), {key: key, data:item});
         }
       });
@@ -445,10 +448,12 @@ var CryoCore = function(_CRYOCORE_) {
       last_update = now - 30; // We allow 30 seconds for data to propagate 
       outstanding += 1;
       var success = function(res) {
+        //console.log("RES", res, "max", res.max_id);
         outstanding = 0;
         var the_data = {};
-        last_id = res.max_id;
-        last_id2d = res.max_id2d;
+        last_id = Math.max(last_id, res.max_id);
+        last_id2d = Math.max(last_id2d, res.max_id2d);
+
         _store(res.data);
         /* Execute callbacks now that we have the data ready */
         for (var key in res.data) {
@@ -590,6 +595,10 @@ var CryoCore = function(_CRYOCORE_) {
         if (!getmax) {
           _store(res.data);
         }
+
+        last_id = Math.max(last_id, res.max_id);
+        last_id2d = Math.max(last_id2d, res.max_id2d);
+
         onComplete(res.data);
       };
 
