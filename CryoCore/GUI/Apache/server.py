@@ -311,7 +311,7 @@ class LiveHandler(WebSocket):
                 for param in req["params"]:
                     if (param in self._last_vals):
                         # TODO: Unsubscribe
-                        del self.last_vals(param)
+                        self.last_vals.remove(param)
 
         except Exception as e:
             print("Badly shaped live request", req, e)
