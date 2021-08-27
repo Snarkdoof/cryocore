@@ -9,6 +9,8 @@ import logging
 import threading
 import logging.handlers
 import sys
+import os
+import json
 
 from CryoCore.Core.Status import Status
 from CryoCore.Core.Config import Config
@@ -69,6 +71,94 @@ def get_config(name=None, version="default"):
     if (name, version) not in configs:
         configs[(name, version)] = Config(name, ".cfg" + version)
     return configs[(name, version)]
+
+
+class GlobalDBConfig:
+    singleton = None
+
+    def __init__(self):
+        self.cfg = {"db_name": "cryocore",
+                    "db_host": "localhost",
+                    "db_user": "cc",
+                    "db_password": u"Kjøkkentrappene bestyrer sørlandske databehandlingsrutiner",
+                    "db_compress": False,
+                    "max_connections": 5,
+                    "ssl.enabled": False,
+                    "ssl.key": None,
+                    "ssl.ca": None,
+                    "ssl.cert": None}
+
+
+        # Check if this is in a docker, if so, localhost should be replaced
+        # with the IP of the "host"
+        if os.path.exists("/.dockerenv"):
+            self.cfg["db_host"] = "172.17.0.1"
+
+        # Check in the user's home dir
+        userconfig = os.path.expanduser("~/.cryoconfig")
+        if os.path.isfile(userconfig):
+            with open(userconfig, "r") as f:
+                cfg = json.loads(f.read())
+            for param in self.cfg:
+                if param in cfg:
+                    self.cfg[param] = cfg[param]
+            for param in cfg:
+                if param.startswith("override_"):
+                    self.cfg[param] = cfg[param]
+
+        # Local override
+        if os.path.isfile(".config"):
+            with open(".config", "r") as f:
+                cfg = json.loads(f.read())
+            for param in self.cfg:
+                if param in cfg:
+                    self.cfg[param] = cfg[param]
+            for param in cfg:
+                if param.startswith("override_"):
+                    self.cfg[param] = cfg[param]
+
+    @staticmethod
+    def get_singleton():
+        if GlobalDBConfig.singleton is None:
+            GlobalDBConfig.singleton = GlobalDBConfig()
+        return GlobalDBConfig.singleton
+
+    def set_cfg(self, cfg):
+        for key in self.cfg:
+            if key in cfg:
+                self.cfg[key] = cfg[key]
+
+    def get_cfg(self):
+        return self.cfg
+
+
+def set_config_db(cfg):
+    """
+    Set the default configuration database parameters
+    """
+    # Sanity check
+    try:
+        legal_keys = ["db_host", "db_password", "db_name", "db_user"]
+        for key in cfg:
+            if key not in legal_keys:
+                raise Exception("Bad config supplied, must only contain from: %s" % str(legal_keys))
+        GlobalDBConfig.get_singleton().set_cfg(cfg)
+    except Exception as e:
+        raise Exception("Bad config supplied", e)
+
+
+def get_config_db(what=None):
+    import copy
+    cfg = copy.copy(GlobalDBConfig.get_singleton().get_cfg())
+
+    # Do we have a particular override?
+    if what:
+        n = "override_%s" % what
+        if n in cfg:
+            for key in cfg[n]:
+                if key in cfg:
+                    cfg[key] = cfg[n][key]
+    return cfg
 
 
 # @logTiming

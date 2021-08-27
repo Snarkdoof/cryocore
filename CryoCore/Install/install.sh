@@ -19,8 +19,8 @@ if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
 	sudo activate-global-python-argcomplete
 	
 	echo "Installing mysql connector"
-  sudo pip install mysql-connector
-  sudo pip3 install mysql-connector
+  sudo pip install mysql-connector-python
+  sudo pip3 install mysql-connector-python
 	# sudo dpkg -i CryoCore/Install/libs/mysql-connector-python*.deb
 
 	echo "Detecting sensors"
@@ -47,10 +47,10 @@ echo "Importing default config"
 
 
 echo "Copying startup scripts"
-python -c "import sys;import os;lines=sys.stdin.read();print lines.replace('CCINSTALLDIR', os.getcwd())" < CryoCore/Install/cryocore.service > /tmp/cryocore.service
+python3 -c "import sys;import os;lines=sys.stdin.read();print(lines.replace('CCINSTALLDIR', os.getcwd()))" < CryoCore/Install/cryocore.service > /tmp/cryocore.service
 sudo mv /tmp/cryocore.service /etc/systemd/system/
 
-python -c "import sys;import os;lines=sys.stdin.read();print lines.replace('CCINSTALLDIR', os.getcwd())" < CryoCore/Install/cryocored > bin/cryocored
+python3 -c "import sys;import os;lines=sys.stdin.read();print(lines.replace('CCINSTALLDIR', os.getcwd()))" < CryoCore/Install/cryocored > bin/cryocored
 chmod 755 bin/cryocored
 
 systemctl is-enabled cryocore.service
