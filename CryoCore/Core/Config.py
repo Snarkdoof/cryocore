@@ -1770,9 +1770,8 @@ class Configuration(threading.Thread):
 
                 # We should now have a list of all the updated parameters we have, loop and call back
                 for param_id, name, value, last_modified in cursor.fetchall():
-
+                    last_modified = time.mktime(last_modified.timetuple())
                     for lastupdate, cbid in cbs[param_id]:
-                        last_modified = time.mktime(last_modified.timetuple())
                         if lastupdate >= last_modified:
                             continue
                         self._callback_items[cbid]["params"][param_id] = last_modified
