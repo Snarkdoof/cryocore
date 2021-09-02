@@ -12,8 +12,7 @@ class SharedMemoryReporter(Status.OnChangeStatusReporter):
         try:
             self.bus = CCshm.EventBus("CryoCore.API.Status", 0, 1024 * 256)
         except:
-            import traceback
-            traceback.print_exc()
+            print("Warning: Shared memory module not compiled, using polling")
             self.bus = None
     
     def add_element(self, element):
@@ -29,5 +28,5 @@ class SharedMemoryReporter(Status.OnChangeStatusReporter):
         data = json.dumps({ "channel" : event.status_holder.get_name(),
                             "ts" : event.get_timestamp(),
                             "name" : event.get_name(),
-                            "value" : event.get_value() })
+                            "value" : event.get_value()})
         self.bus.post(data)

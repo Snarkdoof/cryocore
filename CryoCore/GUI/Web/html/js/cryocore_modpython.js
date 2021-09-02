@@ -232,7 +232,7 @@ var CryoCore = function(_CRYOCORE_) {
       let reconn;
 
       let getConnection = function(url) {
-          if (ws && ws.readyState == ws.OPEN)
+          if (ws && ws.readyState <= ws.OPEN)
               return ws;
           console.log("Connecting to", url);
           ws = new WebSocket(url);
@@ -287,12 +287,9 @@ var CryoCore = function(_CRYOCORE_) {
               let chans = {};
               chans[channel] = [parameter];
               let ws = getConnection(URL);
-              if (ws.readyState != ws.open) {
-                  setTimeout(function() {
-                      ws.send(JSON.stringify({"type": "subscribe", "channels": chans}));
-                  }, 1000);
-              } else {
-                  ws.send(JSON.stringify({"type": "subscribe", "channels": chans}));            
+              if (ws.readyState == ws.open) {
+                // If it's not open yet, it will be subscribed when it gets connected
+                ws.send(JSON.stringify({"type": "subscribe", "channels": chans}));            
               }
           } else {
               if (subs[[channel, parameter]].indexOf(onChange) > -1) {
@@ -317,13 +314,34 @@ var CryoCore = function(_CRYOCORE_) {
               // Unsubscribe on server
               let chans = {};
               chans[channel] = [parameter];
-              getConnection().send(JSON.stringify({"type": "unsubscribe", "channels": chans}));
+              let ws = getConnection();
+              if (ws.readyState == ws.open) {
+                ws.send(JSON.stringify({"type": "unsubscribe", "channels": chans}));
+              }
           }
+      };
+
+      let mapping = {};  // Mapping from chan,param to id (as live uses full names - doesn't go through DB)
+      let subscribe_by_ids = function(parameters, onChange) {
+
+        parameters.forEach(param => {
+          let p = getParamInfo(param);
+
+          mapping[p.channel + "," + p.param] = param;
+
+          subscribe(p.channel, p.param, evt => {
+            console.log("Converting", evt);
+            // Convert to key and {param:, key:, data: [ts, value]}
+            let paramid = mapping[evt.channel + "," + evt.name];
+            onChange(paramid, [[evt.ts, evt.value]]);
+          });
+        });
       };
 
       let LiveAPI = {
         subscribe: subscribe,
-        unsubscribe: unubscribe
+        unsubscribe: unsubscribe,
+        subscribe_by_ids: subscribe_by_ids
       };
       return LiveAPI;
     };
@@ -444,7 +462,10 @@ var CryoCore = function(_CRYOCORE_) {
         if (live_data) {
           console.log("Should use live data as opposed to polling");
           console.log("Params are", params);
+          live_data.subscribe_by_ids(params, callback);
           return;
+        } else {
+          console.log("Live data not available, using polling", options.liveurl);
         }
           
         if (monitored_keys.indexOf(params[i]) == -1) {
@@ -522,6 +543,7 @@ var CryoCore = function(_CRYOCORE_) {
             for (var i=0; i<data[key].length; i++) {
               var item = data[key][i];
               // Add paramid?
+            console.log("Loading", item);
               sequencer.addCue(String(_snr++), new TIMINGSRC.Interval(item[0], item[0]), {key: key, data: item, param:key});
             }
           }
@@ -530,6 +552,7 @@ var CryoCore = function(_CRYOCORE_) {
 
       // Monitor this from now on
       addMonitor(params, function(key, data) {
+        console.log("Monitor triggred", key, "with data", data);
         for (var i=0; i<data.length; i++) {
           var item = data[i];
           console.log("UPDATING DATA", item);
@@ -969,7 +992,8 @@ var CryoCore = function(_CRYOCORE_) {
 
     // Do we also use live data?
     if (options.liveurl) {
-      livedata = LiveData(options.liveurl);
+      live_data = LiveData(options.liveurl);
+      self.live_data = live_data;
     }
 
     return self;

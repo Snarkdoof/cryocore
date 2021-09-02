@@ -253,8 +253,6 @@ class LiveHandler(WebSocket):
                 val = vals[i]
                 if val is None:
                     continue
-                print("VALS", val)
-                print("Last vals:", self.last_vals)
 
                 if i in self.last_vals and self.last_vals[i] and self.last_vals[i]["ts"] < val["ts"]:
                     tosend.append(val)
@@ -266,7 +264,7 @@ class LiveHandler(WebSocket):
                 print("Sending", tosend)
                 self.sendMessage(json.dumps({"type": "update", "values": tosend}))
 
-            listener.wait(1.0)  # Wait for any updates
+            listener.wait(3.0)  # Wait for any updates
 
     def handleMessage(self):
         print("GOT LIVE REQUEST", self.data)
@@ -291,12 +289,6 @@ class LiveHandler(WebSocket):
                 if len(items) > 0:
                     getStatusListener().add_monitors(items)
 
-                items = []
-                for paramid in req["params"]:
-                    items.append(paramid)
-                if len(items) > 0:
-                    getStatusListener().add_monitors_by_id(items)
-
             elif req["type"] == "unsubscribe":
                 items = []
                 for chan in req["channels"]:
@@ -308,10 +300,6 @@ class LiveHandler(WebSocket):
                     # StatusListener don't support removing things yet
                     # getStatusListener().remove_monitors(items)
 
-                for param in req["params"]:
-                    if (param in self._last_vals):
-                        # TODO: Unsubscribe
-                        self.last_vals.remove(param)
 
         except Exception as e:
             print("Badly shaped live request", req, e)
