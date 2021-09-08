@@ -47,20 +47,18 @@ log_level = {logging.CRITICAL: "CRITICAL",
              logging.INFO: "INFO",
              logging.DEBUG: "DEBUG"}
 
-global CONFIGS
-CONFIGS = {}
+global CCGLOBALS
+CCGLOBALS = {
+    "CONFIGS": {},
+    "main_configs": {},
+    "LOGS": {},
+    "LOG_DESTINATION": {},
+    "glblStatusReporter": None,
+    "glblSharedMemoryReporter": None,
+    "reporter_collection": None
+}
 
-global main_configs
-main_configs = {}
-
-LOGS = {}
-LOG_DESTINATION = None
 DEFAULT_LOGLEVEL = logging.DEBUG
-
-global glblStatusReporter, glblSharedMemoryReporter
-glblStatusReporter = None
-glblSharedMemoryReporter = None
-reporter_collection = None
 
 __is_direct = False
 
@@ -68,18 +66,19 @@ api_auto_init = True
 
 
 def get_status_reporter():
-    global glblStatusReporter
-    if not glblStatusReporter:
+
+    global CCGLOBALS
+    if not CCGLOBALS["glblStatusReporter"]:
         from CryoCore.Core.Status.MySQLReporter import MySQLStatusReporter as DBReporter
-        glblStatusReporter = DBReporter()
-    return glblStatusReporter
+        CCGLOBALS["glblStatusReporter"] = DBReporter()
+    return CCGLOBALS["glblStatusReporter"]
 
 def get_shared_memory_status_reporter():
-    global glblSharedMemoryReporter
-    if not glblSharedMemoryReporter:
+    global CCGLOBALS
+    if not CCGLOBALS["glblSharedMemoryReporter"]:
         from CryoCore.Core.Status.SharedMemoryReporter import SharedMemoryReporter
-        glblSharedMemoryReporter = SharedMemoryReporter()
-    return glblSharedMemoryReporter 
+        CCGLOBALS["glblSharedMemoryReporter"] = SharedMemoryReporter()
+    return CCGLOBALS["glblSharedMemoryReporter"] 
 
 class GlobalDBConfig:
     singleton = None
@@ -163,75 +162,6 @@ def get_config_db(what=None):
     return cfg
 
 
-class ReporterCollection:
-    """
-    This is just a class to hold remote status holders that stops and cleans
-    up all reporters
-    """
-    singleton = "None"
-
-    def __init__(self):
-        global api_stop_event
-        self.stop_event = api_stop_event
-        self.lock = threading.Lock()
-
-        self.reporters = {}
-
-        try:
-            from CryoCore.Core.Status.MySQLReporter import MySQLStatusReporter as DBReporter
-            name = "System.Status.MySQL"
-        except Exception as e:
-            print("Exception importing MySQL destination:", e)
-            from CryoCore.Core.Status.Sqlite3Reporter import DBStatusReporter as DBReporter
-            name = "System.Status.Sqlite"
-        self.db_reporter = DBReporter(name)
-
-    @staticmethod
-    def get_singleton():
-        if ReporterCollection.singleton == "None":
-            ReporterCollection.singleton = ReporterCollection()
-        return ReporterCollection.singleton
-
-    def get_db_reporter(self):
-        return self.db_reporter
-
-    def get_reporter(self, name):
-        """
-        @returns (was_created, reporter) where was_created is True iff the
-        reporter was just created
-        """
-        was_created = False
-        with self.lock:
-            if name not in self.reporters:
-                was_created = True
-                from CryoCore.Core.Status.RemoteStatusReporter import RemoteStatusReporter
-                self.reporters[name] = RemoteStatusReporter(name, self.stop_event)
-                # Register this reporter with the UAV service
-                import CryoCore.Core.timeout_xmlrpclib as xmlrpclib
-                try:
-                    cfg = get_config("System.Status.RemoteStatusReporter")
-                    service = xmlrpclib.ServerProxy(cfg["url"], timeout=1.0)
-                    error = None
-                    for i in range(0, 3):
-                        try:
-                            service.add_holder(name, socket.gethostname(),
-                                               self.reporters[name].get_port())
-                            error = None
-                            break
-                        except socket.error as e:
-                            print("Error registering status reporter:", e)
-                            error = e
-                            os.system("python Services/StatusService.py & ")
-                            print("*** Started status service")
-                            time.sleep(2)
-                    if error:
-                        raise error
-                except:
-                    get_log("API").exception("Could not register remote status reporter '%s' with service on port '%s'" % (name, self.reporters[name].get_port()))
-            return (was_created, self.reporters[name])
-
-    def __del__(self):
-        self.stop_event.set()
 
 
 def shutdown():
@@ -257,11 +187,28 @@ def reset():
     Perhaps a better way is to ensure that all external connections are
     dependent on thread-id + process id?
     """
-    shutdown()
+    # shutdown()
 
-    global api_stop_event
-    api_stop_event = threading.Event()
+    # global api_stop_event
+    # api_stop_event = threading.Event()
+    global CCGLOBALS
+    CCGLOBALS = {
+        "CONFIGS": {},
+        "main_configs": {},
+        "LOGS": {},
+        "LOG_DESTINATION": {},
+        "glblStatusReporter": None,
+        "glblSharedMemoryReporter": None,
+        "reporter_collection": None
+    }
 
+    try:
+        from CryoCore.Core.InternalDB import AsyncDB
+        AsyncDB.reset()
+    except Exception as e:
+        print("[ERROR]: Resetting InternalDB.asyncDB:", e)
+
+    return
 
 # @logTiming
 def get_config(name=None, version="default", db_cfg=None):
@@ -272,22 +219,21 @@ def get_config(name=None, version="default", db_cfg=None):
     if db_cfg is None:
         db_cfg = GlobalDBConfig.get_singleton().cfg
 
-    global main_configs
-    if version not in main_configs:
-        main_configs[version] = Configuration(stop_event=api_stop_event,
-                                              version=version,
-                                              db_cfg=db_cfg,
-                                              is_direct=__is_direct,
-                                              auto_init=api_auto_init)
+    if version not in CCGLOBALS["main_configs"]:
+        CCGLOBALS["main_configs"][version] = Configuration(stop_event=api_stop_event,
+                                                           version=version,
+                                                           db_cfg=db_cfg,
+                                                           # is_direct=True,
+                                                           is_direct=__is_direct,
+                                                           auto_init=api_auto_init)
 
-    global CONFIGS
-    if not (name, version) in CONFIGS:
-        CONFIGS[(name, version)] = NamedConfiguration(name, version, main_configs[version])
+    if not (name, version) in CCGLOBALS["CONFIGS"]:
+        CCGLOBALS["CONFIGS"][(name, version)] = NamedConfiguration(name, version, CCGLOBALS["main_configs"][version])
         # CONFIGS[(name, version)] = Configuration(root=name,
         #                                         stop_event=api_stop_event,
         #                                         version=version,
         #                                         db_cfg=db_cfg)
-    return CONFIGS[(name, version)]
+    return CCGLOBALS["CONFIGS"][(name, version)]
 
 
 def set_log_level(loglevel):
@@ -327,18 +273,19 @@ logging.setLoggerClass(PrefixedLogger)
 
 # @logTiming
 def get_log(name, prefix=None):
-    global LOGS
-    global LOG_DESTINATION
-    if not LOG_DESTINATION:
+    # global LOGS
+    # global LOG_DESTINATION
+    if not CCGLOBALS["LOG_DESTINATION"]:
         from CryoCore.Core.dbHandler import DbHandler
-        LOG_DESTINATION = DbHandler()
-    if name not in LOGS:
-            LOGS[name] = logging.getLogger(name)
-            LOGS[name].propagate = False
-            LOGS[name].prefix = prefix
-            LOGS[name].setLevel(DEFAULT_LOGLEVEL)
-            LOGS[name].addHandler(LOG_DESTINATION)
-    return LOGS[name]
+        CCGLOBALS["LOG_DESTINATION"] = DbHandler()
+    if name not in CCGLOBALS["LOGS"]:
+        CCGLOBALS["LOGS"][name] = logging.getLogger(name)
+        CCGLOBALS["LOGS"][name].propagate = False
+        CCGLOBALS["LOGS"][name].prefix = prefix
+        CCGLOBALS["LOGS"][name].setLevel(DEFAULT_LOGLEVEL)
+        CCGLOBALS["LOGS"][name].addHandler(CCGLOBALS["LOG_DESTINATION"])
+
+    return CCGLOBALS["LOGS"][name]
 
 
 # @logTiming
@@ -354,22 +301,9 @@ def get_status(name):
             holder.add_reporter(reporter)
     except Exception as e:
         print("Failed to add shared memory status reporter for %s:" % name, e)
-    return holder
-
-    (was_created, reporter) = ReporterCollection.get_singleton().get_reporter(name)
-    if was_created:
-        try:
-            holder.add_reporter(reporter)
-            holder["remote_port"] = reporter.port
-        except Exception as e:
-            print("Remote reporter could not be added:", e)
-
-        try:
-            holder.add_reporter(ReporterCollection.get_singleton().get_db_reporter())
-        except Exception as e:
-            print("Database reporter could not be added:", e)
 
     return holder
+
 
 
 def _toUnicode(string):

@@ -133,7 +133,7 @@ class ConfigParameter:
 
     def _set_last_modified(self, last_modified):
         if last_modified:
-            self.last_modified = time.mktime(last_modified.timetuple())
+            self.last_modified = last_modified.timestamp()  # time.mktime(last_modified.timetuple()) + (last_modified.microsecond / 1e6)
         else:
             self.last_modified = None
 
@@ -472,6 +472,8 @@ class Configuration(threading.Thread):
         self._condition = threading.Condition()
         self.cursor = None
 
+        self.dbg = threading.Lock()
+
         self._id_cache = {}
         self.cache = {}
         self._version_cache = {}
@@ -547,10 +549,14 @@ class Configuration(threading.Thread):
                 full_path = name
                 parent = None
             else:
-                parent = self._cache_lookup_by_id(version, parentid)
-                path = parent.get_full_path()
-                full_path = path + "." + name
-                parent_ids = self._id_cache[version][path]
+                try:
+                    parent = self._cache_lookup_by_id(version, parentid)
+
+                    full_path = path + "." + name
+                    parent_ids = self._id_cache[version][path]
+                except:
+                    # We're lacking a parent, strange but DB is always correct.
+                    continue
 
             param = ConfigParameter(self, id, name, parent_ids, path,
                                     datatype, value, version, last_modified,
@@ -592,7 +598,7 @@ class Configuration(threading.Thread):
         if version in self.cache:
             if full_path in self.cache[version]:
                 val, expires = self.cache[version][full_path]
-                if expires < time.time():
+                if expires < time.time() or val is None:
                     # self.log.debug("** EXPIRE %s %s %s" % (version, full_path, self.cache[version].keys()))
                     self._cache_refresh(version, full_path)
                 else:
@@ -668,7 +674,7 @@ class Configuration(threading.Thread):
         # return self.get_connection().cursor()
 
         try:
-            if self.cursor is None:
+            if self.cursor is None or temporary_connection:
                 self.cursor = self.get_connection().cursor()
             return self.cursor
         except mysql.OperationalError:
@@ -682,14 +688,18 @@ class Configuration(threading.Thread):
         if self._is_direct:
             try:
                 if DEBUG:
-                    self.log.debug("%s (%s)" % (SQL, parameters))
+                    self.log.debug("%d: " % threading.get_ident() +  SQL % tuple(parameters))
                 cursor = self._get_cursor()
                 cursor.execute(SQL, parameters)
+                time.sleep(0.1)
                 return cursor
             except Exception as e:
                 if ignore_error:
                     return cursor
                 raise e
+
+        # raise RuntimeException("Deprecated")
+
         event = threading.Event()
         retval = {}
 
@@ -700,8 +710,10 @@ class Configuration(threading.Thread):
             self._runQueue.put([event, retval, SQL, parameters, ignore_error])
 
         # t = time.time()
-        event.wait(60.0)
-        # if time.time() - t > 2.0:
+        event.wait(10.0)
+
+        # print(time.time() - t, ":", SQL % tuple(parameters))
+        #if time.time() - t > 2.0:
         #    print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
         if not event.isSet():
             raise Exception("Failed to execute Config query in time (%s)" % SQL)
@@ -906,7 +918,7 @@ class Configuration(threading.Thread):
             SQL = "INSERT INTO config_version(name) VALUES(%s)"
             try:
                 cursor = self._execute(SQL, [version])
-                cursor.close()
+                # cursor.close()
             except Exception as e:
                 print("Version already existed...", e)
                 raise VersionAlreadyExistsException(version)
@@ -923,8 +935,12 @@ class Configuration(threading.Thread):
         TODO: This must be fixed, must also clear the caches
         """
         print("WARNING: delete_version requires restart")
+        #print("***REFUSING TO DELETE FOR DEBUG PURPOSES")
+        #return
         with self._load_lock:
             c = self._execute("SELECT id FROM config_version WHERE name=%s", [version])
+            if c.rowcount > 1:
+                raise Exception("No way!")
             version_id = c.fetchone()
 
             if not version_id:
@@ -969,6 +985,8 @@ class Configuration(threading.Thread):
         if name not in self._version_cache:
             cursor = self._execute("SELECT id FROM config_version WHERE name=%s",
                                    [name])
+            if cursor.rowcount > 1:
+                raise Exception("No way!")
             row = cursor.fetchone()
             if not row:
                 raise NoSuchVersionException(name)
@@ -1046,6 +1064,8 @@ class Configuration(threading.Thread):
             params.append(version)
 
         cursor = self._execute(SQL, params)
+        if cursor.rowcount > 1:
+            raise Exception("No way!")
         row = cursor.fetchone()
         if not row:
             if DEBUG:
@@ -1119,6 +1139,8 @@ class Configuration(threading.Thread):
 
             SQL = "SELECT id, parent, name, value, datatype, version, last_modified, comment FROM config WHERE id=%s"
             cursor = self._execute(SQL, [param_id])
+            if cursor.rowcount > 1:
+                raise Exception("No way!")
             row = cursor.fetchone()
             if not row:
                 raise NoSuchParameterException("Parameter number: %s" % param_id)
@@ -1220,6 +1242,8 @@ class Configuration(threading.Thread):
                     "last_modified, comment FROM config WHERE id=%s"
                 params = [id_path[-1]]
                 cursor = self._execute(SQL, params)
+                if cursor.rowcount > 1:
+                    raise Exception("No way!")
                 row = cursor.fetchone()
                 if not row:
                     # Caching failures fails - a create is typically called
@@ -1300,13 +1324,14 @@ class Configuration(threading.Thread):
             for row in c.fetchall():
                 ret.extend(_rec_delete(row[0], version, path + "." + row[1]))
             self._cache_remove(version, path)
+
             if path in self._id_cache[version]:
                 del self._id_cache[version][path]
+
             ret.append((id, path))
             return ret
 
         with self._load_lock:
-
             param = self.get(full_path, version, add=False)
             params = _rec_delete(param._get_id(), param.get_version(), full_path)
             SQL = "DELETE FROM config WHERE "
@@ -1316,8 +1341,24 @@ class Configuration(threading.Thread):
                 args.append(i)
             SQL = SQL[:-4]
             self._execute(SQL, args)
-            if full_path in self._id_cache:
-                del self._id_cache[full_path]
+            if full_path.startswith("root."):
+                full_path = full_path[5:]
+
+            # Cache should be cleaned after _rec_delete
+            # self._cache_remove(version, full_path)
+
+            if 0:
+                if full_path in self._id_cache[self.version_id]:
+                    del self._id_cache[self.version_id][full_path]
+                    print("Removed %s from ID cache" %full_path)
+                else:
+                    print("Warning: Removed element not in ID cache", full_path, self._id_cache[self.version_id].keys())
+
+                if full_path in self.cache[self.version_id]:
+                    del self.cache[self.version_id][full_path]
+                    print("Removed %s from cache" % full_path)
+                else:
+                    print("Warning: Removed element not in cache", full_path)
 
     def add(self, _full_path, value=None, datatype=None, comment=None,
             version=None,
@@ -1438,7 +1479,6 @@ class Configuration(threading.Thread):
         """
         Commit an updated parameter to the database
         """
-
         with self._load_lock:
             # Integrity check?
             error = False
@@ -1455,13 +1495,13 @@ class Configuration(threading.Thread):
                     if error:
                         raise Exception("Refusing to save inconsistent datatype for config parameter %s=%s. Datatype of parameter is '%s' but type of value is '%s'." % (config_parameter.name, config_parameter.value, config_parameter.datatype, dt))
 
-            SQL = "UPDATE config SET value=%s,datatype=%s,comment=%s WHERE id=%s AND parent=%s AND version=%s"
+            SQL = "UPDATE config SET value=%s,datatype=%s,comment=%s WHERE id=%s AND version=%s"
             self._execute(SQL, [config_parameter.value,
                                 config_parameter.datatype,
                                 config_parameter.comment,
                                 config_parameter.id,
-                                config_parameter.parents[-1],
                                 config_parameter.version])
+
         with self.callbackCondition:
             self._notify_counter += 1
             self.callbackCondition.notify()
@@ -1516,6 +1556,8 @@ class Configuration(threading.Thread):
         with self._load_lock:
             SQL = "SELECT name, device, comment FROM config_version WHERE id=%s"
             cursor = self._execute(SQL, [version_id])
+            if cursor.rowcount > 1:
+                raise Exception("No way!")
             row = cursor.fetchone()
             if not row:
                 raise NoSuchVersionException("ID: %s" % version_id)
@@ -1698,8 +1740,9 @@ class Configuration(threading.Thread):
             root = self.root
 
         # Do a quick cache lookup - if we have the path, we don't need to create it
-        if root + name in self._id_cache[self.version_id]:
-            return
+        if self.version_id in self._id_cache:
+            if root + name in self._id_cache[self.version_id]:
+                return
 
         try:
             self.get(name, root=root, absolute_path=True)
@@ -1727,6 +1770,8 @@ class Configuration(threading.Thread):
             version_id = self._get_version_id(self.version)
 
         c = self._execute("SELECT UNIX_TIMESTAMP(MAX(last_modified)) FROM config WHERE version=%s", [version_id])
+        if cursor.rowcount > 1:
+            raise Exception("No way!")
         row = c.fetchone()
         return row[0]
 
@@ -1766,17 +1811,18 @@ class Configuration(threading.Thread):
                 for param in params:
                     SQL += "(id=%s AND last_modified>%s) OR "
                     p.append(param)
-                    p.append(params[param])
+                    import datetime
+                    p.append(datetime.datetime.fromtimestamp(params[param]))
 
                 SQL = SQL[:-3]
-                cursor = self._execute(SQL, p)
+                cursor = self._execute(SQL, p, temporary_connection=True)
 
                 # We should now have a list of all the updated parameters we have, loop and call back
                 for param_id, name, value, last_modified in cursor.fetchall():
 
                     for lastupdate, cbid in cbs[param_id]:
                         if not isinstance(last_modified, float):
-                            last_modified = time.mktime(last_modified.timetuple())
+                            last_modified = last_modified.timestamp()  # time.mktime(last_modified.timetuple()) + (last_modified.microsecond / 1e6)
                         if lastupdate >= last_modified:
                             continue
                         self._callback_items[cbid]["params"][param_id] = last_modified

@@ -17,15 +17,17 @@ import logging
 
 import sys
 if sys.version_info.major == 3:
-    import queue
+    import multiprocessing as queue
+    from queue import Empty
 else:
     import Queue as queue
+    from Queue import Empty
 
 
 DEBUG = False
 SLOW_WARNING = False
 
-dbThreads = {}
+# dbThreads = {}
 
 
 class TooSlowException(Exception):
@@ -65,14 +67,20 @@ class FakeCursor():
 
 class AsyncDB(threading.Thread):
 
+    dbThreads = {}
+      
     @staticmethod
     def getDB(config, name="global"):
-        global dbThreads
-        if name not in dbThreads:
-            dbThreads[name] = AsyncDB(config)
-            dbThreads[name].daemon = True  # Will be stopped too quickly otherwise...
-            dbThreads[name].start()
-        return dbThreads[name]
+        if name not in AsyncDB.dbThreads:
+            AsyncDB.dbThreads[name] = AsyncDB(config)
+            AsyncDB.dbThreads[name].daemon = True  # Will be stopped too quickly otherwise...
+            AsyncDB.dbThreads[name].start()
+        return AsyncDB.dbThreads[name]
+
+
+    @staticmethod
+    def reset():
+        AsyncDB.dbThreads = {}
 
     def __init__(self, config=None):
         threading.Thread.__init__(self)
@@ -82,6 +90,10 @@ class AsyncDB(threading.Thread):
         self.stop_event = API.api_stop_event
         self.running = True
         self.cursor = None
+        self.lock_map = {}
+        self.retval_map = {}
+        self.lock = threading.Lock()
+
         if config:
             self._mycfg = config
         else:
@@ -106,11 +118,20 @@ class AsyncDB(threading.Thread):
             pass
         pass
 
+
+    def get_retval(self, handle):
+        if handle not in self.retval_map:
+            raise Exception("Bad handle or return value already read")
+        with self.lock:
+            r = self.retval_map[handle]
+            del self.retval_map[handle]
+        return r
+
     def execute(self, task, insist_direct=False):
         if insist_direct:
             conn = self._get_connection()
             cursor = conn.cursor()
-            event, retval, SQL, parameters, ignore_error = task
+            SQL, parameters, ignore_error = task
             cursor.execute(SQL, tuple(parameters))
             retval = {
                 "status": "ok",
@@ -125,7 +146,7 @@ class AsyncDB(threading.Thread):
                 retval["return"] = []
             cursor.close()
             conn.close()
-            return retval
+            return retval, None
 
         with self._lock:  # We protect the shutdown phase - if we queue something as we shut down, we'll hang
             if not self.running:
@@ -133,7 +154,15 @@ class AsyncDB(threading.Thread):
             # if API.api_stop_event.isSet():
             #    print("*** WARNING: executing statements after API shutdown", task)
 
-            self.runQueue.put(task)
+            # First element of task is a condition variable - we can't queue that, so 
+            # map it to a random number and use that
+            import random
+            i = random.random()
+            self.lock_map[i] = threading.Event()
+
+            self.runQueue.put([i, task])
+
+            return self.lock_map[i], i
 
     def run(self):
         self.running = True
@@ -153,15 +182,37 @@ class AsyncDB(threading.Thread):
                             self.running = False
 
                 task = self.runQueue.get(True, timeout=0.5)
-                event, retval, SQL, parameters, ignore_error = task
-                self._async_execute(event, retval, SQL, parameters, ignore_error)
-            except queue.Empty:
+                eventid, [SQL, parameters, ignore_error] = task
+
+                if eventid not in self.lock_map:
+                    print("*** INTERNAL: 18f01kf")
+                    raise Exception("*** INTERNAL: MISSING ASYNC CONDITION")
+                event = self.lock_map[eventid]
+                del self.lock_map[eventid]
+                # print("Executing ", SQL % tuple(parameters))
+                retval = self._async_execute(SQL, parameters, ignore_error)
+
+                with self.lock:
+                    self.retval_map[eventid] = retval
+
+                # print("   - ", retval)
+                event.set()
+
+            except Empty:
                 continue
+            except EOFError:
+                print("*** Parent process stopped")
+                API.api_stop_event.set()
+                should_stop = True
             except:
                 print("Unhandled exception")
                 import traceback
                 traceback.print_exc(file=sys.stdout)
                 time.sleep(0.25)
+                try:
+                    event.set()
+                except:
+                    pass
 
         if 0 or DEBUG:
             self.log.debug("ASYNC_DB STOPPED")
@@ -233,18 +284,20 @@ class AsyncDB(threading.Thread):
 
             if self.cursor is None:
                 self.cursor = self.get_connection().cursor()
+
             return self.cursor
         except MySQLdb.OperationalError:
             self._close_connection()
             return self._get_cursor(temporary_connection)
 
-    def _async_execute(self, event, retval, SQL, parameters=[],
+    def _async_execute(self, SQL, parameters=[],
                        temporary_connection=False,
                        ignore_error=False):
         """
         Execute an SQL statement with the given parameters.
         """
-        retval["status"] = "failed"
+
+        retval = {"status": "failed"}
         if DEBUG:
             self.log.debug(SQL + "(" + str(parameters) + ")")
 
@@ -269,6 +322,7 @@ class AsyncDB(threading.Thread):
                     time.sleep(1)
                     continue
 
+                # print("SQL", SQL % tuple(parameters))
                 if len(parameters) > 0:
                     cursor.execute(SQL, tuple(parameters))
                 else:
@@ -287,7 +341,6 @@ class AsyncDB(threading.Thread):
                 retval["return"] = res
                 break
             except MySQLdb.Warning:  # Is this really the correct thing to do?
-                print("WARNING")
                 break
             except MySQLdb.IntegrityError as e:
                 retval["error"] = "IntegrityError: %s" % str(e)
@@ -335,9 +388,7 @@ class AsyncDB(threading.Thread):
                 print("SQL was:", SQL, str(parameters))
                 break
                 # raise e
-
-        event.set()
-
+        return retval
 
 class mysql:
     """
@@ -435,7 +486,7 @@ class mysql:
         if self._is_direct:
             while not API.api_stop_event.isSet():
                 try:
-                    if not self.cursor:
+                    if not self.cursor or temporary_connection:
                         # self.cursor = AsyncDB.getDB(None)._get_cursor(False)
                         self.cursor = self.db._get_cursor(temporary_connection)
                     self.cursor.execute(SQL, parameters)
@@ -449,10 +500,10 @@ class mysql:
                     if ignore_error:
                         return self.cursor
                     raise e
-        event = threading.Event()
-        retval = {}
-        self.db.execute([event, retval, SQL, parameters, ignore_error], insist_direct=insist_direct)
-        if not insist_direct:
+        if insist_direct:
+            retval = self.db.execute([SQL, parameters, ignore_error], insist_direct=insist_direct)
+        else:
+            event, handle = self.db.execute([SQL, parameters, ignore_error])
             t = time.time()
             event.wait(60.0)
             if time.time() - t > 2.0:
@@ -460,6 +511,8 @@ class mysql:
                     print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
             if not event.isSet():
                 raise TooSlowException("%s Failed to execute query in time (%s)" % (time.ctime(), SQL))
+
+            retval = self.db.get_retval(handle)
 
         if not ignore_error and "error" in retval:
             raise Exception(retval["error"])
