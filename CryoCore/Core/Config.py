@@ -551,7 +551,7 @@ class Configuration(threading.Thread):
             else:
                 try:
                     parent = self._cache_lookup_by_id(version, parentid)
-
+                    path = parent.get_full_path()
                     full_path = path + "." + name
                     parent_ids = self._id_cache[version][path]
                 except:
@@ -613,9 +613,9 @@ class Configuration(threading.Thread):
             now = time.time()
             for val, expires in self.cache[version].values():
                 if not val:
-                    break
+                    continue
                 if expires < now:
-                    continue  # Don't clean the entire cache
+                    continue  # Don't clean the entire cache now
                 if val.id == id:
                     return val
         # self.log.debug("** FAIL %s %s %s" % (version, full_path, self.cache[version].keys()))
@@ -691,7 +691,6 @@ class Configuration(threading.Thread):
                     self.log.debug("%d: " % threading.get_ident() +  SQL % tuple(parameters))
                 cursor = self._get_cursor()
                 cursor.execute(SQL, parameters)
-                time.sleep(0.1)
                 return cursor
             except Exception as e:
                 if ignore_error:
@@ -1227,7 +1226,6 @@ class Configuration(threading.Thread):
             if full_path != "root" and full_path != "":  # special case for root node
                 # Do we have this in the cache?
                 id_path = self._get_id_path(full_path, version, create=add)
-                # print("ID path of", full_path, "is", id_path)
                 if not id_path:
                     parent_path = full_path[:full_path.rfind(".")]
                     parent_ids = self._get_id_path(parent_path, version, create=add)
@@ -1511,7 +1509,6 @@ class Configuration(threading.Thread):
         Recursively return all leaves of the given path
         """
         raise Exception("Deprecated, use children instead")
-        print("***Get leave", _full_path, absolute_path)
         with self._load_lock:
             param = self.get(_full_path, absolute_path=absolute_path, add=False)
             leaves = []
