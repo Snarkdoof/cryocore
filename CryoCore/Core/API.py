@@ -58,6 +58,7 @@ CCGLOBALS = {
     "reporter_collection": None
 }
 
+global DEFAULT_LOGLEVEL
 DEFAULT_LOGLEVEL = logging.DEBUG
 
 __is_direct = False
@@ -245,10 +246,9 @@ def set_log_level(loglevel):
         ll = log_level_str[loglevel]
 
     global DEFAULT_LOGLEVEL
-    global LOG_DESTINATION
     DEFAULT_LOGLEVEL = ll
-    if LOG_DESTINATION:
-        LOG_DESTINATION.level = ll
+    if CCGLOBALS["LOG_DESTINATION"]:
+        CCGLOBALS["LOG_DESTINATION"].level = ll
 
 
 class PrefixedLogger(logging.getLoggerClass()):
