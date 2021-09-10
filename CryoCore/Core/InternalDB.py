@@ -14,6 +14,7 @@ import mysql.connector as MySQLdb
 # from operator import itemgetter
 import warnings
 import logging
+import random
 
 import sys
 if sys.version_info.major == 3:
@@ -156,8 +157,8 @@ class AsyncDB(threading.Thread):
 
             # First element of task is a condition variable - we can't queue that, so 
             # map it to a random number and use that
-            import random
             i = random.random()
+
             self.lock_map[i] = threading.Event()
 
             self.runQueue.put([i, task])
@@ -184,11 +185,14 @@ class AsyncDB(threading.Thread):
                 task = self.runQueue.get(True, timeout=0.5)
                 eventid, [SQL, parameters, ignore_error] = task
 
-                if eventid not in self.lock_map:
-                    print("*** INTERNAL: 18f01kf")
-                    raise Exception("*** INTERNAL: MISSING ASYNC CONDITION")
-                event = self.lock_map[eventid]
-                del self.lock_map[eventid]
+                with self._lock:
+                    if eventid not in self.lock_map:
+                        print("*** INTERNAL: 18f01kf", os.getpid())
+                        print(time.time(), "Not in set:", eventid, self.lock_map)
+                        raise Exception("*** INTERNAL: MISSING ASYNC CONDITION '%s'" % eventid)
+                    event = self.lock_map[eventid]
+                    del self.lock_map[eventid]
+
                 # print("Executing ", SQL % tuple(parameters))
                 retval = self._async_execute(SQL, parameters, ignore_error)
 
@@ -448,6 +452,8 @@ class mysql:
                     db_name = config
                 else:
                     db_name = "global"
+
+            db_name += str(os.getpid())  # Need separate DBs for separate processes
             self.db = AsyncDB.getDB(config, db_name)
 
     def _init_sqls(self, sql_statements):
