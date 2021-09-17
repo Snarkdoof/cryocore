@@ -305,6 +305,10 @@ def get_status(name):
     return holder
 
 
+def get_status_listener(clock=None):
+    from CryoCore.Core.Status import StatusListener
+    return StatusListener.get_status_listener(clock)
+
 
 def _toUnicode(string):
     """
