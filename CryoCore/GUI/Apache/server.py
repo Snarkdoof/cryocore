@@ -261,7 +261,6 @@ class LiveHandler(WebSocket):
                     self.last_vals[i] = val
 
             if len(tosend) > 0:
-                print("Sending", tosend)
                 self.sendMessage(json.dumps({"type": "update", "values": tosend}))
 
             listener.wait(3.0)  # Wait for any updates
