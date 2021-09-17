@@ -263,7 +263,6 @@ var CryoCore = function(_CRYOCORE_) {
           ws.onmessage= function(msg) {
               let data = JSON.parse(msg.data);
               if (data.type == "update") {
-                  console.log(data);
                   data.values.forEach(v => {
                       let itm = [v.channel, v.name];
                       if (subs[itm].length > 0) {
@@ -330,7 +329,6 @@ var CryoCore = function(_CRYOCORE_) {
           mapping[p.channel + "," + p.param] = param;
 
           subscribe(p.channel, p.param, evt => {
-            console.log("Converting", evt);
             // Convert to key and {param:, key:, data: [ts, value]}
             let paramid = mapping[evt.channel + "," + evt.name];
             onChange(paramid, [[evt.ts, evt.value]]);
