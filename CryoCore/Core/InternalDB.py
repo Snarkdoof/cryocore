@@ -205,7 +205,7 @@ class AsyncDB(threading.Thread):
             except Empty:
                 continue
             except EOFError:
-                print("*** Parent process stopped")
+                #print("*** Parent process stopped")
                 API.api_stop_event.set()
                 should_stop = True
             except:
