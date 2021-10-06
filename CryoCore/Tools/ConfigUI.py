@@ -3,6 +3,9 @@
 import sys
 import curses
 from CryoCore import API
+API.queue_timeout = 0.1
+API.shutdown_grace_period = 0.0
+
 import CryoCore.Core.Config as Config
 import locale
 import traceback
@@ -402,7 +405,7 @@ class ConsoleUI:
         elif asc == 't':
             s.visibleCategories[s.selectedCategory].toggleSetting(s.settingWindow)
         elif asc == "q":
-            sys.exit(0)
+            API.api_stop_event.set()
 
     def getInput(s):
         c = s.screen.getch()
@@ -495,7 +498,7 @@ class ConsoleUI:
         s.selectedCategory = 0
         s.categoryScroll = 0
         s.visibleCategories = s.categories.getVisible([])
-        while True:
+        while not API.api_stop_event.is_set():
             s.refresh()
             s.getInput()
     
@@ -569,11 +572,9 @@ class ConsoleUI:
         self.setPrompt(self.promptStack[-1][0], self.promptStack[-1][1])
 
 if __name__ == "__main__":
-    #API.__is_direct = True
-    #API.auto_init = False
-
     parser = ArgumentParser(description="Tree view of CryoCore configuration")
     parser.add_argument("--fullkeys", action="store_true", default=False, help="Use full keys")
+    parser.add_argument("--stacks", action="store_true", default=False, help="Print all thread stacks after shutdown")
     parser.add_argument("-v", "--version", dest="version", default=None, help="Version to operate on")
 
     options = parser.parse_args()
@@ -597,3 +598,12 @@ if __name__ == "__main__":
     finally:
         #status.queue_callback(None)
         API.shutdown()
+        if options.stacks:
+            import threading, traceback, sys
+            for thread in threading.enumerate():
+                try:
+                    print(thread)
+                    traceback.print_stack(sys._current_frames()[thread.ident])
+                    print("\n")
+                except:
+                    print("Thread already exited")

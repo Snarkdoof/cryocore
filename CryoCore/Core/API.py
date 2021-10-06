@@ -65,6 +65,11 @@ __is_direct = False
 
 api_auto_init = True
 
+global queue_timeout
+queue_timeout = 0.5
+
+global shutdown_grace_period
+shutdown_grace_period = 2
 
 def get_status_reporter():
 

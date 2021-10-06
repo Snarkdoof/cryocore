@@ -130,7 +130,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
         # Thread entry point
         while not self.stop_event.is_set():
-            self.get_log_entry_and_insert(taskqueue, True, 1.0)
+            self.get_log_entry_and_insert(taskqueue, True, API.queue_timeout)
         # Insert any remaining items until self.tasks is empty
         while self.get_log_entry_and_insert(taskqueue, False, None):
             pass

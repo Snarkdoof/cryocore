@@ -751,6 +751,7 @@ class Configuration(threading.Thread):
         stop_time = 0
         should_stop = False
         # print(os.getpid(), threading.currentThread().ident, "RUNNING")
+        from CryoCore.Core import API
         while not should_stop:  # We wait for a bit after stop has been called to ensure that we finish all tasks
             # with self._lock:
             if 1:
@@ -758,12 +759,13 @@ class Configuration(threading.Thread):
                     if not stop_time:
                         # print("Async config should stop soon")
                         stop_time = time.time()
-                    elif time.time() - stop_time > 2:
-                        # print("Async config DB stopped")
+                    # In case API.shutdown_grace_period == 0, test the condition even if we just set stop_time
+                    if time.time() - stop_time > API.shutdown_grace_period:
+                        # print(f"Async config DB stopped: {API.shutdown_grace_period} {API.queue_timeout}")
                         self.running = False
                         should_stop = True
             try:
-                task = self._runQueue.get(block=True, timeout=0.5)
+                task = self._runQueue.get(block=True, timeout=API.queue_timeout)
                 event, retval, SQL, parameters, ignore_error = task
                 self._async_execute(event, retval, SQL, parameters, ignore_error)
             except queue.Empty:
