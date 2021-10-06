@@ -322,7 +322,16 @@ class TailLog(mysql):
             print("WARNING: Shared memory not available - realtime log reverting to database")
             options.realtime = False
             return
-        print("Following in realtime from now")
+
+        target_file = None
+        if options.tofile:
+            if not os.path.isdir(os.path.dirname(options.tofile)):
+                os.makedirs(os.path.dirname(options.tofile))
+            target_file = open(options.tofile, "a+")
+            options.since = time.ctime()
+            options.follow = True
+
+            
         # We need a separate daemon thread to get new data from the shared memory system.
         # Without it, we would block forever on Ctrl-C if no new log messages appear.
         def getter():
@@ -341,7 +350,27 @@ class TailLog(mysql):
                         try:
                             d = json.loads(item.decode("utf-8"))
                             row = [ -1, d["message"], d["level"], d["time"], d["msecs"], d["line"], d["function"], d["module"], d["logger"] ]
-                            self._print_row(options, row)
+
+                            do_print = self.default_show
+
+                            # Any matches to hide it?
+                            for filter in self.filters:
+                                try:
+                                    if list(filter(row)):
+                                        do_print = True
+                                    else:
+                                        do_print = False
+                                    if do_print != self.default_show:
+                                        break  # Found a match, stop now
+
+                                except Exception as e:
+                                    print("Exception executing filter " + str(filter) + ":", e)
+
+                            if do_print:
+                                if target_file:
+                                    self._write_to_file(target_file, options, row)
+                                else:
+                                    self._print_row(options, row)
                         except:
                             print("Failed to parse or print data: %s" % (data))
                             traceback.print_exc()
@@ -488,7 +517,7 @@ if __name__ == "__main__":
     parser.add_argument("--bw", action="store_true", default=False,
                         help="Black and white output")
     
-    parser.add_argument("-r", "--realtime", action="store_true", default=False, help="Dump the realtime log. Does not support historical data")
+    parser.add_argument("-r", "--realtime", action="store_true", default=True, help="Dump the realtime log. Does not support historical data")
     
     parser.add_argument("--db_name", type=str, dest="db_name", default="", help="cryocore or from .config")
     parser.add_argument("--db_user", type=str, dest="db_user", default="", help="cc or from .config")
