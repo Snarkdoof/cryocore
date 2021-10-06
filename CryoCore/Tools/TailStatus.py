@@ -310,7 +310,7 @@ class TailStatus(mysql):
                                     do_print = True
                                     break
                             if do_print:
-                                self._print_row(row, False)
+                                self._print_row(row, False, options.words)
                         except:
                             print("Failed to parse or print data: %s" % (data))
                             traceback.print_exc()
@@ -494,7 +494,7 @@ if __name__ == "__main__":
                             help="When exporting timeseries, the last value from all listed instruments is used "
                                  "whenever a value is flushed. If not given, non-aligning items are left empty")
         
-        parser.add_argument("-r", "--realtime", action="store_true", default=False, help="Dump realtime status from shared memory")
+        parser.add_argument("-r", "--realtime", action="store_true", default=True, help="Dump realtime status from shared memory")
 
         parser.add_argument("--motion", dest="motion", action="store_true", default=False,
                             help="Replay a mission according to motions")
