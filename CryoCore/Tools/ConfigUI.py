@@ -54,7 +54,7 @@ class Category:
     
     def update(self, lookupKey):
         if self.lookupKey == lookupKey:
-            log.debug(f"Found config param for key {lookupKey}")
+            #log.debug(f"Found config param for key {lookupKey}")
             self.setValue(self.cfg[self.lookupKey], None, False)
             return True
         for c in self.categories:
