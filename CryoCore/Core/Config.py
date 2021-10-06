@@ -20,6 +20,13 @@ import logging.handlers
 
 # from CryoCore.Core.Utils import logTiming
 
+try:
+    from CryoCore.Core.Status import SharedMemoryReporter
+    shm = True
+except:
+    # print("Missing Shared memory support")
+    shm = False
+
 if sys.version_info.major == 3:
     import queue
 else:
@@ -471,6 +478,7 @@ class Configuration(threading.Thread):
         self._runQueue = queue.Queue()
         self._condition = threading.Condition()
         self.cursor = None
+        self.shmreporter = None
 
         self.dbg = threading.Lock()
 
@@ -515,6 +523,11 @@ class Configuration(threading.Thread):
 
         # self._init_id_cache()
         self._fill_full_cache()
+
+
+
+        if shm:
+            self.shmreporter = SharedMemoryReporter.SharedMemoryReporter()
 
     def _init_id_cache(self):
         SQL = "SELECT id, parent, name FROM config WHERE version=%s ORDER BY id"
@@ -689,8 +702,20 @@ class Configuration(threading.Thread):
             try:
                 if DEBUG:
                     self.log.debug("%d: " % threading.get_ident() +  SQL % tuple(parameters))
-                cursor = self._get_cursor()
+                cursor = self._get_cursor(True)
                 cursor.execute(SQL, parameters)
+
+                if self.shmreporter and SQL.startswith("INSERT") or SQL.startswith("UPDATE"):
+                    ts = time.time()
+                    # print(ts, "Broadcast (direct)")
+                    e = SharedMemoryReporter.SimpleEvent("config", ts, "updated", ts)
+                    self.shmreporter.report(e)
+
+                with self.callbackCondition:
+                    self._notify_counter += 1
+                    self.callbackCondition.notifyAll()
+
+
                 return cursor
             except Exception as e:
                 if ignore_error:
@@ -738,12 +763,12 @@ class Configuration(threading.Thread):
                         self.running = False
                         should_stop = True
             try:
-                task = self._runQueue.get(block=False, timeout=0.5)
+                task = self._runQueue.get(block=True, timeout=0.5)
                 event, retval, SQL, parameters, ignore_error = task
                 self._async_execute(event, retval, SQL, parameters, ignore_error)
             except queue.Empty:
                 # print(os.getpid(), "AsyncConfig IDLE", self.stop_event.isSet(), self._runQueue.empty(), should_stop)
-                time.sleep(0.1)  # Condition variables, blocking queue, doesn't work
+                # time.sleep(0.1)  # Condition variables, blocking queue, doesn't work
                 continue
             except:
                 print("Unhandled exception")
@@ -837,6 +862,17 @@ class Configuration(threading.Thread):
                 # raise e
 
         event.set()
+
+        if self.shmreporter and SQL.startswith("INSERT") or SQL.startswith("UPDATE"):
+            ts = time.time()
+            # print(ts, "Async broadcast")
+            e = SharedMemoryReporter.SimpleEvent("config", ts, "updated", ts)
+            self.shmreporter.report(e)
+
+            with self.callbackCondition:
+                self._notify_counter += 1
+                self.callbackCondition.notify()
+
 
     def _prepare_tables(self):
         """
@@ -1072,6 +1108,7 @@ class Configuration(threading.Thread):
                 self.log.debug("Tried to get param id for %s (version %s) but failed" %
                                (name, version))
                 c = self._execute("SELECT name, parent from config where version=%s", [version])
+                c.fetchall()
                 # print(c.fetchall())
             return None
 
@@ -1500,10 +1537,6 @@ class Configuration(threading.Thread):
                                 config_parameter.id,
                                 config_parameter.version])
 
-        with self.callbackCondition:
-            self._notify_counter += 1
-            self.callbackCondition.notify()
-
     def get_leaves(self, _full_path=None, absolute_path=False, recursive=True):
         """
         Recursively return all leaves of the given path
@@ -1776,6 +1809,15 @@ class Configuration(threading.Thread):
     def _callback_thread_main(self):
         if DEBUG:
             self.log.debug("Callback thread started")
+
+        # If shared memory, we'll use that too
+        if shm:
+            from CryoCore.Core.Status.StatusListener import StatusListener
+            listener = StatusListener(evt=self.callbackCondition)
+            listener.add_monitors([("config", "updated")])
+        else:
+            listener = None
+
         last_notified = 0
         while not self._internal_stop_event.is_set() and not self.stop_event.is_set():
             try:
@@ -1812,14 +1854,17 @@ class Configuration(threading.Thread):
                     p.append(datetime.datetime.fromtimestamp(params[param]))
 
                 SQL = SQL[:-3]
-                cursor = self._execute(SQL, p, temporary_connection=True)
-
+                # print(time.time(), "Checking")
+                cursor = self._execute(SQL, p)  # , temporary_connection=True)
+                if cursor.rowcount > 0:
+                    print(time.time(), "Performing callbacks")
                 # We should now have a list of all the updated parameters we have, loop and call back
                 for param_id, name, value, last_modified in cursor.fetchall():
 
                     for lastupdate, cbid in cbs[param_id]:
                         if not isinstance(last_modified, float):
                             last_modified = last_modified.timestamp()  # time.mktime(last_modified.timetuple()) + (last_modified.microsecond / 1e6)
+
                         if lastupdate >= last_modified:
                             continue
                         self._callback_items[cbid]["params"][param_id] = last_modified
@@ -1835,14 +1880,9 @@ class Configuration(threading.Thread):
                         except:
                             self.log.exception("In callback handler")
 
-                # We use a condition variable to ensure that we are awoken immediately on local changes
-                # we might however be notified multiple times, so we use a counter to ensure that we don't sleep
-                # if there was a notify while we worked
                 with self.callbackCondition:
-                    if self._notify_counter == last_notified:
-                        self.callbackCondition.wait(1)
-                    else:
-                        last_notified = self._notify_counter
+                    self.callbackCondition.wait(1.0)
+
             except:
                 self.log.exception("INTERNAL: Callback handler crashed badly")
                 time.sleep(1)

@@ -6,6 +6,32 @@ import json
 
 available = CCshm.available
 
+class SimpleEvent:
+    def __init__(self, channel, ts, name, value):
+
+
+        class FakeStatusHolder:
+            def __init__(self, name):
+                self.name = name
+
+            def get_name(self):
+                return self.name
+
+        self.status_holder = FakeStatusHolder(channel)
+        self.ts = ts
+        self.name = name
+        self.value = value
+
+    def get_timestamp(self):
+        return self.ts
+
+    def get_name(self):
+        return self.name
+
+    def get_value(self):
+        return self.value
+
+
 class SharedMemoryReporter(Status.OnChangeStatusReporter):
     def __init__(self, name="System.Status.SharedMemoryReporter"):
         Status.OnChangeStatusReporter.__init__(self, name)

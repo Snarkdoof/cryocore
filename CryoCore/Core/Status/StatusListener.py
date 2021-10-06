@@ -91,12 +91,15 @@ class StatusListenerDB(threading.Thread):
 
 
 class StatusListener():
-    def __init__(self, monitor_all=False):
+    def __init__(self, monitor_all=False, evt=None):
         self._channels = {}
         self._param_ids = []
         self._last_values = {}
         self._monitor_all = monitor_all
-        self.condition_lock = threading.Condition()
+        if evt:
+            self.condition_lock = evt
+        else:
+            self.condition_lock = threading.Condition()
 
         if not CCshm.available:
             raise Exception("Shared memory not available and no db implementation is done")
@@ -139,6 +142,7 @@ class StatusListener():
                     for item in data:
                         try:
                             d = json.loads(item.decode("utf-8"))
+                            print("Got something", d)
                             if self._monitor_all or \
                                (d["channel"] in self._channels and
                                 d["name"] in self._channels[d["channel"]]):
