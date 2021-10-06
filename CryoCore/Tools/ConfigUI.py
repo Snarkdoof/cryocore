@@ -14,7 +14,8 @@ code = locale.getpreferredencoding()
 ui = None
 truncateLength = 80
 fullKeys = False
-
+log = None
+status = None
 
 def startUI(screen):
     ui.run(screen)
@@ -50,7 +51,24 @@ class Category:
             else:
                 category = Category(key, key, cfg, level + 1, s)
             s.categories.append(category)
-
+    
+    def update(self, lookupKey):
+        if self.lookupKey == lookupKey:
+            log.debug(f"Found config param for key {lookupKey}")
+            self.setValue(self.cfg[self.lookupKey], None, False)
+            return True
+        for c in self.categories:
+            if c.update(lookupKey):
+                return True
+        return False
+    
+    def build_parameter_list(self, parameter_list):
+        if self.isValue:
+            parameter_list.append(self.lookupKey)
+        for c in self.categories:
+            c.build_parameter_list(parameter_list)
+        return parameter_list
+    
     def getDataType(s):
         native = s.value
         try:
@@ -164,17 +182,18 @@ class Category:
             if s.isValue:
                 screen.hline(line, 0, " ", width, color)
                 screen.addstr(line, x, displayName, color)
-                screen.addstr(line, width - truncateLength - 2, "| ".encode(code) + s.truncValue, color)
+                if width - truncateLength - 2 > 0:
+                    screen.addstr(line, width - truncateLength - 2, "| ".encode(code) + s.truncValue, color)
             else:
                 displayName = marker + displayName
                 screen.hline(line, 0, " ", width, color)
                 screen.addstr(line, x, displayName, color)
                 screen.hline(line, x + len(displayName) + 1, "-", width - (x + len(displayName)) - truncateLength, color)
-                screen.hline(line, width - truncateLength, "=", truncateLength, color)
-                screen.addstr(line, width - truncateLength - 2, "+=", color)
+                if width - truncateLength - 2 > 0:
+                    screen.hline(line, width - truncateLength, "=", truncateLength, color)
+                    screen.addstr(line, width - truncateLength - 2, "+=", color)
         except:
-            traceback.print_exc()
-            pass
+            if log: log.exception("Error rendering to screen")
 
 
 def readEscape(window):
@@ -186,7 +205,7 @@ def readEscape(window):
 
 class Editor:
     def __init__(s, window, color, forceLower=False):
-        s.window = window
+        s.set_window(window)
         s.initialValue = ""
         s.value = ""
         s.editing = False
@@ -194,9 +213,12 @@ class Editor:
         s.cursorColor = curses.color_pair(2)
         s.cursorPos = 0
         s.forceLowerCase = forceLower
-        s.height, s.width = s.window.getmaxyx()
         s.saveOnEnd = False
-
+    
+    def set_window(self, window):
+        self.window = window
+        self.height, self.width = self.window.getmaxyx()
+    
     def beginEditing(s, newInitialValue=None):
         if newInitialValue is not None:
             s.initialValue = newInitialValue
@@ -281,7 +303,7 @@ class Editor:
             else:
                 s.window.addstr(cursY, cursX, " ", s.cursorColor)
         except:
-            traceback.print_exc()
+            if log: log.exception("Error in render")
             # Hopefully we'll never have settings that require more than 8 lines of space to render.
         s.window.refresh()
 
@@ -311,12 +333,19 @@ Press ? to exit help.
 
 
 class ConsoleUI:
-    def __init__(s):
-        s.cfg = API.get_config()
-        s.categories = Category("", "", cfg)
-        s.help = helpText.split("\n")
-        s.helpMode = False
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.categories = Category("", "", cfg)
+        parameter_list = self.categories.build_parameter_list([])
+        self.cfg.add_callback(parameter_list, self.config_updated)
+        self.help = helpText.split("\n")
+        self.helpMode = False
 
+    def config_updated(self, param):
+        #log.info(f"{param.name} {param.id} {param.path} was updated to {param.get_value()}")
+        if not self.categories.update(f"{param.path}.{param.name}"):
+            log.warning(f"Failed to find config param for {param.path}.{param.name} - restart ccconfigui to discover new config params")
+        
     def updateFilter(s):
         if len(s.filterEditor.value) > 0:
             s.selectedCategory = 0
@@ -377,6 +406,11 @@ class ConsoleUI:
 
     def getInput(s):
         c = s.screen.getch()
+        if c == -1:
+            return
+        if c == curses.KEY_RESIZE:
+            s.resize_screen()
+            return
         asc = -1
         try:
             asc = chr(c)
@@ -432,8 +466,7 @@ class ConsoleUI:
     def run(s, screen):
         global truncateLength
         s.screen = screen
-        s.height, s.width = s.screen.getmaxyx()
-        truncateLength = int(s.width / 2)
+        s.screen.timeout(200)
         # Set up some colors
         curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
         curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
@@ -451,15 +484,7 @@ class ConsoleUI:
         s.infoHeight = 4
         s.footerHeight = 2
         s.headerHeight = 1
-        s.categoryHeight = s.height - s.infoHeight - s.footerHeight - s.headerHeight
-        s.categoryWidth = s.width
-        s.categoryWindow = curses.newwin(s.categoryHeight, s.categoryWidth, s.headerHeight, 0)
-        s.settingWindow = curses.newwin(s.infoHeight, s.width, 1 + s.categoryHeight, 0)
-        s.settingEditor = Editor(s.settingWindow, curses.color_pair(5))
-        s.filterWindow = curses.newwin(1, s.width, s.height - 1, 0)
-        s.filterEditor = Editor(s.filterWindow, curses.color_pair(5), True)
-        s.screen.hline(0, 0, "*", s.width, s.borderColor)
-        s.centerText(s.screen, 0, "CryoCore Config Tool", s.borderColor, 3)
+        s.resize_screen()
 
         s.pushPrompt("Arrow keys: Move/expand selection | / : Filter | T: Toggle setting | Enter: Modify setting | Q: Exit | ? : Help", False)
         s.screen.hline(s.height - 1, 0, " ", s.width, s.inputColor)
@@ -471,19 +496,49 @@ class ConsoleUI:
         s.categoryScroll = 0
         s.visibleCategories = s.categories.getVisible([])
         while True:
-            if s.helpMode:
-                for y in range(0, s.categoryWindow.getmaxyx()[0]):
-                    s.categoryWindow.hline(y, 0, " ", s.width)
-                    if y < len(s.help):
-                        s.categoryWindow.addstr(y, 0, s.help[y])
-                s.categoryWindow.refresh()
-            else:
-                s.renderCategories()
-            s.screen.refresh()
-            s.screen.move(s.height - 1, s.width - 1)
-            curses.doupdate()
+            s.refresh()
             s.getInput()
+    
+    def refresh(self):
+        if self.helpMode:
+            for y in range(0, self.categoryWindow.getmaxyx()[0]):
+                self.categoryWindow.hline(y, 0, " ", self.width)
+                if y < len(self.help):
+                    self.categoryWindow.addstr(y, 0, self.help[y])
+            self.categoryWindow.refresh()
+        else:
+            self.renderCategories()
+        if self.settingEditor.editing:
+            self.settingEditor.render()
+        elif self.filterEditor.editing:
+            self.filterEditor.render()
+        self.refreshPrompt()
+        self.screen.refresh()
+        try:
+            self.screen.move(0, 0)
+        except:
+            if log: log.exception("Error moving")
+        curses.doupdate()
 
+    
+    def resize_screen(self):
+        self.height, self.width = self.screen.getmaxyx()
+        truncateLength = int(self.width / 2)
+        self.categoryHeight = self.height - self.infoHeight - self.footerHeight - self.headerHeight
+        self.categoryWidth = self.width
+        self.categoryWindow = curses.newwin(self.categoryHeight, self.categoryWidth, self.headerHeight, 0)
+        self.settingWindow = curses.newwin(self.infoHeight, self.width, 1 + self.categoryHeight, 0)
+        self.filterWindow = curses.newwin(1, self.width, self.height - 1, 0)
+        if hasattr(self, "settingEditor"):
+            self.settingEditor.set_window(self.settingWindow)
+            self.filterEditor.set_window(self.filterWindow)
+        else:
+            self.settingEditor = Editor(self.settingWindow, curses.color_pair(5))
+            self.filterEditor = Editor(self.filterWindow, curses.color_pair(5), True)
+        self.screen.clear()
+        self.screen.hline(0, 0, "*", self.width, self.borderColor)
+        self.centerText(self.screen, 0, "CryoCore Config Tool", self.borderColor, 3)
+    
     def centerText(s, screen, line, text, color, pad=0):
         width = screen.getmaxyx()[1]
         start = int((width - (2 * pad + len(text))) / 2)
@@ -509,10 +564,13 @@ class ConsoleUI:
     def popPrompt(s):
         s.promptStack = s.promptStack[0:-1]
         s.setPrompt(s.promptStack[-1][0], s.promptStack[-1][1])
+    
+    def refreshPrompt(self):
+        self.setPrompt(self.promptStack[-1][0], self.promptStack[-1][1])
 
 if __name__ == "__main__":
-    API.__is_direct = True
-    API.auto_init = False
+    #API.__is_direct = True
+    #API.auto_init = False
 
     parser = ArgumentParser(description="Tree view of CryoCore configuration")
     parser.add_argument("--fullkeys", action="store_true", default=False, help="Use full keys")
@@ -522,7 +580,9 @@ if __name__ == "__main__":
     if options.fullkeys:
         fullkeys = True
     try:
-        cfg = API.get_config()
+        cfg = None
+        log = API.get_log("CryoCore.Tools.ConfigUI")
+        #status = API.get_status("CryoCore.Tools.ConfigUI")
         if options.version:
             try:
                 cfg.set_version(options.version)
@@ -530,8 +590,10 @@ if __name__ == "__main__":
             except Config.NoSuchVersionException:
                 raise SystemExit("version <%s> does not exist in list: <%s>. Aborting." %
                                  (options.version, ",".join(map(str, cfg.list_versions()))))
-
-        ui = ConsoleUI()
+        else:
+            cfg = API.get_config()
+        ui = ConsoleUI(cfg)
         curses.wrapper(startUI)
     finally:
+        #status.queue_callback(None)
         API.shutdown()

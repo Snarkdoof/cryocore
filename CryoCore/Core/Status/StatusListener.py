@@ -142,7 +142,7 @@ class StatusListener():
                     for item in data:
                         try:
                             d = json.loads(item.decode("utf-8"))
-                            print("Got something", d)
+                            #print("Got something", d)
                             if self._monitor_all or \
                                (d["channel"] in self._channels and
                                 d["name"] in self._channels[d["channel"]]):
