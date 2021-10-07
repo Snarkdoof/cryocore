@@ -269,6 +269,10 @@ class TailLog(mysql):
                 if rows == 0:
                     if not options.follow:
                         break
+                    if options.realtime:
+                        # If we're doing realtime logs, start monitoring the event bus from now on.
+                        # We might get a few duplicates, but not too many.
+                        self._follow_realtime(options)
                     # No new activity, wait a bit before we try again
                     time.sleep(0.1)
 
@@ -309,6 +313,75 @@ class TailLog(mysql):
         target.write(json.dumps(item) + "\n")
         target.flush()
 
+    def _follow_realtime(self, options):
+        import traceback
+        import json
+        import threading
+        from CryoCore.Core import CCshm
+        if not CCshm.available:
+            print("WARNING: Shared memory not available - realtime log reverting to database")
+            options.realtime = False
+            return
+
+        target_file = None
+        if options.tofile:
+            if not os.path.isdir(os.path.dirname(options.tofile)):
+                os.makedirs(os.path.dirname(options.tofile))
+            target_file = open(options.tofile, "a+")
+            options.since = time.ctime()
+            options.follow = True
+
+            
+        # We need a separate daemon thread to get new data from the shared memory system.
+        # Without it, we would block forever on Ctrl-C if no new log messages appear.
+        def getter():
+            log_bus = None
+            while True:
+                try:
+                    log_bus = CCshm.EventBus("CryoCore.API.Log", 0, 0)
+                    break
+                except:
+                    print("Event bus not ready yet..")
+                    time.sleep(1)
+            while True:
+                data = log_bus.get_many()
+                if data:
+                    for item in data:
+                        try:
+                            d = json.loads(item.decode("utf-8"))
+                            row = [ -1, d["message"], d["level"], d["time"], d["msecs"], d["line"], d["function"], d["module"], d["logger"] ]
+
+                            do_print = self.default_show
+
+                            # Any matches to hide it?
+                            for filter in self.filters:
+                                try:
+                                    if list(filter(row)):
+                                        do_print = True
+                                    else:
+                                        do_print = False
+                                    if do_print != self.default_show:
+                                        break  # Found a match, stop now
+
+                                except Exception as e:
+                                    print("Exception executing filter " + str(filter) + ":", e)
+
+                            if do_print:
+                                if target_file:
+                                    self._write_to_file(target_file, options, row)
+                                else:
+                                    self._print_row(options, row)
+                        except:
+                            print("Failed to parse or print data: %s" % (data))
+                            traceback.print_exc()
+                    # Sleep to avoid lock thrashing, and buffer up more data before
+                    # we do anything
+                    time.sleep(0.016)            
+        t = threading.Thread(target=getter, daemon=True)
+        t.start()
+        while True:
+            time.sleep(1)
+            
     def _print_row(self, options, row, noprint=False):
         # Convert time to readable and ignore the ID
         t = time.ctime(row[TIMESTAMP])
@@ -443,7 +516,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--bw", action="store_true", default=False,
                         help="Black and white output")
-
+    
+    parser.add_argument("-r", "--realtime", action="store_true", default=True, help="Dump the realtime log. Does not support historical data")
+    
     parser.add_argument("--db_name", type=str, dest="db_name", default="", help="cryocore or from .config")
     parser.add_argument("--db_user", type=str, dest="db_user", default="", help="cc or from .config")
     parser.add_argument("--db_host", type=str, dest="db_host", default="", help="localhost or from .config")
@@ -452,8 +527,8 @@ if __name__ == "__main__":
     parser.add_argument("--tofile", type=str, dest="tofile", default="", help="Dump logs to a given file name, not terminal")
     parser.add_argument("--maxfilesize", type=str, dest="maxfilesize", default=None, help="Maximum filesize in MB")
 
-    # parser.add_argument("--motion", dest="motion", action="store_true", default=False,
-    #                     help="Replay a mission according to motions")
+    parser.add_argument("--motion", dest="motion", action="store_true", default=False,
+                        help="Replay a mission according to motions")
 
     try:
         if "argcomplete" in sys.modules:
@@ -474,12 +549,13 @@ if __name__ == "__main__":
             API.set_config_db(db_cfg)
 
         clock = None
-        if 0:  # options.motion:
+        if options.motion:
             try:
                 import MCorp
                 # app = MCorp.App("6459748540093085075", API.api_stop_event)
                 app = MCorp.App("5479276526614340281", API.api_stop_event)
                 clock = app.motions["live"]
+                print("Motion time is", time.ctime(clock.pos()), clock.pos())
             except Exception as e:
                 print("Failed to use motion:", e)
 

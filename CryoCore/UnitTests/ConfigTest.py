@@ -8,7 +8,6 @@ from CryoCore.Core import Config
 
 stop_event = threading.Event()
 
-
 class ConfigTest(unittest.TestCase):
     """
     Unit tests for the Status class
@@ -30,6 +29,8 @@ class ConfigTest(unittest.TestCase):
     def tearDown(self):
         API.get_config(version="unittest").remove("UnitTest")
         # API.get_config().delete_version("unittest")
+        API.reset()
+        time.sleep(0.5)
         pass
 
     def testBasic(self):
@@ -138,6 +139,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(cfg2["UnitTest.TestParam"], "TestValue", "Set default create failed")
 
         cfg2.remove("UnitTest.TestParam")
+        time.sleep(2)
         self.assertEqual(cfg2["UnitTest.TestParam"], None, "Remove of subtree failed: %s" % cfg2["UnitTest.TestParam"])
 
         cfg2.remove("UnitTest")
@@ -166,7 +168,7 @@ class ConfigTest(unittest.TestCase):
         self.cfg.get("TestBasic.Float").set_value(2.3)
         self.cfg.get("TestBasic.One").set_comment("A comment")
 
-        time.sleep(1.0)  # Allow a bit of time for async callbacks
+        time.sleep(0.2)  # Allow a bit of time for async callbacks
 
         # Verify
         self.assertTrue("UnitTest.TestBasic.One" in last_val, "Missing change on One")
@@ -209,7 +211,7 @@ class ConfigTest(unittest.TestCase):
         self.assertTrue(first_lookup > (second_lookup / 10))
 
     def testEmpty(self):
-        cfg = API.get_config("This.does.not.exist", version="unittest")
+        cfg = API.get_config("UnitTest.This.does.not.exist", version="unittest")
         self.assertEqual(cfg.keys(), [])
         cfg.set_default("it_does_now", True)
 
@@ -231,7 +233,7 @@ if __name__ == "__main__":
         else:
             unittest.main()
     finally:
-        API.get_config().delete_version("unittest")
+        API.get_config(version="unittest").delete_version("unittest")
 
         # from CryoCore import API
         stop_event.set()
