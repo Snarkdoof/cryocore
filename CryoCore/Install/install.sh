@@ -14,7 +14,9 @@ apt-get --help > /dev/null
 if [[ $? == 0 ]] || [[ $1 == "force" ]]; then
 	echo "Checking dependencies"
   sudo apt-get update
-	sudo apt-get -y install mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip python-pyinotify python3-pyinotify python-psutil python3-psutil bash-completion
+	for pkg in mysql-server mysql-client lm-sensors ntp python-argcomplete python3-argcomplete python-pip python3-pip python-pyinotify python3-pyinotify python-psutil python3-psutil bash-completion ; do 
+		sudo apt -y install $pkg
+	done
 
 	sudo activate-global-python-argcomplete
 	
