@@ -558,11 +558,16 @@ class ConsoleUI:
         s.setPrompt(text, centered)
 
     def setPrompt(s, text, centered):
-        s.screen.hline(s.height - 2, 0, " ", s.width, s.borderColor)
-        if centered:
-            s.centerText(s.screen, s.height - 2, text, s.borderColor)
-        else:
-            s.screen.addstr(s.height - 2, 0, text[0:s.width], s.borderColor)
+        try:
+            s.screen.hline(s.height - 2, 0, " ", s.width, s.borderColor)
+            if centered:
+                s.centerText(s.screen, s.height - 2, text, s.borderColor)
+            else:
+                s.screen.addstr(s.height - 2, 0, text[0:s.width], s.borderColor)
+        except:
+            # Exceptions here are typically caused during resize. We don't want
+            # to spew the log with them.
+            pass
 
     def popPrompt(s):
         s.promptStack = s.promptStack[0:-1]
