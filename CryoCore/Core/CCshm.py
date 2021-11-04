@@ -48,6 +48,12 @@ def make_identity_file(name):
     try:
         fd = open(fd_path, "w")
         fd.close()
+        old_mask = os.umask(0o000)
+        try:
+            os.chmod(fd_path, 0o777);
+        except:
+            pass
+        os.umask(old_mask)
     except:
         # We want this to raise an exception. If we can't create the file, and we can't stat it, we can't work.
         os.stat(fd_path)
