@@ -174,10 +174,12 @@ class TailStatus(mysql):
             last_id_2d = 0
 
         params = []
+        raw_params = []
         for p in options.parameters:
             if p.find(":") == -1:
                 raise Exception("Bad parameter specification '%s', must be channel:paramname" % p)
             chan, param = p.split(":", 1)
+            raw_params.append( (chan, param) )
             paramid = self.get_param_id(chan, param)
             params.append(paramid)
         if len(options.parameters) == 0:
@@ -261,6 +263,8 @@ class TailStatus(mysql):
                     return
 
                 if rows == 0:
+                    if options.realtime:
+                        self._follow_realtime(options, raw_params)
                     # No new activity, wait a bit before we try again
                     time.sleep(1)
             except Exception:
@@ -269,6 +273,55 @@ class TailStatus(mysql):
                 raise SystemExit()
             finally:
                 pass
+
+    def _follow_realtime(self, options, raw_params):
+        import traceback
+        import json
+        import threading
+        from CryoCore.Core import CCshm
+        if not CCshm.available:
+            print("WARNING: Shared memory not available - realtime log reverting to database")
+            options.realtime = False
+            return
+        print("Tailing status from shared memory from now")
+        # We need a separate daemon thread to get new data from the shared memory system.
+        # Without it, we would block forever on Ctrl-C if no new status items appear.
+        def getter():
+            status_bus = None
+            while True:
+                try:
+                    status_bus = CCshm.EventBus("CryoCore.API.Status", 0, 0)
+                    break
+                except:
+                    print("Status event bus not ready yet..")
+                    time.sleep(1)
+            while True:
+                data = status_bus.get_many()
+                if data:
+                    for item in data:
+                        try:
+                            d = json.loads(item.decode("utf-8"))
+                            row = [ -1, d["ts"], d["name"], d["channel"], d["value"] ]
+                            do_print = True
+                            if len(self.filters) > 0:
+                                do_print = False
+                            for filter in self.filters:
+                                if filter(row):
+                                    do_print = True
+                                    break
+                            if do_print:
+                                self._print_row(row, False, options.words)
+                        except:
+                            print("Failed to parse or print data: %s" % (data))
+                            traceback.print_exc()
+                    # Sleep to avoid lock thrashing, and buffer up more data before
+                    # we do anything
+                    time.sleep(0.016)
+        t = threading.Thread(target=getter, daemon=True)
+        t.start()
+        while True:
+            time.sleep(1)
+
 
     def _print_row(self, row, is2D, words=None):
 
@@ -440,6 +493,8 @@ if __name__ == "__main__":
         parser.add_argument("--fill", action="store_true",
                             help="When exporting timeseries, the last value from all listed instruments is used "
                                  "whenever a value is flushed. If not given, non-aligning items are left empty")
+        
+        parser.add_argument("-r", "--realtime", action="store_true", default=True, help="Dump realtime status from shared memory")
 
         parser.add_argument("--motion", dest="motion", action="store_true", default=False,
                             help="Replay a mission according to motions")

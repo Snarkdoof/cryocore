@@ -1,4 +1,4 @@
 #!/bin/sh
 export PYTHONPATH=$PYTHONPATH:.
 cd CCINSTALLDIR
-python ./CryoCore/System/SystemControl.py
+python3 ./CryoCore/System/SystemControl.py

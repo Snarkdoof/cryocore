@@ -530,6 +530,9 @@ var CryoCore = function(_CRYOCORE_) {
         console.log("Warning: directLoad called with no parameters");
         return;
       }
+      if (isNaN(startts) || isNaN(endts)) {
+        throw new Error("startts and endts can't not be a number");
+      }
       var p = {
         "params": JSON.stringify(params),
         "start": startts,

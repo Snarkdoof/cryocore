@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import os
 import os.path
@@ -198,6 +198,8 @@ class SystemControl(threading.Thread):
         cwd = self.cfg["process.%s.dir" % name]
         if not cwd:
             cwd = self.cfg["default_cwd"]
+        if not cwd:
+            cwd = self.cfg["default_dir"]
         self._process[name] = subprocess.Popen(command, cwd=cwd, preexec_fn=os.setsid)
         self.status["process.%s.pid" % name] = self._process[name].pid
         self._add_process_monitor(self._process[name].pid, name)
@@ -496,7 +498,7 @@ if __name__ == "__main__":
             # exit, and exit itself as well.
             check_and_set_pid_running("/var/run/uav.pid")
             print("Starting child: %s" % (" ".join(sys.argv)))
-            ret = subprocess.call(["python"] + sys.argv + ["--child"], preexec_fn=os.setsid)
+            ret = subprocess.call(["python3"] + sys.argv + ["--child"], preexec_fn=os.setsid)
             print("Parent exiting; child sys control returned with status %d" % (ret))
     finally:
         API.shutdown()
