@@ -1,0 +1,606 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 50;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E1563EBE232BBBD9004F135D /* CCshm.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1563EBD232BBBD9004F135D /* CCshm.cxx */; };
+		E1563EC7232F74D6004F135D /* SemRWLock.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1563EC5232F74D6004F135D /* SemRWLock.cxx */; };
+		E1563ECA232F75F4004F135D /* EventBus.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1563EC8232F75F4004F135D /* EventBus.cxx */; };
+		E1563ECE2330DD26004F135D /* ChannelManager.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1563ECC2330DD26004F135D /* ChannelManager.cxx */; };
+		E1563EDE23323A4F004F135D /* SemRWLock.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1563EC5232F74D6004F135D /* SemRWLock.cxx */; };
+		E1563EDF23323A4F004F135D /* EventBus.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1563EC8232F75F4004F135D /* EventBus.cxx */; };
+		E1563EE223323ABC004F135D /* CCshm_py.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1563EE023323ABC004F135D /* CCshm_py.cxx */; };
+		E1563EE323323ABC004F135D /* CCshm_py.h in Headers */ = {isa = PBXBuildFile; fileRef = E1563EE123323ABC004F135D /* CCshm_py.h */; };
+		E1563EEF2333B6C1004F135D /* SemRWLock.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1563EC5232F74D6004F135D /* SemRWLock.cxx */; };
+		E1563EF02333B6C1004F135D /* EventBus.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1563EC8232F75F4004F135D /* EventBus.cxx */; };
+		E1563EF12333B6C1004F135D /* CCshm_py.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1563EE023323ABC004F135D /* CCshm_py.cxx */; };
+		E1563EF52333BC8B004F135D /* Python.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1563EF42333BC8B004F135D /* Python.framework */; };
+		E1BF21992355A843002521A8 /* Python.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1563EF42333BC8B004F135D /* Python.framework */; };
+		E1BF21A02355A876002521A8 /* ByteArrayDebug.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1BF219E2355A871002521A8 /* ByteArrayDebug.cxx */; };
+		E1BF21B2235700A2002521A8 /* SharedMem.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1BF21B0235700A2002521A8 /* SharedMem.cxx */; };
+		E1BF21B3235700A2002521A8 /* SharedMem.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1BF21B0235700A2002521A8 /* SharedMem.cxx */; };
+		E1BF21B4235700A2002521A8 /* SharedMem.cxx in Sources */ = {isa = PBXBuildFile; fileRef = E1BF21B0235700A2002521A8 /* SharedMem.cxx */; };
+		E1BF21B5235700A2002521A8 /* SharedMem.h in Headers */ = {isa = PBXBuildFile; fileRef = E1BF21B1235700A2002521A8 /* SharedMem.h */; };
+		E1BF21B6235700A2002521A8 /* SharedMem.h in Headers */ = {isa = PBXBuildFile; fileRef = E1BF21B1235700A2002521A8 /* SharedMem.h */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E1563EB8232BBBD9004F135D /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		E1563EBA232BBBD9004F135D /* CCshm */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = CCshm; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1563EBD232BBBD9004F135D /* CCshm.cxx */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CCshm.cxx; sourceTree = "<group>"; };
+		E1563EC4232BBC8A004F135D /* CCshm.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CCshm.h; sourceTree = "<group>"; };
+		E1563EC5232F74D6004F135D /* SemRWLock.cxx */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = SemRWLock.cxx; sourceTree = "<group>"; };
+		E1563EC6232F74D6004F135D /* SemRWLock.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SemRWLock.h; sourceTree = "<group>"; };
+		E1563EC8232F75F4004F135D /* EventBus.cxx */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = EventBus.cxx; sourceTree = "<group>"; };
+		E1563EC9232F75F4004F135D /* EventBus.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = EventBus.h; sourceTree = "<group>"; };
+		E1563ECB2330BE96004F135D /* CMakeLists.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = CMakeLists.txt; sourceTree = "<group>"; };
+		E1563ECC2330DD26004F135D /* ChannelManager.cxx */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ChannelManager.cxx; sourceTree = "<group>"; };
+		E1563ECD2330DD26004F135D /* ChannelManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ChannelManager.h; sourceTree = "<group>"; };
+		E1563EDA23323A42004F135D /* CCshm_py3.so */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = CCshm_py3.so; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1563EE023323ABC004F135D /* CCshm_py.cxx */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = CCshm_py.cxx; sourceTree = "<group>"; };
+		E1563EE123323ABC004F135D /* CCshm_py.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CCshm_py.h; sourceTree = "<group>"; };
+		E1563EE62333804C004F135D /* test-shm.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "test-shm.py"; sourceTree = "<group>"; };
+		E1563EEB2333B6B3004F135D /* CCshm_py2.so */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = CCshm_py2.so; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1563EF42333BC8B004F135D /* Python.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Python.framework; path = ../../../../../usr/local/Frameworks/Python.framework; sourceTree = "<group>"; };
+		E1BF219D2355A843002521A8 /* ByteArrayDebug.so */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = ByteArrayDebug.so; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1BF219E2355A871002521A8 /* ByteArrayDebug.cxx */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ByteArrayDebug.cxx; sourceTree = "<group>"; };
+		E1BF21A12355AE15002521A8 /* TestByteArray.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = TestByteArray.py; sourceTree = "<group>"; };
+		E1BF21B0235700A2002521A8 /* SharedMem.cxx */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = SharedMem.cxx; sourceTree = "<group>"; };
+		E1BF21B1235700A2002521A8 /* SharedMem.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SharedMem.h; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E1563EB7232BBBD9004F135D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1563ED823323A42004F135D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1563EE92333B6B3004F135D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1563EF52333BC8B004F135D /* Python.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1BF21982355A843002521A8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1BF21992355A843002521A8 /* Python.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E1563EB1232BBBD9004F135D = {
+			isa = PBXGroup;
+			children = (
+				E1563EBD232BBBD9004F135D /* CCshm.cxx */,
+				E1563EC4232BBC8A004F135D /* CCshm.h */,
+				E1563EC5232F74D6004F135D /* SemRWLock.cxx */,
+				E1563EC6232F74D6004F135D /* SemRWLock.h */,
+				E1BF21B0235700A2002521A8 /* SharedMem.cxx */,
+				E1BF21B1235700A2002521A8 /* SharedMem.h */,
+				E1563EC8232F75F4004F135D /* EventBus.cxx */,
+				E1563EC9232F75F4004F135D /* EventBus.h */,
+				E1563EE023323ABC004F135D /* CCshm_py.cxx */,
+				E1563EE123323ABC004F135D /* CCshm_py.h */,
+				E1563ECC2330DD26004F135D /* ChannelManager.cxx */,
+				E1563ECD2330DD26004F135D /* ChannelManager.h */,
+				E1BF219E2355A871002521A8 /* ByteArrayDebug.cxx */,
+				E1563ECB2330BE96004F135D /* CMakeLists.txt */,
+				E1563EE62333804C004F135D /* test-shm.py */,
+				E1BF21A12355AE15002521A8 /* TestByteArray.py */,
+				E1563EF42333BC8B004F135D /* Python.framework */,
+				E1563EBB232BBBD9004F135D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E1563EBB232BBBD9004F135D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E1563EBA232BBBD9004F135D /* CCshm */,
+				E1563EDA23323A42004F135D /* CCshm_py3.so */,
+				E1563EEB2333B6B3004F135D /* CCshm_py2.so */,
+				E1BF219D2355A843002521A8 /* ByteArrayDebug.so */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		E1563ED623323A42004F135D /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1563EE323323ABC004F135D /* CCshm_py.h in Headers */,
+				E1BF21B5235700A2002521A8 /* SharedMem.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1563EE72333B6B3004F135D /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1BF21B6235700A2002521A8 /* SharedMem.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1BF21932355A843002521A8 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		E1563EB9232BBBD9004F135D /* CCshm */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1563EC1232BBBD9004F135D /* Build configuration list for PBXNativeTarget "CCshm" */;
+			buildPhases = (
+				E1563EB6232BBBD9004F135D /* Sources */,
+				E1563EB7232BBBD9004F135D /* Frameworks */,
+				E1563EB8232BBBD9004F135D /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CCshm;
+			productName = CCshm;
+			productReference = E1563EBA232BBBD9004F135D /* CCshm */;
+			productType = "com.apple.product-type.tool";
+		};
+		E1563ED923323A42004F135D /* CCshm_py3 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1563EDD23323A42004F135D /* Build configuration list for PBXNativeTarget "CCshm_py3" */;
+			buildPhases = (
+				E1563ED623323A42004F135D /* Headers */,
+				E1563ED723323A42004F135D /* Sources */,
+				E1563ED823323A42004F135D /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CCshm_py3;
+			productName = CCshm_py3;
+			productReference = E1563EDA23323A42004F135D /* CCshm_py3.so */;
+			productType = "com.apple.product-type.library.dynamic";
+		};
+		E1563EEA2333B6B3004F135D /* CCshm_py2 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1563EEC2333B6B3004F135D /* Build configuration list for PBXNativeTarget "CCshm_py2" */;
+			buildPhases = (
+				E1563EE72333B6B3004F135D /* Headers */,
+				E1563EE82333B6B3004F135D /* Sources */,
+				E1563EE92333B6B3004F135D /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CCshm_py2;
+			productName = CCshm_py2;
+			productReference = E1563EEB2333B6B3004F135D /* CCshm_py2.so */;
+			productType = "com.apple.product-type.library.dynamic";
+		};
+		E1BF21922355A843002521A8 /* ByteArrayDebug */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1BF219A2355A843002521A8 /* Build configuration list for PBXNativeTarget "ByteArrayDebug" */;
+			buildPhases = (
+				E1BF21932355A843002521A8 /* Headers */,
+				E1BF21942355A843002521A8 /* Sources */,
+				E1BF21982355A843002521A8 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ByteArrayDebug;
+			productName = CCshm_py2;
+			productReference = E1BF219D2355A843002521A8 /* ByteArrayDebug.so */;
+			productType = "com.apple.product-type.library.dynamic";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E1563EB2232BBBD9004F135D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1010;
+				ORGANIZATIONNAME = Norut;
+				TargetAttributes = {
+					E1563EB9232BBBD9004F135D = {
+						CreatedOnToolsVersion = 10.1;
+					};
+					E1563ED923323A42004F135D = {
+						CreatedOnToolsVersion = 10.1;
+					};
+					E1563EEA2333B6B3004F135D = {
+						CreatedOnToolsVersion = 10.1;
+					};
+				};
+			};
+			buildConfigurationList = E1563EB5232BBBD9004F135D /* Build configuration list for PBXProject "CCshm" */;
+			compatibilityVersion = "Xcode 9.3";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = E1563EB1232BBBD9004F135D;
+			productRefGroup = E1563EBB232BBBD9004F135D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E1563EB9232BBBD9004F135D /* CCshm */,
+				E1563ED923323A42004F135D /* CCshm_py3 */,
+				E1563EEA2333B6B3004F135D /* CCshm_py2 */,
+				E1BF21922355A843002521A8 /* ByteArrayDebug */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E1563EB6232BBBD9004F135D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1563EBE232BBBD9004F135D /* CCshm.cxx in Sources */,
+				E1563ECA232F75F4004F135D /* EventBus.cxx in Sources */,
+				E1563EC7232F74D6004F135D /* SemRWLock.cxx in Sources */,
+				E1BF21B2235700A2002521A8 /* SharedMem.cxx in Sources */,
+				E1563ECE2330DD26004F135D /* ChannelManager.cxx in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1563ED723323A42004F135D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1BF21B3235700A2002521A8 /* SharedMem.cxx in Sources */,
+				E1563EE223323ABC004F135D /* CCshm_py.cxx in Sources */,
+				E1563EDE23323A4F004F135D /* SemRWLock.cxx in Sources */,
+				E1563EDF23323A4F004F135D /* EventBus.cxx in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1563EE82333B6B3004F135D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1BF21B4235700A2002521A8 /* SharedMem.cxx in Sources */,
+				E1563EF12333B6C1004F135D /* CCshm_py.cxx in Sources */,
+				E1563EEF2333B6C1004F135D /* SemRWLock.cxx in Sources */,
+				E1563EF02333B6C1004F135D /* EventBus.cxx in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1BF21942355A843002521A8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1BF21A02355A876002521A8 /* ByteArrayDebug.cxx in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		E1563EBF232BBBD9004F135D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		E1563EC0232BBBD9004F135D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		E1563EC2232BBBD9004F135D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		E1563EC3232BBBD9004F135D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		E1563EDB23323A42004F135D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				EXECUTABLE_EXTENSION = so;
+				EXECUTABLE_PREFIX = "";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(LOCAL_LIBRARY_DIR)/Frameworks",
+				);
+				OTHER_CFLAGS = "-DBUILD_PYTHON_MODULE=1";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		E1563EDC23323A42004F135D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				EXECUTABLE_EXTENSION = so;
+				EXECUTABLE_PREFIX = "";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(LOCAL_LIBRARY_DIR)/Frameworks",
+				);
+				OTHER_CFLAGS = "-DBUILD_PYTHON_MODULE=1";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		E1563EED2333B6B3004F135D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				EXECUTABLE_EXTENSION = so;
+				EXECUTABLE_PREFIX = "";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					/usr/local/Frameworks,
+				);
+				OTHER_CFLAGS = "-DBUILD_PYTHON_MODULE=1";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		E1563EEE2333B6B3004F135D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				EXECUTABLE_EXTENSION = so;
+				EXECUTABLE_PREFIX = "";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					/usr/local/Frameworks,
+				);
+				OTHER_CFLAGS = "-DBUILD_PYTHON_MODULE=1";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		E1BF219B2355A843002521A8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				EXECUTABLE_EXTENSION = so;
+				EXECUTABLE_PREFIX = "";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					/usr/local/Frameworks,
+				);
+				OTHER_CFLAGS = "-DBUILD_PYTHON_MODULE=1";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		E1BF219C2355A843002521A8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				EXECUTABLE_EXTENSION = so;
+				EXECUTABLE_PREFIX = "";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					/usr/local/Frameworks,
+				);
+				OTHER_CFLAGS = "-DBUILD_PYTHON_MODULE=1";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E1563EB5232BBBD9004F135D /* Build configuration list for PBXProject "CCshm" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1563EBF232BBBD9004F135D /* Debug */,
+				E1563EC0232BBBD9004F135D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1563EC1232BBBD9004F135D /* Build configuration list for PBXNativeTarget "CCshm" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1563EC2232BBBD9004F135D /* Debug */,
+				E1563EC3232BBBD9004F135D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1563EDD23323A42004F135D /* Build configuration list for PBXNativeTarget "CCshm_py3" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1563EDB23323A42004F135D /* Debug */,
+				E1563EDC23323A42004F135D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1563EEC2333B6B3004F135D /* Build configuration list for PBXNativeTarget "CCshm_py2" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1563EED2333B6B3004F135D /* Debug */,
+				E1563EEE2333B6B3004F135D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1BF219A2355A843002521A8 /* Build configuration list for PBXNativeTarget "ByteArrayDebug" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1BF219B2355A843002521A8 /* Debug */,
+				E1BF219C2355A843002521A8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E1563EB2232BBBD9004F135D /* Project object */;
+}
