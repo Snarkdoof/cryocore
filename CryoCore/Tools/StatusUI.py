@@ -277,9 +277,9 @@ Press ? to exit help.
 class ConsoleUI:
     def __init__(self):
         self.root = StatusValue("", None, False)
-        self.root.add_or_update("Instruments.Camera.XCam.images", 1)
-        self.root.add_or_update("Instruments.Camera.Spinnaker.images", 2)
-        self.root.add_or_update("System.Defaults.value", "testing")
+        #self.root.add_or_update("Instruments.Camera.XCam.images", 1)
+        #self.root.add_or_update("Instruments.Camera.Spinnaker.images", 2)
+        #self.root.add_or_update("System.Defaults.value", "testing")
         self.help = helpText.split("\n")
         self.helpMode = False
         self.listener = StatusListener(monitor_all=True)
