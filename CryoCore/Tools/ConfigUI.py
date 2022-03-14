@@ -289,9 +289,6 @@ class Editor:
 
     def render(s):
         color = s.color if s.editing else curses.color_pair(0)
-        with open("./cui-log.txt", "a+") as file:
-            file.write(toStr(s.value))
-            file.write("\n")
         for y in range(0, s.height):
             s.window.hline(y, 0, " ", s.width, color)
         try:
