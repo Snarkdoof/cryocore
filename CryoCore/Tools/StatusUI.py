@@ -285,7 +285,9 @@ class ConsoleUI:
         self.expand_all = False
     
     def import_initial_status(self):
+        print("Importing existing status.. stand by.")
         ts = TailStatus("Tools.StatusUI", None)
+        ts.create_pc_index()
         channels = ts.get_channels()
         for channel in channels:
             params = ts.get_params(channel)
@@ -294,6 +296,7 @@ class ConsoleUI:
                 last_value = ts.get_last_value(channel, param)
                 if last_value is not None:
                     self.root.add_or_update(f"{channel}.{param}", last_value)
+        print("Ready!")
     
     def updateFilter(self):
         if len(self.filterEditor.value) > 0:

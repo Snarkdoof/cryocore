@@ -138,11 +138,19 @@ class TailStatus(mysql):
         cursor = self._execute(SQL, (channel, name))
         row = cursor.fetchone()
         if row and len(row) == 2:
-            SQL = "SELECT value from status where chanid=%s and paramid=%s order by id desc limit 1"
+            SQL = "select value from status where id = (select max(id) from status where chanid=%s and paramid=%s)"
             cursor = self._execute(SQL, row)
             row = cursor.fetchone()
             return row[0]
         return None
+    
+    def create_pc_index(self):
+        cursor = self._execute("select count(1) from INFORMATION_SCHEMA.STATISTICS where table_schema=DATABASE() AND table_name='status' AND index_name='pc_index'")
+        row = cursor.fetchone()
+        if row[0] == 0:
+            print("Creating covering index..")
+            cursor = self._execute("create index pc_index on status (chanid, paramid)")
+            print("Index created, fetching values..")
     
     def print_status(self, options):
         """
