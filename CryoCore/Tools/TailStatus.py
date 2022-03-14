@@ -132,7 +132,18 @@ class TailStatus(mysql):
         if row is None:
             raise Exception("Missing parameter '%s' in channel '%s'" % (name, channel))
         return row[0]
-
+    
+    def get_last_value(self, channel, name):
+        SQL = "SELECT status_parameter.chanid, status_parameter.paramid FROM status_parameter,status_channel WHERE status_channel.name=%s AND status_parameter.name=%s AND status_parameter.chanid=status_channel.chanid"
+        cursor = self._execute(SQL, (channel, name))
+        row = cursor.fetchone()
+        if row and len(row) == 2:
+            SQL = "SELECT value from status where chanid=%s and paramid=%s order by timestamp desc limit 1"
+            cursor = self._execute(SQL, row)
+            row = cursor.fetchone()
+            return row[0]
+        return None
+    
     def print_status(self, options):
         """
         Loop and print status. Does never return - kill it.

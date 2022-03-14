@@ -4,6 +4,7 @@ import sys
 import curses
 from CryoCore import API
 from CryoCore.Core.Status.StatusListener import StatusListener
+from CryoCore.Tools.TailStatus import TailStatus
 API.queue_timeout = 0.1
 API.shutdown_grace_period = 0.0
 
@@ -277,13 +278,23 @@ Press ? to exit help.
 class ConsoleUI:
     def __init__(self):
         self.root = StatusValue("", None, False)
-        #self.root.add_or_update("Instruments.Camera.XCam.images", 1)
-        #self.root.add_or_update("Instruments.Camera.Spinnaker.images", 2)
-        #self.root.add_or_update("System.Defaults.value", "testing")
         self.help = helpText.split("\n")
         self.helpMode = False
+        self.import_initial_status()
         self.listener = StatusListener(monitor_all=True)
-
+        self.expand_all = False
+    
+    def import_initial_status(self):
+        ts = TailStatus("Tools.StatusUI", None)
+        channels = ts.get_channels()
+        for channel in channels:
+            params = ts.get_params(channel)
+            #print(f"{channel} : {params}")
+            for param in params:
+                last_value = ts.get_last_value(channel, param)
+                if last_value is not None:
+                    self.root.add_or_update(f"{channel}.{param}", last_value)
+    
     def updateFilter(self):
         if len(self.filterEditor.value) > 0:
             self.selected = 0
@@ -330,6 +341,9 @@ class ConsoleUI:
             else:
                 self.visible[self.selected].expand = False
             self.visible = self.root.getVisible([], len(self.filterEditor.value) > 0)
+        elif asc == '*':
+            self.expand_all = not self.expand_all
+            self.root.setRecursiveExpand(self.expand_all)
         elif asc == '/':
             self.inputColor = curses.color_pair(5)
             self.filterEditor.beginEditing()
@@ -414,7 +428,7 @@ class ConsoleUI:
         self.headerHeight = 1
         self.resize_screen()
 
-        self.pushPrompt("Arrow keys: Move/expand selection | / : Filter | Q: Exit | ? : Help", False)
+        self.pushPrompt("Arrow keys: Move/expand selection | / : Filter | * : Expand/collapse all | Q: Exit | ? : Help", False)
         self.screen.hline(self.height - 1, 0, " ", self.width, self.inputColor)
         self.screen.hline(self.height - 1, 0, " ", self.width)
         self.screen.refresh()
