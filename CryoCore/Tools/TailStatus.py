@@ -138,7 +138,7 @@ class TailStatus(mysql):
         cursor = self._execute(SQL, (channel, name))
         row = cursor.fetchone()
         if row and len(row) == 2:
-            SQL = "SELECT value from status where chanid=%s and paramid=%s order by timestamp desc limit 1"
+            SQL = "SELECT value from status where chanid=%s and paramid=%s order by id desc limit 1"
             cursor = self._execute(SQL, row)
             row = cursor.fetchone()
             return row[0]
