@@ -1036,10 +1036,12 @@ class BaseElement:
                 report_downsampled = False
 
         import copy
-        element = copy.copy(self)
+        element = None # Create a copy once within the loop if we have callbacks and aren't downsampled.
         for (callback, args, downsampled) in self.callbacks:
             if downsampled and not report_downsampled:
                 continue
+            if not element:
+                element = copy.copy(self)
             try:
                 if args:
                     # callback(element, *args)
