@@ -141,7 +141,8 @@ class TailStatus(mysql):
             SQL = "select value from status where id = (select max(id) from status where chanid=%s and paramid=%s)"
             cursor = self._execute(SQL, row)
             row = cursor.fetchone()
-            return row[0]
+            if row:
+                return row[0]
         return None
     
     def create_pc_index(self):

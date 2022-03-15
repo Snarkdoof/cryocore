@@ -1816,6 +1816,11 @@ class Configuration(threading.Thread):
         if shm:
             from CryoCore.Core.Status.StatusListener import StatusListener
             listener = StatusListener(evt=self.callbackCondition)
+            """
+            The config is rarely updated, so we want to avoid waking up too often
+            if there's a lot of other traffic on the status bus.
+            """
+            listener._bus_sleep = 0.2
             listener.add_monitors([("config", "updated")])
         else:
             listener = None

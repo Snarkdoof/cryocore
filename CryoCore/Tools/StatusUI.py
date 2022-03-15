@@ -276,15 +276,16 @@ Press ? to exit help.
 
 
 class ConsoleUI:
-    def __init__(self):
+    def __init__(self, options):
         self.root = StatusValue("", None, False)
         self.help = helpText.split("\n")
         self.helpMode = False
-        self.import_initial_status()
+        self.import_initial_status(options.allow_none)
         self.listener = StatusListener(monitor_all=True)
+        self.listener._bus_sleep = 0.2
         self.expand_all = False
     
-    def import_initial_status(self):
+    def import_initial_status(self, allow_none):
         print("Importing existing status.. stand by.")
         ts = TailStatus("Tools.StatusUI", None)
         ts.create_pc_index()
@@ -294,7 +295,7 @@ class ConsoleUI:
             #print(f"{channel} : {params}")
             for param in params:
                 last_value = ts.get_last_value(channel, param)
-                if last_value is not None:
+                if last_value is not None or allow_none:
                     self.root.add_or_update(f"{channel}.{param}", last_value)
         print("Ready!")
     
@@ -526,6 +527,7 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Tree view of CryoCore configuration")
     parser.add_argument("--fullkeys", action="store_true", default=False, help="Use full keys")
     parser.add_argument("--stacks", action="store_true", default=False, help="Print all thread stacks after shutdown")
+    parser.add_argument("--allow-none", action="store_true", default=False, help="Include status keys that don't have a value yet")
     
     options = parser.parse_args()
     if options.fullkeys:
@@ -533,7 +535,7 @@ if __name__ == "__main__":
     try:
         log = API.get_log("CryoCore.Tools.StatusUI")
         #status = API.get_status("CryoCore.Tools.ConfigUI")
-        ui = ConsoleUI()
+        ui = ConsoleUI(options)
         curses.wrapper(startUI)
     finally:
         #status.queue_callback(None)
