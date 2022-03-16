@@ -40,8 +40,8 @@ enum {
 typedef int semaphore_id_t;
 
 #if defined(__clang__)
-#define atomic_increment(x) __sync_fetch_and_add_4(x, 1)
-#define atomic_decrement(x) __sync_fetch_and_sub_4(x, 1)
+#define atomic_increment(x) __sync_add_and_fetch_4(x, 1)
+#define atomic_decrement(x) __sync_sub_and_fetch_4(x, 1)
 #elif defined(__GNUC__) || defined(__GNUG__)
 static inline int32_t	atomic_increment(volatile int32_t *value) {
 	return __sync_add_and_fetch(value, 1);
