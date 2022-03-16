@@ -43,7 +43,7 @@ class SharedMemoryReporter(Status.OnChangeStatusReporter):
     
     def add_element(self, element):
         # We override add_element to get full-throttle change callbacks.
-        element.add_callback(self.report)
+        element.add_immediate_callback(self.report)
     
     def can_report(self):
         return self.bus != None
