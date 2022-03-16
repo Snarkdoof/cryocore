@@ -51,8 +51,17 @@ class SharedMemoryReporter(Status.OnChangeStatusReporter):
     def report(self, event):
         if not self.bus:
             return
-        data = json.dumps({ "channel" : event.status_holder.get_name(),
-                            "ts" : event.get_timestamp(),
-                            "name" : event.get_name(),
-                            "value" : event.get_value()})
+        val = event.get_value()
+        params = (event.status_holder.get_name(), event.get_timestamp(), event.get_name(), val)
+        if isinstance(val, int):
+            data = """{"channel":"%s","ts":%.8f,"name":"%s","value":%d}""" % params
+        elif isinstance(val, float):
+            data = """{"channel":"%s","ts":%.8f,"name":"%s","value":%.8f}""" % params
+        else:
+            data = """{"channel":"%s","ts":%.8f,"name":"%s","value":"%s"}""" % params
+        
+        #data = json.dumps({ "channel" : event.status_holder.get_name(),
+        #                    "ts" : event.get_timestamp(),
+        #                    "name" : event.get_name(),
+        #                    "value" : event.get_value()})
         self.bus.post(data)

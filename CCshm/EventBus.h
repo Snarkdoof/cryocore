@@ -101,7 +101,6 @@ class EventBusManager : public CCObject {
         virtual ~EventBusManager() {
             pthread_mutex_lock(&lock);
             for (auto it=pending.begin();it!=pending.end();++it) {
-                std::vector<struct EventBusData> &items = it->second;
                 it->first->release();
                 clear_pending(it->second);
             }
