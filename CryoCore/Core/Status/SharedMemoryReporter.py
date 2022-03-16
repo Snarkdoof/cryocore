@@ -18,12 +18,12 @@ class SimpleEvent:
                 return self.name
 
         self.status_holder = FakeStatusHolder(channel)
-        self.ts = ts
+        self.timestamp = ts
         self.name = name
         self.value = value
 
     def get_timestamp(self):
-        return self.ts
+        return self.timestamp
 
     def get_name(self):
         return self.name
