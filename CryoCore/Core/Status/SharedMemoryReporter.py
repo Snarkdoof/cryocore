@@ -51,8 +51,8 @@ class SharedMemoryReporter(Status.OnChangeStatusReporter):
     def report(self, event):
         if not self.bus:
             return
-        val = event.get_value()
-        params = (event.status_holder.get_name(), event.get_timestamp(), event.get_name(), val)
+        val = event.value
+        params = (event.status_holder.name, event.timestamp, event.name, val)
         if isinstance(val, int):
             data = """{"channel":"%s","ts":%.8f,"name":"%s","value":%d}""" % params
         elif isinstance(val, float):
