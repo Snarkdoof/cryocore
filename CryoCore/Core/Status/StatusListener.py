@@ -146,6 +146,7 @@ class StatusListener():
             while True:
                 data = status_bus.get_many()
                 if data:
+                    notify_condition = False
                     for item in data:
                         try:
                             d = json.loads(item.decode("utf-8"))
@@ -154,11 +155,13 @@ class StatusListener():
                                (d["channel"] in self._channels and
                                 d["name"] in self._channels[d["channel"]]):
                                     self._last_values[(d["channel"], d["name"])] = d
+                                    notify_condition = True
                         except:
                             print("Failed to parse or print data: %s" % (data))
                             traceback.print_exc()
-                    with self.condition_lock:
-                        self.condition_lock.notifyAll()
+                    if notify_condition:
+                        with self.condition_lock:
+                            self.condition_lock.notifyAll()
 
                     # Sleep to avoid lock thrashing, and buffer up more data before
                     # we do anything (is this necessary?)
