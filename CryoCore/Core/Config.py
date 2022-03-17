@@ -88,6 +88,10 @@ def _toUnicode(string):
         pass
     return unicode(string, "latin-1")
 
+string_types = [str]
+if sys.version_info.major < 3:
+    string_types += [unicode]
+
 
 class ConfigParameter:
     """
@@ -165,40 +169,40 @@ class ConfigParameter:
         else:
             datatype = "string"  # raise Exception("Unknown datatype for %s"%self.name)
 
-        if sys.version_info.major == 3:
-            strings = [str]
-        else:
-            strings = [str, unicode]
-
         if check:
-            try:
-                if datatype == "folder":
-                    self.value = None
-                elif value.__class__ in strings:
-                    if datatype == "boolean":
-                        if value.__class__ == bool:
-                            self.value = value
-                        else:
-                            if value.isdigit():
-                                self.value = int(value) == 1
-                            else:
-                                self.value = value.lower() == "true"
-                    elif datatype == "double":
-                        self.value = float(value)
-                    elif datatype == "integer":
-                        self.value = int(value)
-                    else:
-                        self.value = value
-                else:
-                    self.value = value
-            except:
-                raise ConfigException("Could not 'cast' '%s' %s to a '%s' (native class: %s)" % (self.name, value, datatype, value.__class__))
+            self.value = self._cast(value, datatype)
         else:
             self.value = value
 
         if commit:
             self._cfg._commit(self, check)
-
+    
+    def _cast(self, value, datatype=None):
+        if not datatype:
+            datatype = self.datatype or "string"
+        try:
+            if datatype == "folder":
+                return None
+            elif value.__class__ in string_types:
+                if datatype == "boolean":
+                    if value.__class__ == bool:
+                        return value
+                    else:
+                        if value.isdigit():
+                            return int(value) == 1
+                        else:
+                            return value.lower() == "true"
+                elif datatype == "double":
+                    return float(value)
+                elif datatype == "integer":
+                    return int(value)
+                else:
+                    return value
+            else:
+                return value
+        except:
+            raise ConfigException("Could not 'cast' '%s' %s to a '%s' (native class: %s)" % (self.name, value, datatype, value.__class__))
+    
     def _get_id(self):
         return self.id
 
@@ -1863,8 +1867,6 @@ class Configuration(threading.Thread):
                 SQL = SQL[:-3]
                 # print(time.time(), "Checking")
                 cursor = self._execute(SQL, p)  # , temporary_connection=True)
-                if cursor.rowcount > 0:
-                    print(time.time(), "Performing callbacks")
                 # We should now have a list of all the updated parameters we have, loop and call back
                 for param_id, name, value, last_modified in cursor.fetchall():
                     last_modified = last_modified.timestamp() # time.mktime(last_modified.timetuple()) + (last_modified.microsecond / 1e6)
@@ -1876,6 +1878,13 @@ class Configuration(threading.Thread):
                         func = self._callback_items[cbid]["func"]
                         args = self._callback_items[cbid]["args"]
                         param = self.get_by_id(param_id)
+                        # Update param's value if its current value differs from the one reported by
+                        # the database.
+                        try:
+                            if param.get_value() != param._cast(value):
+                                param.set_value(value, commit=False)
+                        except:
+                            self.log.exception("Failed to cast value from database to config var's datatype. Value reported may be stale!")
                         try:
                             if args:
                                 func(param, *args)
