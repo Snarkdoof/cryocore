@@ -44,7 +44,7 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
         last_clean = 0
         while True:  # Must loop - we only exit when idle, to ensure that we flush all items
             try:
-                (event, ts, value) = self.tasks.get(block=True, timeout=1.0)
+                (event, ts, value) = self.tasks.get(block=True, timeout=API.queue_timeout)
                 # Should insert something
                 # self._execute(sql, args)
                 self._async_report(event, ts, value)
@@ -53,7 +53,7 @@ class MySQLStatusReporter(Status.OnChangeStatusReporter, InternalDB.mysql, threa
                     if stop_time is None:
                         stop_time = time.time()
                         continue
-                    if time.time() - stop_time < 5:
+                    if time.time() - stop_time < API.shutdown_grace_period:
                         # We have a few seconds "grace time" to ensure that we get all status messages
                         continue
                     break

@@ -142,6 +142,7 @@ class StatusHolder(threading.Thread):
 
     def run(self):
         self.log.info("Callback %s thread started" % self.name)
+        from CryoCore import API
         while not self._async_stop_event.is_set():
             try:
                 while self._set_value_queue.unfinished_tasks > 0:
@@ -154,7 +155,7 @@ class StatusHolder(threading.Thread):
 
             func = None
             try:
-                func = self._callback_queue.get(block=True, timeout=1.0)
+                func = self._callback_queue.get(block=True, timeout=API.queue_timeout)
             except queue.Empty:
                 pass  # Why the h... does this not return None?
 
