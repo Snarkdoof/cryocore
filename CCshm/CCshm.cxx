@@ -48,7 +48,7 @@ int main(int argc, const char * argv[]) {
 			auto_post = false,
 			dump = false,
 			many = false,
-            init_locks = true;
+            init_locks = false;
 	size_t	item_size = 0;
 	const char	*path = "./.ccshm-shared-mem-id";
 	for (ssize_t i=1;i<argc;i++) {
