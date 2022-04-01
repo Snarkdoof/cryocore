@@ -80,10 +80,13 @@ int main(int argc, const char * argv[]) {
 									item_size);
 	bus->open(init);
 	if (dump) {
+        printf("Current semaphore state:\n");
 		bus->dump();
-        if (init_locks)
+        if (init_locks) {
             bus->init_locks();
-        bus->dump();
+            printf("Semaphores after initialization:\n");
+            bus->dump();
+        }
 		exit(0);
 	}
 	pthread_t tid;
