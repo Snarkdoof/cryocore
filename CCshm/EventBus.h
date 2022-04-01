@@ -56,6 +56,10 @@ class EventBus : public CCObject {
 		int		wakeup_count;
 		bool	valid;
 		void*	getExtraHeaderArea(ssize_t bytes);
+        void    init_locks(void) {
+            lock->init();
+            notify();
+        };
 		
 	protected:
 		bool	_post(EventBusData &data);

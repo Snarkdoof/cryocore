@@ -45,8 +45,7 @@ bool	EventBus::open(bool &force_init) {
 	//	in case we want to get fancy with mapping the ring buffer.
 	if (force_init) {
 		printf("Initializing\n");
-		lock->init();
-		notify();
+        init_locks();
 		memset(shm.ptr, 0, shm.size);
 		header->num_items = num_items;
 		header->item_size = item_size;
