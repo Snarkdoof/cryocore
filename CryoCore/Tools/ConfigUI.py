@@ -55,6 +55,12 @@ class Category:
                 category = Category(key, key, cfg, level + 1, s)
             s.categories.append(category)
     
+    def remove(self):
+        if len(self.lookupKey) > 0:
+            self.cfg.remove(self.lookupKey)
+            if self.parent is not None:
+                self.parent.categories.remove(self)
+    
     def update(self, lookupKey):
         if self.lookupKey == lookupKey:
             #log.debug(f"Found config param for key {lookupKey}")
@@ -366,6 +372,12 @@ class ConsoleUI:
             s.selectedCategory = s.selectedCategory if s.selectedCategory == len(s.visibleCategories) - 1 else s.selectedCategory + 1
         elif c == curses.KEY_RIGHT:
             s.visibleCategories[s.selectedCategory].expand = True
+            s.visibleCategories = s.categories.getVisible([], len(s.filterEditor.value) > 0)
+        elif c == curses.KEY_BACKSPACE or c == 8 or c == 13:
+            s.visibleCategories[s.selectedCategory].remove()
+            s.selectedCategory -= 1
+            if s.selectedCategory < 0:
+                s.selectedCategory = 0
             s.visibleCategories = s.categories.getVisible([], len(s.filterEditor.value) > 0)
         elif isAlt and (curses.keyname(c) == 'f' or curses.keyname(c) == 'b'):  # right or left arrow
             s.visibleCategories[s.selectedCategory].setRecursiveExpand(curses.keyname(c) == 'f')
