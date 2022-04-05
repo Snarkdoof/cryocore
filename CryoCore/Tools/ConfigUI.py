@@ -34,6 +34,28 @@ def toStr(val):
             ret = str(val)
     return ret
 
+def check_confirm(window, message, yes_response, no_response):
+    window.hline(0, 0, " ", window.getmaxyx()[1], curses.color_pair(4))
+    window.addstr(message, curses.color_pair(4))
+    window.refresh()
+    c = window.getch()
+    try:
+        asc = chr(c)
+        window.hline(0, 0, " ", window.getmaxyx()[1], curses.color_pair(4))
+        if asc.lower() == "y" or asc.lower() == "yes":
+            window.hline(0, 0, " ", window.getmaxyx()[1], curses.color_pair(6))
+            window.addstr(0, 0, yes_response, curses.color_pair(6))
+            window.refresh()
+            return True
+        else:
+            window.addstr(0, 0, no_response, curses.color_pair(4))
+            window.refresh()
+            return False
+        window.refresh()
+    except:
+        window.addstr(0, 0, f"{no_response} (exception)", curses.color_pair(4))
+    return False
+
 
 class Category:
     def __init__(s, name, lookupKey, cfg, level=0, parent=None):
@@ -110,23 +132,8 @@ class Category:
                 s.cfg.set(s.lookupKey, s.value, None)
             except:
                 if window is not None:
-                    window.hline(0, 0, " ", window.getmaxyx()[1], curses.color_pair(4))
-                    window.addstr("Error, datatype mismatch! Override? (Y/N): ", curses.color_pair(4))
-                    window.refresh()
-                    c = window.getch()
-                    try:
-                        asc = chr(c)
-                        window.hline(0, 0, " ", window.getmaxyx()[1], curses.color_pair(4))
-                        if asc.lower() == "y" or asc.lower() == "yes":
-                            s.cfg.set(s.lookupKey, s.value, datatype=s.getDataType())
-                            window.hline(0, 0, " ", window.getmaxyx()[1], curses.color_pair(6))
-                            window.addstr(0, 0, "Changed", curses.color_pair(6))
-                        else:
-                            window.addstr(0, 0, "Not changed", curses.color_pair(4))
-                        window.refresh()
-                    except:
-                        window.addstr(0, 0, "Not changed (attempting to set threw exception)", curses.color_pair(4))
-                        window.refresh()
+                    if check_confirm(window, "Error, datatype mismatch! Override? (Y/N): ", "Changed", "Not changed"):
+                        s.cfg.set(s.lookupKey, s.value, datatype=s.getDataType())
                     s.setValue(s.cfg[s.lookupKey], None, False)
 
     def setRecursiveExpand(s, flag):
@@ -374,11 +381,11 @@ class ConsoleUI:
             s.visibleCategories[s.selectedCategory].expand = True
             s.visibleCategories = s.categories.getVisible([], len(s.filterEditor.value) > 0)
         elif c == curses.KEY_BACKSPACE or c == 8 or c == 13:
-            s.visibleCategories[s.selectedCategory].remove()
-            s.selectedCategory -= 1
-            if s.selectedCategory < 0:
-                s.selectedCategory = 0
-            s.visibleCategories = s.categories.getVisible([], len(s.filterEditor.value) > 0)
+            if check_confirm(s.settingWindow, f"Delete config tree {s.visibleCategories[s.selectedCategory].lookupKey}? ", "Deleted", "Not deleted"):
+                s.visibleCategories[s.selectedCategory].remove()
+                s.visibleCategories = s.categories.getVisible([], len(s.filterEditor.value) > 0)
+                if s.selectedCategory > len(s.visibleCategories):
+                    s.selectedCategory = len(s.visibleCategories)-1
         elif isAlt and (curses.keyname(c) == 'f' or curses.keyname(c) == 'b'):  # right or left arrow
             s.visibleCategories[s.selectedCategory].setRecursiveExpand(curses.keyname(c) == 'f')
             s.visibleCategories = s.categories.getVisible([], len(s.filterEditor.value) > 0)
