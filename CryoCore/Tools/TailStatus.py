@@ -143,7 +143,7 @@ class TailStatus(mysql):
             row = cursor.fetchone()
             if row:
                 return row
-        return None
+        return None, None
     
     def create_pc_index(self):
         cursor = self._execute("select count(1) from INFORMATION_SCHEMA.STATISTICS where table_schema=DATABASE() AND table_name='status' AND index_name='pc_index'")
