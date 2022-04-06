@@ -138,11 +138,11 @@ class TailStatus(mysql):
         cursor = self._execute(SQL, (channel, name))
         row = cursor.fetchone()
         if row and len(row) == 2:
-            SQL = "select value from status where id = (select max(id) from status where chanid=%s and paramid=%s)"
+            SQL = "select value, timestamp from status where id = (select max(id) from status where chanid=%s and paramid=%s)"
             cursor = self._execute(SQL, row)
             row = cursor.fetchone()
             if row:
-                return row[0]
+                return row
         return None
     
     def create_pc_index(self):

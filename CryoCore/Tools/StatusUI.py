@@ -2,6 +2,7 @@
 
 import sys
 import curses
+import time
 from CryoCore import API
 from CryoCore.Core.Status.StatusListener import StatusListener
 from CryoCore.Tools.TailStatus import TailStatus
@@ -37,15 +38,17 @@ def toStr(val):
     return ret
 
 class StatusValue:
-    def __init__(self, path, value, is_leaf, level=0, parent=None):
+    def __init__(self, path, value, is_leaf, level=0, parent=None, timestamp=None):
         self.path = path
         self.name = path.split(".")[-1]
         self.level = level
         self.is_leaf = is_leaf
         if self.is_leaf:
             self.value = value
+            self.timestamp = timestamp or time.time()
         else:
             self.value = None
+            self.timestamp = None
         self.expand = len(self.name) == 0
         self.filter = False
         self.parent = parent
@@ -83,23 +86,30 @@ class StatusValue:
         for child in self.children:
             child.clearFilter()
 
-    def getVisible(self, result, enableFilter=False):
-        if self.filter and enableFilter:
-            result.append(self)
-        elif not enableFilter:
-            result.append(self)
+    def getVisible(self, result, enableFilter, filter_recent, recent_seconds):
+        if self.is_leaf and filter_recent:
+            if self.timestamp is None:
+                print("Error, leaf value doesn't have a timestamp")
+            else:
+                if time.time()-self.timestamp > recent_seconds:
+                    return result
+        visible_children = []
         if self.expand or (self.filter and enableFilter):
             for child in self.children:
-                child.getVisible(result, enableFilter)
+                child.getVisible(visible_children, enableFilter, filter_recent, recent_seconds)
+        if len(visible_children) > 0 or (not enableFilter and not filter_recent):
+            result.append(self)
+            result += visible_children
         return result
     
-    def update_value(self, value):
+    def update_value(self, value, timestamp):
         self.is_leaf = True
         if value != self.value:
             self.flash = 2
         self.value = value
+        self.timestamp = timestamp or time.time()
     
-    def add_or_update(self, path, value):
+    def add_or_update(self, path, value, timestamp=None):
         names = path.split(".")
         node_path = ""
         parent = self
@@ -109,12 +119,12 @@ class StatusValue:
             if key in parent.child_map:
                 parent = parent.child_map[key]
             else:
-                child = StatusValue(key, None, False, parent.level+1, parent)
+                child = StatusValue(key, None, False, parent.level+1, parent, timestamp)
                 parent.children.append(child)
                 parent.child_map[key] = child
                 parent = child
                 added = True
-        parent.update_value(value)
+        parent.update_value(value, timestamp)
         return added
     
     def renderToScreen(self, screen, line, width, selected=False):
@@ -268,6 +278,9 @@ Left/right arrow keys: Expand or collapse a group of settings
                     /: Search for names and settings with the
                        given text. Press enter when you are
                        done, or ESC to clear the filter.
+                    *: Expand or collapse all status variables
+                    $: Toggle filtering of not recently updated
+                       variables.
                     Q: Exit the application
                     ?: Show/hide this help text.
 
@@ -283,7 +296,10 @@ class ConsoleUI:
         self.import_initial_status(options.allow_none)
         self.listener = StatusListener(monitor_all=True)
         self.listener._bus_sleep = 0.2
-        self.expand_all = False
+        self.expand_all = True
+        self.filter_recent = True
+        self.recent_seconds = options.recent_seconds
+        self.root.setRecursiveExpand(self.expand_all)
     
     def import_initial_status(self, allow_none):
         print("Importing existing status.. stand by.")
@@ -294,20 +310,20 @@ class ConsoleUI:
             params = ts.get_params(channel)
             #print(f"{channel} : {params}")
             for param in params:
-                last_value = ts.get_last_value(channel, param)
+                last_value, timestamp = ts.get_last_value(channel, param)
                 if last_value is not None or allow_none:
-                    self.root.add_or_update(f"{channel}.{param}", last_value)
+                    self.root.add_or_update(f"{channel}.{param}", last_value, timestamp)
         print("Ready!")
     
     def updateFilter(self):
         if len(self.filterEditor.value) > 0:
             self.selected = 0
             self.root.checkFilter(self.filterEditor.value)
-            self.visible = self.root.getVisible([], True)
+            self.visible = self.root.getVisible([], True, self.filter_recent, self.recent_seconds)
         else:
             self.selected = 0
             self.root.clearFilter()
-            self.visible = self.root.getVisible([], False)
+            self.visible = self.root.getVisible([], False, self.filter_recent, self.recent_seconds)
 
     def handleInput(self, c, asc, isAlt=False):
         if asc == '?':
@@ -319,10 +335,10 @@ class ConsoleUI:
             self.selected = self.selected if self.selected == len(self.visible) - 1 else self.selected + 1
         elif c == curses.KEY_RIGHT:
             self.visible[self.selected].expand = True
-            self.visible = self.root.getVisible([], len(self.filterEditor.value) > 0)
+            self.visible = self.root.getVisible([], len(self.filterEditor.value) > 0, self.filter_recent, self.recent_seconds)
         elif isAlt and (curses.keyname(c) == 'f' or curses.keyname(c) == 'b'):  # right or left arrow
             self.visible[self.selected].setRecursiveExpand(curses.keyname(c) == 'f')
-            self.visible = self.root.getVisible([], len(self.filterEditor.value) > 0)
+            self.visible = self.root.getVisible([], len(self.filterEditor.value) > 0, self.filter_recent, self.recent_seconds)
         elif c == 27:  # escape or alt
             newC = readEscape(self.screen)
             try:
@@ -344,10 +360,12 @@ class ConsoleUI:
                         break
             else:
                 self.visible[self.selected].expand = False
-            self.visible = self.root.getVisible([], len(self.filterEditor.value) > 0)
+            self.visible = self.root.getVisible([], len(self.filterEditor.value) > 0, self.filter_recent, self.recent_seconds)
         elif asc == '*':
             self.expand_all = not self.expand_all
             self.root.setRecursiveExpand(self.expand_all)
+        elif asc == '$':
+            self.filter_recent = not self.filter_recent
         elif asc == '/':
             self.inputColor = curses.color_pair(5)
             self.filterEditor.beginEditing()
@@ -432,14 +450,14 @@ class ConsoleUI:
         self.headerHeight = 1
         self.resize_screen()
 
-        self.pushPrompt("Arrow keys: Move/expand selection | / : Filter | * : Expand/collapse all | Q: Exit | ? : Help", False)
+        self.pushPrompt("Arrows: Move/expand | / : Filter | * : Expand/collapse all : $ : Toggle recent | Q: Exit | ? : Help", False)
         self.screen.hline(self.height - 1, 0, " ", self.width, self.inputColor)
         self.screen.hline(self.height - 1, 0, " ", self.width)
         self.screen.refresh()
         curses.doupdate()
         self.selected = 0
         self.categoryScroll = 0
-        self.visible = self.root.getVisible([])
+        self.visible = self.root.getVisible([], False, self.filter_recent, self.recent_seconds)
         while not API.api_stop_event.is_set():
             self.refresh()
             self.getInput()
@@ -450,7 +468,7 @@ class ConsoleUI:
                 added |= self.root.add_or_update(path, value["value"])
             if added and len(self.filterEditor.value) > 0:
                 self.root.checkFilter(self.filterEditor.value)
-            self.visible = self.root.getVisible([], len(self.filterEditor.value) > 0)
+            self.visible = self.root.getVisible([], len(self.filterEditor.value) > 0, self.filter_recent, self.recent_seconds)
             truncateLength = self.width - self.root.measure_label() - 10
     
     def refresh(self):
@@ -528,7 +546,7 @@ if __name__ == "__main__":
     parser.add_argument("--fullkeys", action="store_true", default=False, help="Use full keys")
     parser.add_argument("--stacks", action="store_true", default=False, help="Print all thread stacks after shutdown")
     parser.add_argument("--allow-none", action="store_true", default=False, help="Include status keys that don't have a value yet")
-    
+    parser.add_argument("--recent-seconds", action="store", default=3*60*60, type=float, help="Time delta since now for filtering not recently updated status items")
     options = parser.parse_args()
     if options.fullkeys:
         fullkeys = True
