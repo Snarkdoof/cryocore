@@ -88,8 +88,9 @@ class StatusValue:
 
     def getVisible(self, result, enableFilter, filter_recent, recent_seconds):
         if self.is_leaf:
-            if not self.filter and enableFilter:
-                result.append(self)
+            if enableFilter:
+                if self.filter:
+                    result.append(self)
             elif filter_recent:
                 if self.timestamp is None:
                     #log.debug("Error, leaf value doesn't have a timestamp")
