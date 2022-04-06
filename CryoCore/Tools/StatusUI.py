@@ -87,12 +87,18 @@ class StatusValue:
             child.clearFilter()
 
     def getVisible(self, result, enableFilter, filter_recent, recent_seconds):
-        if self.is_leaf and filter_recent:
-            if self.timestamp is None:
-                print("Error, leaf value doesn't have a timestamp")
+        if self.is_leaf:
+            if not self.filter and enableFilter:
+                result.append(self)
+            elif filter_recent:
+                if self.timestamp is None:
+                    #log.debug("Error, leaf value doesn't have a timestamp")
+                    pass
+                elif time.time()-self.timestamp < recent_seconds:
+                    result.append(self)
             else:
-                if time.time()-self.timestamp > recent_seconds:
-                    return result
+                result.append(self)
+            return result
         visible_children = []
         if self.expand or (self.filter and enableFilter):
             for child in self.children:
