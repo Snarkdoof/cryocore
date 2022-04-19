@@ -282,6 +282,10 @@ static PyModuleDef CCshm_py3_module = {
 	.m_name = "CCshm_py3",
 	.m_doc = "CryoCore Shared Memory.",
 	.m_size = -1,
+    .m_methods = NULL,
+    .m_slots = NULL
+    .m_traverse = NULL,
+    .m_clear = NULL,
     .m_free = CCshm_destroy
 };
 #endif
