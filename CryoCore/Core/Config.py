@@ -1806,7 +1806,7 @@ class Configuration(threading.Thread):
             version_id = self._get_version_id(self.version)
 
         c = self._execute("SELECT UNIX_TIMESTAMP(MAX(last_modified)) FROM config WHERE version=%s", [version_id])
-        if cursor.rowcount > 1:
+        if c.rowcount > 1:
             raise Exception("No way!")
         row = c.fetchone()
         return row[0]
