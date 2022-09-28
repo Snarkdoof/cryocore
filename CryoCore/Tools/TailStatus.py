@@ -169,8 +169,6 @@ class TailStatus(mysql):
                 else:
                     SQL += "status_channel.name LIKE %%%s%% OR status_parameter.name LIKE %%%s%% OR "
                 args.extend([word, word])
-        print(SQL[:-3])
-        print(args)
         cursor = self._execute(SQL[:-3] + ")", args)
         ret = []
         for row in cursor.fetchall():
