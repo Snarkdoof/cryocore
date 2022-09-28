@@ -82,6 +82,9 @@ class CSVExporter:
         value = row[VALUE]
         # if words and name not in words and not value in words:
         #    return
+        if self._parameters:
+            if ":".join((channel, name)) not in self._parameters:
+                return
 
         # We write if the difference in timestamp is more than .01 seconds, which we regard as "simultaneous"
         if self._lastts is not None and abs(t - self._lastts) > 0.01:
@@ -171,10 +174,7 @@ class TailStatus(mysql):
         cursor = self._execute(SQL[:-3] + ")", args)
         ret = []
         for row in cursor.fetchall():
-            print("ROW", row)
             ret.append(":".join(row))
-        print("WORDS", words)
-        print("ret", ret)
         return ret
 
     def get_last_value(self, channel, name):
