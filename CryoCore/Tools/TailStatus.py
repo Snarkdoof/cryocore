@@ -80,8 +80,8 @@ class CSVExporter:
         channel = row[CHANNEL]
         name = row[NAME]
         value = row[VALUE]
-        if words and name not in words and not value in words:
-            return
+        # if words and name not in words and not value in words:
+        #    return
 
         # We write if the difference in timestamp is more than .01 seconds, which we regard as "simultaneous"
         if self._lastts is not None and abs(t - self._lastts) > 0.01:
@@ -292,7 +292,6 @@ class TailStatus(mysql):
 
                         if do_print:
                             if exporter:
-                                print("EXPORTING", row)
                                 exporter.print_row(row, is2D, options.words)
                             else:
                                 self._print_row(row, is2D, options.words)
