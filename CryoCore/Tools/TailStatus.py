@@ -34,10 +34,12 @@ class CSVExporter:
         self._options = options
         self._lastts = None
         self._values = {}
+        self._rows = {}
         self._write_header()
         self._last_flush = 0  # Flush periodically in case we follow
 
     def _write_header(self):
+        print("PARAMETERS", self._parameters)
         self._target.write("Time," + ",".join(self._parameters) + "\n")
 
     def close(self):
@@ -51,6 +53,7 @@ class CSVExporter:
             pass
 
     def _flush(self):
+    
         s = "%s," % self._lastts
         for p in self._parameters:
             c, n = p.split(":")
@@ -58,6 +61,11 @@ class CSVExporter:
                 s += "%s," % self._values[(c, n)]
             else:
                 s += ","
+
+        if not self._parameters:
+            # Print all
+            for val in self._values:
+                s += "%s:%s," % val
         self._target.write(s[:-1] + "\n")
 
         if not self._options.fill:
@@ -67,11 +75,17 @@ class CSVExporter:
             self._target.flush()
             self._last_flush = time.time()
 
-    def print_row(self, row, is2D):
+    def print_row(self, row, is2D, words=[]):
         t = row[TIMESTAMP]
         channel = row[CHANNEL]
         name = row[NAME]
         value = row[VALUE]
+        # if words and name not in words and not value in words:
+        #    return
+        if self._parameters:
+            if ":".join((channel, name)) not in self._parameters:
+                return
+
         # We write if the difference in timestamp is more than .01 seconds, which we regard as "simultaneous"
         if self._lastts is not None and abs(t - self._lastts) > 0.01:
             self._flush()
@@ -133,6 +147,34 @@ class TailStatus(mysql):
             raise Exception("Missing parameter '%s' in channel '%s'" % (name, channel))
         return row[0]
     
+    def get_param_list(self, words, fullmatch=True):
+        """
+        Try to find all parameters matching the given word
+        """
+        SQL = "SELECT status_channel.name, status_parameter.name " +\
+              "FROM status_parameter,status_channel " +\
+              "WHERE status_channel.chanid=status_parameter.chanid AND ("
+
+        args = []
+        for word in words:
+            if word.find(":") > -1:
+                if fullmatch:
+                    SQL += "(status_channel.name=%s AND status_parameter.name=%s) OR "
+                else:
+                    SQL += "(status_channel.name LIKE %%%s%% AND status_parameter.name LIKE %%%s%%) OR "
+                args.extend(list(word.split(":")))
+            else:
+                if fullmatch:
+                    SQL += "status_channel.name=%s OR status_parameter.name=%s OR "
+                else:
+                    SQL += "status_channel.name LIKE %%%s%% OR status_parameter.name LIKE %%%s%% OR "
+                args.extend([word, word])
+        cursor = self._execute(SQL[:-3] + ")", args)
+        ret = []
+        for row in cursor.fetchall():
+            ret.append(":".join(row))
+        return ret
+
     def get_last_value(self, channel, name):
         SQL = "SELECT status_parameter.chanid, status_parameter.paramid FROM status_parameter,status_channel WHERE status_channel.name=%s AND status_parameter.name=%s AND status_parameter.chanid=status_channel.chanid"
         cursor = self._execute(SQL, (channel, name))
@@ -210,6 +252,10 @@ class TailStatus(mysql):
             additional2d = " AND (" + ("status2d.paramid=%s OR " * len(options.parameters))[:-4] + ")"
 
         if options.timeseries:
+
+            # Build the parameters
+            options.parameters = self.get_param_list(options.words)
+            print("TIMESERIES WITH PARAMETERS", options.parameters)
             exporter = CSVExporter(options.timeseries, options.parameters, options)
         else:
             exporter = None
