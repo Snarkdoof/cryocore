@@ -147,7 +147,7 @@ class StatusValue:
             elif self.is_leaf:
                 color = curses.color_pair(0)
             else:
-                color = curses.color_pair(2)
+                color = curses.color_pair(0) | curses.A_BOLD
             if self.is_leaf:
                 if self.flash > 0:
                     self.flash -= 1

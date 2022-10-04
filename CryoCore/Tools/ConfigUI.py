@@ -194,7 +194,7 @@ class Category:
             elif s.isValue:
                 color = curses.color_pair(0)
             else:
-                color = curses.color_pair(2)
+                color = curses.color_pair(0) | curses.A_BOLD
             if s.isValue:
                 screen.hline(line, 0, " ", width, color)
                 screen.addstr(line, x, displayName, color)
