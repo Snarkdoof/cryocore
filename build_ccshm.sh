@@ -3,7 +3,7 @@
 CCDIR=$PWD
 
 # Install dependencies
-sudo apt install -y cmake 
+sudo apt install -y cmake g++ 
 
 cmake >/dev/null 2>/dev/null
 if [ $? != 0 ]; then
