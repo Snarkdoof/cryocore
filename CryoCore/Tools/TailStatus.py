@@ -67,11 +67,20 @@ class CSVExporter:
             self._target.flush()
             self._last_flush = time.time()
 
-    def print_row(self, row, is2D):
+    def print_row(self, row, is2D, words=None):
         t = row[TIMESTAMP]
         channel = row[CHANNEL]
         name = row[NAME]
         value = row[VALUE]
+
+        if words and not self._parameters:
+            found = -1
+            for word in words:
+                found = max(found, name.find(_word))
+                found = max(found, channel.find(_word))
+            if found == -1:
+                return
+
         # We write if the difference in timestamp is more than .01 seconds, which we regard as "simultaneous"
         if self._lastts is not None and abs(t - self._lastts) > 0.01:
             self._flush()
@@ -210,6 +219,23 @@ class TailStatus(mysql):
             additional2d = " AND (" + ("status2d.paramid=%s OR " * len(options.parameters))[:-4] + ")"
 
         if options.timeseries:
+
+            # Find parameters first
+            chans = self.get_channels()
+            _params = []
+            for chan in chans:
+                for p in self.get_params(chan):
+                    _params.append(chan + ":" + p)
+
+            for word in options.words:
+                if word.find(":") > -1:
+                    options.parameters.append(word)
+                else:
+                    # Must search!
+                    for param in _params:
+                        if param.find(word) > -1:
+                            options.parameters.append(param)
+
             exporter = CSVExporter(options.timeseries, options.parameters, options)
         else:
             exporter = None
