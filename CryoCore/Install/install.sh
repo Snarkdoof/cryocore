@@ -11,7 +11,7 @@ sudo locale-gen "nb_NO.UTF-8"
 sudo locale-gen "en_US.UTF-8"
 
 # Check for mysql
-apt show mysql-serverf 2>/dev/null > /dev/null
+apt show mysql-server 2>/dev/null > /dev/null
 if [[ $? == 0 ]]; then 
 	MYSQL="mysql";
 else
