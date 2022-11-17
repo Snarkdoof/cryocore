@@ -208,6 +208,9 @@ class AsyncDB(threading.Thread):
                 #print("*** Parent process stopped")
                 API.api_stop_event.set()
                 should_stop = True
+            except OSError:
+                if API.api_stop_event.isSet():
+                    break  # Queue is broken
             except:
                 print("Unhandled exception")
                 import traceback
