@@ -272,6 +272,7 @@ value TEXT)""",
     def get_data(self, params, start_time, end_time, since=0, since2d=0, aggregate=None, lastValues=False):
         if len(params) == 0:
             raise Exception("No parameters given")
+
         # print("Getting data between %s and %s (%s)" % (float(start_time) - time.time(), float(end_time) - time.time(), start_time))
         dataset = {}
         params2d = []

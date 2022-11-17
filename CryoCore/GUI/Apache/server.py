@@ -137,6 +137,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
         # Check if we provide the requested method
         if path.startswith("/JSON.py/"):
+            # print(" *** GOT ARGS **", args)
             path = path[9:]
             try:
                 if path in functions:
@@ -342,6 +343,7 @@ try:
             t = threading.Thread(target=run_until_stopped, args=(server,))
             t.start()
 
+            print("Started live server on port %s" % cfg["live_port"])
             log.info("Started live server on port %s" % cfg["live_port"])
 
     httpd = http.server.HTTPServer(("", cfg["port"]), MyHandler)
