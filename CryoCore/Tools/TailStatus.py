@@ -13,7 +13,7 @@ from argparse import ArgumentParser
 
 try:
     import argcomplete
-except:
+except Exception:
     print("Missing argcomplete, autocomplete not available")
 
 ID = 0
@@ -75,15 +75,17 @@ class CSVExporter:
             self._target.flush()
             self._last_flush = time.time()
 
-    def print_row(self, row, is2D, words=[]):
+    def print_row(self, row, is2D, words=None):
         t = row[TIMESTAMP]
         channel = row[CHANNEL]
         name = row[NAME]
         value = row[VALUE]
-        # if words and name not in words and not value in words:
-        #    return
-        if self._parameters:
-            if ":".join((channel, name)) not in self._parameters:
+        if words and not self._parameters:
+            found = -1
+            for word in words:
+                found = max(found, name.find(_word))
+                found = max(found, channel.find(_word))
+            if found == -1:
                 return
 
         # We write if the difference in timestamp is more than .01 seconds, which we regard as "simultaneous"
@@ -253,9 +255,22 @@ class TailStatus(mysql):
 
         if options.timeseries:
 
-            # Build the parameters
-            options.parameters = self.get_param_list(options.words)
-            print("TIMESERIES WITH PARAMETERS", options.parameters)
+            # Find parameters first
+            chans = self.get_channels()
+            _params = []
+            for chan in chans:
+                for p in self.get_params(chan):
+                    _params.append(chan + ":" + p)
+
+            for word in options.words:
+                if word.find(":") > -1:
+                    options.parameters.append(word)
+                else:
+                    # Must search!
+                    for param in _params:
+                        if param.find(word) > -1:
+                            options.parameters.append(param)
+
             exporter = CSVExporter(options.timeseries, options.parameters, options)
         else:
             exporter = None

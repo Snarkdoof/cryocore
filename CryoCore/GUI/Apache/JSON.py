@@ -101,7 +101,9 @@ def get(req, params, start, end, since=0, since2d=0, aggregate=None):
         get_last_values = True
     else:
         get_last_values = False
+
     max_id, max_id2d, dataset = db.get_db().get_data(params, float(start), float(end), int(since), int(since2d), aggregate, get_last_values)
+    # print("GET:", json.dumps({"max_id": max_id, "max_id2d": max_id2d, "data": dataset, "glv": get_last_values}))
     return json.dumps({"max_id": max_id, "max_id2d": max_id2d, "data": dataset, "glv": get_last_values})
 
 

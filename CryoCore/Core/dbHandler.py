@@ -139,7 +139,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         while not self.stop_event.is_set():
             self.get_log_entry_and_insert(taskqueue, True, API.queue_timeout)
         # Insert any remaining items until self.tasks is empty
-        while self.get_log_entry_and_insert(taskqueue, False, None):
+        while not self.stop_event.is_set() and self.get_log_entry_and_insert(taskqueue, False, None):
             pass
         self.complete_event.set()
 
@@ -148,7 +148,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
         SQL = "INSERT INTO log (logger, level, module, line, func, time, msecs, message) VALUES "
         params = []
-        while True:
+        while not API.api_stop_event.isSet():
             try:
                 args = taskqueue.get(should_block, desired_timeout)
                 SQL += "(%s, %s, %s, %s, %s, %s, %s, %s),"
@@ -162,7 +162,9 @@ class DbHandler(logging.Handler, InternalDB.mysql):
                 # API.api_stop_event.set()
                 return False
             except Exception as e:
-                print("Error getting async log messages:", e)
+                #print("Error getting async log messages:", e)
+                import time
+                time.sleep(0.1)
                 return False
 
         if len(params) == 0:
