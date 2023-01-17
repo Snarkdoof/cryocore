@@ -58,10 +58,10 @@ class SharedMemoryReporter(Status.OnChangeStatusReporter):
         elif isinstance(val, float):
             data = """{"channel":"%s","ts":%.8f,"name":"%s","value":%.8f}""" % params
         else:
-            data = """{"channel":"%s","ts":%.8f,"name":"%s","value":"%s"}""" % params
-        
-        #data = json.dumps({ "channel" : event.status_holder.get_name(),
-        #                    "ts" : event.get_timestamp(),
-        #                    "name" : event.get_name(),
-        #                    "value" : event.get_value()})
+            # The commented-out line was a really great idea UNTIL the value started containing quotes. Oops!
+            #data = """{"channel":"%s","ts":%.8f,"name":"%s","value":"%s"}""" % params
+            data = json.dumps({ "channel" : event.status_holder.get_name(),
+                                "ts" : event.get_timestamp(),
+                                "name" : event.get_name(),
+                                "value" : event.get_value()})
         self.bus.post(data)
