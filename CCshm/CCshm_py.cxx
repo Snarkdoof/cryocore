@@ -14,6 +14,12 @@
 #define PY3K 0
 #endif
 
+#if PY_VERSION_HEX < 0x030900A4 && !defined(Py_SET_SIZE)
+static inline void _Py_SET_SIZE(PyVarObject *ob, Py_ssize_t size)
+{ ob->ob_size = size; }
+#define Py_SET_SIZE(ob, size) _Py_SET_SIZE((PyVarObject*)(ob), size)
+#endif
+
 #if CCSHM_VERSION == 3 && !PY3K
     #error Compiling for python3, but we're including python2
 #elif CCSM_VERSION == 2 && PY3K
@@ -121,7 +127,7 @@ static PyObject*	PyByteArray_FromMemoryTransferOwnership(void *data, Py_ssize_t 
         return 0;
 	obj->ob_bytes = (char*)data;
 	obj->ob_bytes[len] = '\0';
-    Py_SIZE(obj) = len;
+    Py_SET_SIZE(obj, len);
     obj->ob_alloc = len + 1;
     #if PY3K
     obj->ob_start = obj->ob_bytes;
