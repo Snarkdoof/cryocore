@@ -66,6 +66,8 @@ class StatusDbReader(InternalDB.mysql):
         if now:
             extra = "timestamp<%s AND"
             args.append(now)
+        else:
+            extra = ""
 
         SQL = "SELECT paramid, timestamp, value FROM status WHERE " + extra + " timestamp>%s AND ("
         args.append(since)
