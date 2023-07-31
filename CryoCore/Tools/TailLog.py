@@ -349,7 +349,7 @@ class TailLog(mysql):
                     for item in data:
                         try:
                             d = json.loads(item.decode("utf-8"))
-                            row = [ -1, d["message"], d["level"], d["time"], d["msecs"], d["line"], d["function"], d["module"], d["logger"] ]
+                            row = [ -1, d["message"], d["level"], d["time"], d["msecs"], d["line"], d["func"], d["module"], d["logger"] ]
 
                             do_print = self.default_show
 
