@@ -262,7 +262,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
             self.tasks.put(toRecord)
 
             if self.log_bus:
-                names = ["logger", "level", "module", "line", "function", "time", "msecs", "message"]
+                names = ["logger", "level", "module", "line", "func", "time", "msecs", "message"]
                 d = dict(zip(names, toRecord))
                 j = json.dumps(d)
                 try:
