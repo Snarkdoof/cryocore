@@ -354,7 +354,7 @@ class TailLog(mysql):
                             do_print = self.default_show
 
                             # Limit to log level?
-                            if options.level and API.log_level_str[options.level] < d["level"]:
+                            if options.level and API.log_level_str[options.level] > d["level"]:
                                 continue
 
                             # Any matches to hide it?
