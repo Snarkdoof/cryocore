@@ -18,12 +18,12 @@ class SimpleEvent:
                 return self.name
 
         self.status_holder = FakeStatusHolder(channel)
-        self.ts = ts
+        self.timestamp = ts
         self.name = name
         self.value = value
 
     def get_timestamp(self):
-        return self.ts
+        return self.timestamp
 
     def get_name(self):
         return self.name
@@ -43,7 +43,7 @@ class SharedMemoryReporter(Status.OnChangeStatusReporter):
     
     def add_element(self, element):
         # We override add_element to get full-throttle change callbacks.
-        element.add_callback(self.report)
+        element.add_immediate_callback(self.report)
     
     def can_report(self):
         return self.bus != None
@@ -51,8 +51,17 @@ class SharedMemoryReporter(Status.OnChangeStatusReporter):
     def report(self, event):
         if not self.bus:
             return
-        data = json.dumps({ "channel" : event.status_holder.get_name(),
-                            "ts" : event.get_timestamp(),
-                            "name" : event.get_name(),
-                            "value" : event.get_value()})
+        val = event.value
+        params = (event.status_holder.name, event.timestamp, event.name, val)
+        if isinstance(val, int):
+            data = """{"channel":"%s","ts":%.8f,"name":"%s","value":%d}""" % params
+        elif isinstance(val, float):
+            data = """{"channel":"%s","ts":%.8f,"name":"%s","value":%.8f}""" % params
+        else:
+            # The commented-out line was a really great idea UNTIL the value started containing quotes. Oops!
+            #data = """{"channel":"%s","ts":%.8f,"name":"%s","value":"%s"}""" % params
+            data = json.dumps({ "channel" : event.status_holder.get_name(),
+                                "ts" : event.get_timestamp(),
+                                "name" : event.get_name(),
+                                "value" : event.get_value()})
         self.bus.post(data)

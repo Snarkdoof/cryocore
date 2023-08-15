@@ -96,6 +96,13 @@ class StatusListener():
         self._param_ids = []
         self._last_values = {}
         self._monitor_all = monitor_all
+        """
+        Amount of time to sleep between calls to get_many(). The default
+        is to return data at 100 Hz (if available), but for many uses a
+        lower setting is preferable (such as the config listening for config updates).
+        Setting the value too high risks losing messages, so user beware!
+        """
+        self._bus_sleep = 0.01
         if evt:
             self.condition_lock = evt
         else:
@@ -139,6 +146,7 @@ class StatusListener():
             while True:
                 data = status_bus.get_many()
                 if data:
+                    notify_condition = False
                     for item in data:
                         try:
                             d = json.loads(item.decode("utf-8"))
@@ -147,15 +155,22 @@ class StatusListener():
                                (d["channel"] in self._channels and
                                 d["name"] in self._channels[d["channel"]]):
                                     self._last_values[(d["channel"], d["name"])] = d
+                                    notify_condition = True
                         except:
                             print("Failed to parse or print data: %s" % (data))
                             traceback.print_exc()
-                    with self.condition_lock:
-                        self.condition_lock.notifyAll()
+                    if notify_condition:
+                        with self.condition_lock:
+                            self.condition_lock.notifyAll()
 
                     # Sleep to avoid lock thrashing, and buffer up more data before
                     # we do anything (is this necessary?)
-                    time.sleep(0.005)
+                    # Daniel answers: It's probably a good idea. The get_many() call will
+                    # block if no data is available, but without a sleep this loop will
+                    # easily go to 100% if there's continuous status updates from some
+                    # component (say, a thing running status["key"] = counter in a tight
+                    # loop). I made the sleep value configurable by clients.
+                    time.sleep(self._bus_sleep)
 
         t = threading.Thread(target=getter)
         t.setDaemon(True)

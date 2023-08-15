@@ -1,4 +1,0 @@
-#!/bin/sh
-export PYTHONPATH=$PYTHONPATH:.
-cd /home/njaal/git/cryocore/master
-python ./CryoCore/System/SystemControl.py

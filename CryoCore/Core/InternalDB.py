@@ -201,13 +201,18 @@ class AsyncDB(threading.Thread):
 
                 # print("   - ", retval)
                 event.set()
-
+            except OSError:
+                # Handle is probably closed, which means we're stopping
+                break
             except Empty:
                 continue
             except EOFError:
                 #print("*** Parent process stopped")
                 API.api_stop_event.set()
                 should_stop = True
+            except OSError:
+                if API.api_stop_event.isSet():
+                    break  # Queue is broken
             except:
                 print("Unhandled exception")
                 import traceback
@@ -516,7 +521,7 @@ class mysql:
                 if SLOW_WARNING:
                     print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
             if not event.isSet():
-                raise TooSlowException("%s Failed to execute query in time (%s)" % (time.ctime(), SQL))
+                raise TooSlowException("%s Failed to execute query in time (%s)" % (time.time() - t, SQL))
 
             retval = self.db.get_retval(handle)
 

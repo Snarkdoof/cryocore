@@ -553,7 +553,7 @@ var CryoCore = function(_CRYOCORE_) {
         console.log("Monitor triggred", key, "with data", data);
         for (var i=0; i<data.length; i++) {
           var item = data[i];
-          console.log("UPDATING DATA", item);
+          //console.log("UPDATING DATA", item);
           sequencer.addCue(String(_snr++), new TIMINGSRC.Interval(item[0], item[0]), {key: key, data:item});
         }
       });
@@ -565,13 +565,13 @@ var CryoCore = function(_CRYOCORE_) {
       }
       if (outstanding > 0) return;
 
-      var now;
-      now = options.timingObject.pos;
+      var now = options.timingObject.pos;
       var lower_limit = options.minTimingObject.pos;
       var upper_limit = now;
       if (monitored_keys === null || monitored_keys === undefined) {
         throw Exception("Update without keys");
       }
+
       var p = {
         params: JSON.stringify(monitored_keys),
         start: Math.max(last_update, lower_limit),
@@ -582,7 +582,6 @@ var CryoCore = function(_CRYOCORE_) {
       last_update = now - 30; // We allow 30 seconds for data to propagate 
       outstanding += 1;
       var success = function(res) {
-        //console.log("RES", res, "max", res.max_id);
         outstanding = 0;
         var the_data = {};
         last_id = Math.max(last_id, res.max_id);
@@ -948,6 +947,7 @@ var CryoCore = function(_CRYOCORE_) {
 
     /* Update every second */
     loadParameters(options.onReady);
+
     setInterval(update, options.refresh);
 
     var self = {};
@@ -969,6 +969,7 @@ var CryoCore = function(_CRYOCORE_) {
     self.directLoad = directLoad;
     self.monitorLastValue = monitorLastValue;
     self.sequenceMonitor = sequenceMonitor;
+    self.loadParameters = loadParameters;
     self.getTimingObject = function() {
       return options.timingObject;
     };
@@ -1058,8 +1059,8 @@ var CryoCore = function(_CRYOCORE_) {
         {last_id: last_id, start: startto.pos, end: endto.pos, minlevel:self.minLevel},
         function(reply) {
           is_refreshing = false;
-          if (reply.data.length > 0)
-            console.log(reply);
+          // if (reply.data.length > 0)
+            // console.log(reply);
           last_id = reply.max_id;
           for (var i=0; i<reply.data.length; i++) {
             var line = reply.data[i];

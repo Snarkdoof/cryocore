@@ -13,7 +13,7 @@ from argparse import ArgumentParser
 
 try:
     import argcomplete
-except:
+except Exception:
     print("Missing argcomplete, autocomplete not available")
 
 ID = 0
@@ -34,10 +34,12 @@ class CSVExporter:
         self._options = options
         self._lastts = None
         self._values = {}
+        self._rows = {}
         self._write_header()
         self._last_flush = 0  # Flush periodically in case we follow
 
     def _write_header(self):
+        print("PARAMETERS", self._parameters)
         self._target.write("Time," + ",".join(self._parameters) + "\n")
 
     def close(self):
@@ -51,6 +53,7 @@ class CSVExporter:
             pass
 
     def _flush(self):
+    
         s = "%s," % self._lastts
         for p in self._parameters:
             c, n = p.split(":")
@@ -58,6 +61,11 @@ class CSVExporter:
                 s += "%s," % self._values[(c, n)]
             else:
                 s += ","
+
+        if not self._parameters:
+            # Print all
+            for val in self._values:
+                s += "%s:%s," % val
         self._target.write(s[:-1] + "\n")
 
         if not self._options.fill:
@@ -67,11 +75,19 @@ class CSVExporter:
             self._target.flush()
             self._last_flush = time.time()
 
-    def print_row(self, row, is2D):
+    def print_row(self, row, is2D, words=None):
         t = row[TIMESTAMP]
         channel = row[CHANNEL]
         name = row[NAME]
         value = row[VALUE]
+        if words and not self._parameters:
+            found = -1
+            for word in words:
+                found = max(found, name.find(_word))
+                found = max(found, channel.find(_word))
+            if found == -1:
+                return
+
         # We write if the difference in timestamp is more than .01 seconds, which we regard as "simultaneous"
         if self._lastts is not None and abs(t - self._lastts) > 0.01:
             self._flush()
@@ -132,7 +148,55 @@ class TailStatus(mysql):
         if row is None:
             raise Exception("Missing parameter '%s' in channel '%s'" % (name, channel))
         return row[0]
+    
+    def get_param_list(self, words, fullmatch=True):
+        """
+        Try to find all parameters matching the given word
+        """
+        SQL = "SELECT status_channel.name, status_parameter.name " +\
+              "FROM status_parameter,status_channel " +\
+              "WHERE status_channel.chanid=status_parameter.chanid AND ("
 
+        args = []
+        for word in words:
+            if word.find(":") > -1:
+                if fullmatch:
+                    SQL += "(status_channel.name=%s AND status_parameter.name=%s) OR "
+                else:
+                    SQL += "(status_channel.name LIKE %%%s%% AND status_parameter.name LIKE %%%s%%) OR "
+                args.extend(list(word.split(":")))
+            else:
+                if fullmatch:
+                    SQL += "status_channel.name=%s OR status_parameter.name=%s OR "
+                else:
+                    SQL += "status_channel.name LIKE %%%s%% OR status_parameter.name LIKE %%%s%% OR "
+                args.extend([word, word])
+        cursor = self._execute(SQL[:-3] + ")", args)
+        ret = []
+        for row in cursor.fetchall():
+            ret.append(":".join(row))
+        return ret
+
+    def get_last_value(self, channel, name):
+        SQL = "SELECT status_parameter.chanid, status_parameter.paramid FROM status_parameter,status_channel WHERE status_channel.name=%s AND status_parameter.name=%s AND status_parameter.chanid=status_channel.chanid"
+        cursor = self._execute(SQL, (channel, name))
+        row = cursor.fetchone()
+        if row and len(row) == 2:
+            SQL = "select value, timestamp from status where id = (select max(id) from status where chanid=%s and paramid=%s)"
+            cursor = self._execute(SQL, row)
+            row = cursor.fetchone()
+            if row:
+                return row
+        return None, None
+    
+    def create_pc_index(self):
+        cursor = self._execute("select count(1) from INFORMATION_SCHEMA.STATISTICS where table_schema=DATABASE() AND table_name='status' AND index_name='pc_index'")
+        row = cursor.fetchone()
+        if row[0] == 0:
+            print("Creating covering index..")
+            cursor = self._execute("create index pc_index on status (chanid, paramid)")
+            print("Index created, fetching values..")
+    
     def print_status(self, options):
         """
         Loop and print status. Does never return - kill it.
@@ -190,6 +254,23 @@ class TailStatus(mysql):
             additional2d = " AND (" + ("status2d.paramid=%s OR " * len(options.parameters))[:-4] + ")"
 
         if options.timeseries:
+
+            # Find parameters first
+            chans = self.get_channels()
+            _params = []
+            for chan in chans:
+                for p in self.get_params(chan):
+                    _params.append(chan + ":" + p)
+
+            for word in options.words:
+                if word.find(":") > -1:
+                    options.parameters.append(word)
+                else:
+                    # Must search!
+                    for param in _params:
+                        if param.find(word) > -1:
+                            options.parameters.append(param)
+
             exporter = CSVExporter(options.timeseries, options.parameters, options)
         else:
             exporter = None

@@ -14,6 +14,12 @@
 #define PY3K 0
 #endif
 
+#if PY_VERSION_HEX < 0x030900A4 && !defined(Py_SET_SIZE)
+static inline void _Py_SET_SIZE(PyVarObject *ob, Py_ssize_t size)
+{ ob->ob_size = size; }
+#define Py_SET_SIZE(ob, size) _Py_SET_SIZE((PyVarObject*)(ob), size)
+#endif
+
 #if CCSHM_VERSION == 3 && !PY3K
     #error Compiling for python3, but we're including python2
 #elif CCSM_VERSION == 2 && PY3K
@@ -21,6 +27,8 @@
 #endif
 
 extern "C" {
+
+static EventBusManager *_bus_manager = 0;
 
 typedef struct {
 	PyObject_HEAD
@@ -37,8 +45,11 @@ static PyObject *EventBus_Py_new(PyTypeObject *type, PyObject *args, PyObject *k
 }
 
 static void	EventBus_Py_dealloc(EventBus_Py *self) {
-	if (self->bus)
+    if (self->bus) {
+        if (_bus_manager)
+            _bus_manager->remove_bus(self->bus);
 		self->bus->release();
+    }
 	self->bus = 0;
 	Py_TYPE(self)->tp_free((PyObject *) self);
 }
@@ -63,6 +74,8 @@ static int EventBus_Py_init(EventBus_Py *self, PyObject *args, PyObject *kwds) {
 		PyErr_SetString(PyExc_ValueError, "Failed to initialize event bus.\n");
 		return -1;
 	}
+    if (_bus_manager)
+        _bus_manager->add_bus(self->bus);
 	return 0;
 }
 
@@ -77,14 +90,23 @@ static PyObject*	EventBus_Py_post(EventBus_Py *self, PyObject *args) {
 		PyErr_SetString(PyExc_ValueError, "Unable to post data - wrong type (expect string or bytes)\n");
 		return 0;
 	}
-	EventBusData	ebd = { (size_t)length, (void*)data, false };
+    if (length > 0) {
+        EventBusData	ebd;
+        ebd.data = malloc(length);
+        memcpy(ebd.data, data, length);
+        ebd.length = length;
+        ebd.free_after = true;
+        _bus_manager->post(self->bus, ebd);
+    }
+#if 0
 	//	TODO: Determine if we should make a copy of the string (python thread safety?)
 	//	Don't think it's necessary, but..
 	Py_BEGIN_ALLOW_THREADS;
 	//	We actually should make this post to a different thread, so we don't block the caller.
 	self->bus->post(ebd);
 	Py_END_ALLOW_THREADS;
-	
+#endif
+    
 	Py_RETURN_NONE;
 }
 
@@ -105,7 +127,7 @@ static PyObject*	PyByteArray_FromMemoryTransferOwnership(void *data, Py_ssize_t 
         return 0;
 	obj->ob_bytes = (char*)data;
 	obj->ob_bytes[len] = '\0';
-    Py_SIZE(obj) = len;
+    Py_SET_SIZE(obj, len);
     obj->ob_alloc = len + 1;
     #if PY3K
     obj->ob_start = obj->ob_bytes;
@@ -253,12 +275,24 @@ static PyTypeObject EventBus_Py_type = {
 	PyVarObject_HEAD_INIT(NULL, 0)
 };
 
+static void CCshm_destroy(void *ptr) {
+    if (_bus_manager) {
+        _bus_manager->release();
+        _bus_manager = 0;
+    }
+}
+
 #if PY3K
 static PyModuleDef CCshm_py3_module = {
 	PyModuleDef_HEAD_INIT,
 	.m_name = "CCshm_py3",
 	.m_doc = "CryoCore Shared Memory.",
 	.m_size = -1,
+    .m_methods = NULL,
+    .m_slots = NULL,
+    .m_traverse = NULL,
+    .m_clear = NULL,
+    .m_free = CCshm_destroy
 };
 #endif
 
@@ -284,6 +318,7 @@ static void init_eventbus_type() {
 static PyObject *CCshm_generic_init(void) {
 	PyObject *m;
 	
+    _bus_manager = new EventBusManager();
 	init_eventbus_type();
 	
 	if (PyType_Ready(&EventBus_Py_type) < 0)

@@ -142,6 +142,7 @@ class StatusHolder(threading.Thread):
 
     def run(self):
         self.log.info("Callback %s thread started" % self.name)
+        from CryoCore import API
         while not self._async_stop_event.is_set():
             try:
                 while self._set_value_queue.unfinished_tasks > 0:
@@ -154,7 +155,7 @@ class StatusHolder(threading.Thread):
 
             func = None
             try:
-                func = self._callback_queue.get(block=True, timeout=1.0)
+                func = self._callback_queue.get(block=True, timeout=API.queue_timeout)
             except queue.Empty:
                 pass  # Why the h... does this not return None?
 
@@ -685,6 +686,7 @@ class BaseElement:
         self.name = name
         self.value = None
         self.callbacks = []
+        self.immediate_callbacks = []
         self._status_lock = threading.Lock()
         self.on_value_events = {}  # Events to set on change
         self.on_change_events = []
@@ -824,7 +826,18 @@ class BaseElement:
         @rtype: whatever the value is
         """
         return self.value
-
+    
+    def add_immediate_callback(self, callback, *args):
+        """
+        Add a callback that is executed immediately when the status item changes.
+        This is used by the shared memory reporter to avoid passing through layers upon
+        layers of queues and locks, eating lots of CPU time.
+        """
+        if (callback, args) in self.immediate_callbacks:
+            raise Exception("Already have immediate callback '%s' registered" % str(callback))
+            return
+        self.immediate_callbacks.append((callback, args))
+    
     def add_callback(self, callback, *args):
         """
         Add a callback that will be executed when this element is changed. The callback
@@ -1007,7 +1020,17 @@ class BaseElement:
         # The rest only should happen if a change occurred
         if not changed:
             return
-
+        
+        # Execute immediate calllbacks
+        for (cb, args) in self.immediate_callbacks:
+            try:
+                if args:
+                    cb(self, *args)
+                else:
+                    cb(self)
+            except:
+                API.get_log("status").exception("Error executing immediate callback")
+        
         for (event, is_once) in self.on_change_events:
             try:
                 if is_once:
@@ -1036,10 +1059,12 @@ class BaseElement:
                 report_downsampled = False
 
         import copy
-        element = copy.copy(self)
+        element = None # Create a copy once within the loop if we have callbacks and aren't downsampled.
         for (callback, args, downsampled) in self.callbacks:
             if downsampled and not report_downsampled:
                 continue
+            if not element:
+                element = copy.copy(self)
             try:
                 if args:
                     # callback(element, *args)

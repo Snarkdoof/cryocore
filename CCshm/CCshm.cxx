@@ -47,7 +47,8 @@ int main(int argc, const char * argv[]) {
 	bool	init = false,
 			auto_post = false,
 			dump = false,
-			many = false;
+			many = false,
+            init_locks = false;
 	size_t	item_size = 0;
 	const char	*path = "./.ccshm-shared-mem-id";
 	for (ssize_t i=1;i<argc;i++) {
@@ -63,6 +64,10 @@ int main(int argc, const char * argv[]) {
 			many = true;
 		else if (strcmp(argv[i], "--size") == 0)
 			item_size = atoi(++argv[i]);
+        else if (strcmp(argv[i], "--init-locks") == 0) {
+            init_locks = true;
+            dump = true;
+        }
 	}
 	struct stat st_buf = {};
 	if (stat(path, &st_buf) != 0) {
@@ -75,7 +80,13 @@ int main(int argc, const char * argv[]) {
 									item_size);
 	bus->open(init);
 	if (dump) {
+        printf("Current semaphore state:\n");
 		bus->dump();
+        if (init_locks) {
+            bus->init_locks();
+            printf("Semaphores after initialization:\n");
+            bus->dump();
+        }
 		exit(0);
 	}
 	pthread_t tid;

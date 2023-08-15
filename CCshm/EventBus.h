@@ -8,6 +8,8 @@
 #include "SemRWLock.h"
 #include "SharedMem.h"
 #include <vector>
+#include <map>
+#include <pthread.h>
 
 #define kEventBusMagic	0xd5ffabcdef0102d5
 
@@ -36,7 +38,6 @@ struct EventBusData {
 	bool	free_after;
 };
 
-
 class EventBus : public CCObject {
 	public:
 		EventBus(key_t sem_key, key_t shm_key, size_t items, size_t item_size);
@@ -55,6 +56,10 @@ class EventBus : public CCObject {
 		int		wakeup_count;
 		bool	valid;
 		void*	getExtraHeaderArea(ssize_t bytes);
+        void    init_locks(void) {
+            lock->init();
+            notify();
+        };
 		
 	protected:
 		bool	_post(EventBusData &data);
@@ -89,6 +94,104 @@ class EventBus : public CCObject {
 		pid_t						pid;
 		bool						fixed_width;
 };
+
+class EventBusManager : public CCObject {
+    public:
+        EventBusManager() : CCObject() {
+            pthread_mutex_init(&lock, 0);
+            pthread_cond_init(&cond, 0);
+            pthread_create(&_tid, 0, EventBusManager::post_thread, this);
+        };
+        virtual ~EventBusManager() {
+            pthread_mutex_lock(&lock);
+            for (auto it=pending.begin();it!=pending.end();++it) {
+                it->first->release();
+                clear_pending(it->second);
+            }
+            pending.clear();
+            _stop = true;
+            pthread_cond_broadcast(&cond);
+            pthread_mutex_unlock(&lock);
+            pthread_join(_tid, 0);
+            pthread_mutex_destroy(&lock);
+            pthread_cond_destroy(&cond);
+        };
+    
+        void clear_pending(std::vector<struct EventBusData> &items) {
+            for (size_t i=0;i<items.size();i++) {
+                if (items[i].free_after)
+                    free(items[i].data);
+            }
+            items.clear();
+        };
+        
+        void add_bus(EventBus *bus) {
+            pthread_mutex_lock(&lock);
+            auto it = pending.find(bus);
+            if (it == pending.end()) {
+                bus->retain();
+                pending[bus] = std::vector<struct EventBusData>();
+            }
+            pthread_mutex_unlock(&lock);
+        };
+    
+        void remove_bus(EventBus *bus) {
+            pthread_mutex_lock(&lock);
+            auto it = pending.find(bus);
+            if (it != pending.end()) {
+                it->first->release();
+                clear_pending(it->second);
+                pending.erase(it);
+            }
+            pthread_mutex_unlock(&lock);
+        };
+        
+        void post(EventBus *bus, EventBusData &ed) {
+            pthread_mutex_lock(&lock);
+            pending[bus].push_back(ed);
+            pending_count++;
+            pthread_cond_broadcast(&cond);
+            pthread_mutex_unlock(&lock);
+        };
+    
+        static void* post_thread(void *arg) {
+            EventBusManager *self = (EventBusManager*)arg;
+            self->_post_thread();
+            return 0;
+        };
+    
+        void _post_thread() {
+            std::map<EventBus*, std::vector<struct EventBusData>> to_post;
+            while (!_stop) {
+                pthread_mutex_lock(&lock);
+                while (!_stop && pending_count == 0)
+                    pthread_cond_wait(&cond, &lock);
+                pending_count = 0;
+                to_post = pending;
+                //  Retain event buses and clear pending
+                for (auto it=pending.begin();it!=pending.end();++it) {
+                    it->first->retain();
+                    it->second.clear();
+                }
+                pthread_mutex_unlock(&lock);
+                for (auto it=to_post.begin();it!=to_post.end();++it) {
+                    if (it->second.size() > 0) {
+                        it->first->post_many(it->second);
+                    }
+                    it->first->release();
+                }
+            }
+        };
+    
+    protected:
+        pthread_mutex_t lock;
+        pthread_cond_t cond;
+        std::map<EventBus*, std::vector<struct EventBusData>> pending;
+        size_t pending_count;
+        bool _stop;
+        pthread_t _tid;
+};
+
 
 
 #endif
