@@ -314,7 +314,7 @@ class SyncDB(Singleton):
             self._lost_connection("fast")
 
     def run(self, stop_event, verbose=False):
-        while not stop_event.isSet():
+        while not stop_event.is_set():
             self._run(verbose)
             stop_event.wait(self.period)
 

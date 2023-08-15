@@ -53,7 +53,7 @@ class StatusListenerDB(threading.Thread):
         last_run = -60
         # If the clock jumps, we need to clear stuff and restart it a bit
         last_pos = self.clock.pos()
-        while not API.api_stop_event.isSet():
+        while not API.api_stop_event.is_set():
             now = self.clock.pos()
             if abs(now - last_pos) > 2:
                 # RESET

@@ -116,7 +116,7 @@ class TailLog(mysql):
         r = r[:-1]
         reg = re.compile(r)
         # Search in text, module, logger
-        while not API.api_stop_event.isSet():
+        while not API.api_stop_event.is_set():
             SQL = "SELECT * FROM log WHERE id>%s ORDER BY id LIMIT 10000"
             cursor = self._execute(SQL, [last_id])
             last_lines = []

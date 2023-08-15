@@ -51,7 +51,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         @postcondition: The object variables L{con<DbHandler.con>} and L{cur<DbHandler.cur>} have been initialed properly. And by calling the base class constructor the whole new object.
         @warning: if the database connection failed, a log message would be saved into a file identify by I{aux_filename}. This file is maintained as a rotating file, therefore its name would be extended by numbers, e.g. '.1', '.2' etc.
         """
-        # if dbg_flag.isSet():
+        # if dbg_flag.is_set():
         #    raise Exception("Already created one")
         # dbg_flag.set()
 
@@ -148,7 +148,7 @@ class DbHandler(logging.Handler, InternalDB.mysql):
 
         SQL = "INSERT INTO log (logger, level, module, line, func, time, msecs, message) VALUES "
         params = []
-        while not API.api_stop_event.isSet():
+        while not API.api_stop_event.is_set():
             try:
                 args = taskqueue.get(should_block, desired_timeout)
                 SQL += "(%s, %s, %s, %s, %s, %s, %s, %s),"

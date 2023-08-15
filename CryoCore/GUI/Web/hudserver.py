@@ -104,7 +104,7 @@ class HUDServer(threading.Thread):
         hud = HUD.HUDProvider()
         hud.start()
 
-        while not API.api_stop_event.isSet():
+        while not API.api_stop_event.is_set():
             r = select.select([self._socket], [], [], 1.0)[0]
             if len(r) == 0:
                 continue

@@ -334,7 +334,7 @@ try:
         else:
             import time
             def run_until_stopped(s):
-                while not API.api_stop_event.isSet():
+                while not API.api_stop_event.is_set():
                     s.serveonce()
                     time.sleep(0.050)
 

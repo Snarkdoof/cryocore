@@ -130,7 +130,7 @@ class AsyncDB(threading.Thread):
         with self._lock:  # We protect the shutdown phase - if we queue something as we shut down, we'll hang
             if not self.running:
                 raise Exception("Can't execute queries when not running")
-            # if API.api_stop_event.isSet():
+            # if API.api_stop_event.is_set():
             #    print("*** WARNING: executing statements after API shutdown", task)
 
             self.runQueue.put(task)
@@ -145,7 +145,7 @@ class AsyncDB(threading.Thread):
         while not should_stop:  # We wait for a bit after stop has been called to ensure that we finish all tasks
             try:
                 with self._lock:
-                    if self.stop_event.isSet() and self.runQueue.empty():
+                    if self.stop_event.is_set() and self.runQueue.empty():
                         if not stop_time:
                             stop_time = time.time()
                         elif time.time() - stop_time > 2:
@@ -207,7 +207,7 @@ class AsyncDB(threading.Thread):
                                        charset="utf8")
 
     def get_connection(self):
-        while self.running:  # stop_event.isSet():
+        while self.running:  # stop_event.is_set():
             try:
                 if not self.db_conn:
                     self.db_conn = self._get_connection()
@@ -256,7 +256,7 @@ class AsyncDB(threading.Thread):
                     if not self.running:
                         retval["statue"] = "DB Inteface stopped"
                         break
-                    # if self.stop_event.isSet():
+                    # if self.stop_event.is_set():
                     #    print("STOP EVENT IS SET")
                     #    break
                     print("[%s] No connection, retrying in a bit" % os.getpid(), e)
@@ -433,7 +433,7 @@ class mysql:
         if parameters is None:
             parameters = []
         if self._is_direct:
-            while not API.api_stop_event.isSet():
+            while not API.api_stop_event.is_set():
                 try:
                     if not self.cursor:
                         # self.cursor = AsyncDB.getDB(None)._get_cursor(False)
@@ -458,7 +458,7 @@ class mysql:
             if time.time() - t > 2.0:
                 if SLOW_WARNING:
                     print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
-            if not event.isSet():
+            if not event.is_set():
                 raise TooSlowException("%s Failed to execute query in time (%s)" % (time.ctime(), SQL))
 
         if not ignore_error and "error" in retval:

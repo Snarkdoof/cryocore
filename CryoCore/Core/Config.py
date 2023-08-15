@@ -650,7 +650,7 @@ class Configuration(threading.Thread):
             print("IGNORED: Failed to close DB connection", e)
 
     def get_connection(self):
-        while not self.stop_event.isSet():
+        while not self.stop_event.is_set():
             try:
                 if not self.db_conn:
                     if self._cfg["ssl.enabled"]:
@@ -743,7 +743,7 @@ class Configuration(threading.Thread):
         # print(time.time() - t, ":", SQL % tuple(parameters))
         #if time.time() - t > 2.0:
         #    print("*** SLOW ASYNC EXEC: %.2f" % (time.time() - t), SQL, parameters)
-        if not event.isSet():
+        if not event.is_set():
             raise Exception("Failed to execute Config query in time (%s)" % SQL)
 
         if not ignore_error and "error" in retval:
@@ -759,7 +759,7 @@ class Configuration(threading.Thread):
         while not should_stop:  # We wait for a bit after stop has been called to ensure that we finish all tasks
             # with self._lock:
             if 1:
-                if self.stop_event.isSet() and self._runQueue.empty():
+                if self.stop_event.is_set() and self._runQueue.empty():
                     if not stop_time:
                         # print("Async config should stop soon")
                         stop_time = time.time()
@@ -773,7 +773,7 @@ class Configuration(threading.Thread):
                 event, retval, SQL, parameters, ignore_error = task
                 self._async_execute(event, retval, SQL, parameters, ignore_error)
             except queue.Empty:
-                # print(os.getpid(), "AsyncConfig IDLE", self.stop_event.isSet(), self._runQueue.empty(), should_stop)
+                # print(os.getpid(), "AsyncConfig IDLE", self.stop_event.is_set(), self._runQueue.empty(), should_stop)
                 # time.sleep(0.1)  # Condition variables, blocking queue, doesn't work
                 continue
             except:
@@ -799,7 +799,7 @@ class Configuration(threading.Thread):
                 try:
                     cursor = self._get_cursor()
                 except Exception as e:
-                    if self.stop_event.isSet():
+                    if self.stop_event.is_set():
                         break
                     print("[%s] No connection, retrying in a bit" % os.getpid(), e)
                     import traceback

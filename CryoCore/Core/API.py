@@ -31,7 +31,7 @@ cc_default_expire_time = None  # No default expiry
 # Global stop-event for everything instantiated by the API
 global api_stop_event
 api_stop_event = multiprocessing.Event()
-api_stop_event.isSet = api_stop_event.is_set
+api_stop_event.is_set = api_stop_event.is_set
 
 log_level_str = {"CRITICAL": logging.CRITICAL,
                  "FATAL": logging.FATAL,
