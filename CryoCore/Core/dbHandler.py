@@ -75,24 +75,6 @@ class DbHandler(logging.Handler, InternalDB.mysql):
         except:
             pass
 
-        # We get ready to deal with problems in the database connection
-        self.aux_logger = logging.getLogger('dbHandler_exception')
-        if len(self.aux_logger.handlers) < 1:
-            # self.aux_logger.setLevel(logging.WARNING)
-            self.aux_logger.addHandler(logging.StreamHandler(sys.stdout))
-            self.aux_logger.addHandler(logging.handlers.RotatingFileHandler(aux_filename,
-                                       maxBytes=50000,
-                                       backupCount=5))
-
-        # Ensure that the file is accessible for other users too
-        # - Some instruments run as root, but most dont
-        # TODO: Do something more sensible here
-        import stat
-        try:
-            os.chmod(aux_filename, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-        except:
-            pass
-
         self.tasks = queue.Queue()
         # We use two internal events to control the handler.
         # The stop_event is set in the handler's close() func,
